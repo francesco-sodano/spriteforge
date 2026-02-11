@@ -22,7 +22,7 @@ class PaletteColor(BaseModel):
 
     @property
     def rgb(self) -> tuple[int, int, int]:
-        """Return the colour as an ``(R, G, B)`` tuple."""
+        """Return the color as an ``(R, G, B)`` tuple."""
         return (self.r, self.g, self.b)
 
 
