@@ -6,7 +6,9 @@ readme = "README.md"
 requires-python = ">=3.12.12,<3.13"
 authors = [{ name = "Francesco Sodano" }]
 license = { text = "MIT" }
-dependencies = []
+dependencies = [
+    "pydantic>=2.0",
+]
 
 [build-system]
 requires = ["hatchling"]
