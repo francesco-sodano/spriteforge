@@ -8,6 +8,7 @@ authors = [{ name = "Francesco Sodano" }]
 license = { text = "MIT" }
 dependencies = [
     "pydantic>=2.0",
+    "pyyaml>=6.0",
 ]
 
 [build-system]
