@@ -1,0 +1,222 @@
+name: "Feature Request"
+description: "Propose a new feature or enhancement for the project."
+title: "[Feature]: "
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        ## Feature Request
+        Fill out all sections below with enough detail for an AI agent to implement this feature autonomously.
+        Be specific, include examples, and define acceptance criteria clearly.
+
+        ### Project Standards (AI Agent must follow these)
+        - **Instructions:** The AI agent MUST read and follow `.github/copilot-instructions.md` before starting any work.
+        - **Language:** Python 3.12 — all code must be compatible.
+        - **Code style:** PEP 8, `snake_case`, explicit type hints on all function signatures, formatted with `black`.
+        - **Type checking:** Code must pass `mypy src/` with no errors.
+        - **Testing:** Use `pytest`. Tests go in `tests/` mirroring `src/` structure. Cover happy paths, edge cases, and error scenarios.
+        - **Imports:** Use absolute imports relative to `src/` (e.g., `from project_name.module import ...`).
+        - **Dependencies:** Managed via `uv` and `pyproject.toml` only. No `requirements.txt`.
+        - **Security:** No hardcoded secrets. Sanitize external inputs. Prefer well-maintained packages.
+        - **Docstrings:** Required for all public modules, classes, and functions.
+        - **Validation:** Run `black . && mypy src/ && pytest` before considering work complete.
+        - **Missing information:** If any section is incomplete, ambiguous, or lacks detail needed to implement the feature, the AI agent MUST ask the issue author for clarification before proceeding. Do NOT guess or make assumptions about unclear requirements.
+
+  - type: dropdown
+    id: priority
+    attributes:
+      label: Priority
+      description: How urgent is this feature?
+      options:
+        - "Low — Nice to have, no deadline"
+        - "Medium — Important but not blocking"
+        - "High — Blocking other work or critical path"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: complexity
+    attributes:
+      label: Estimated Complexity
+      description: How complex do you expect this feature to be?
+      options:
+        - "Small — Single file, < 50 lines of code"
+        - "Medium — Multiple files, moderate logic"
+        - "Large — Significant changes across the codebase"
+    validations:
+      required: true
+
+  - type: textarea
+    id: summary
+    attributes:
+      label: Summary
+      description: >
+        A clear, concise description of the feature or enhancement you are requesting.
+        What problem does it solve? Why is it needed?
+      placeholder: "Describe the feature in 2-3 sentences."
+    validations:
+      required: true
+
+  - type: textarea
+    id: motivation
+    attributes:
+      label: Motivation & Context
+      description: >
+        Explain why this feature is important.
+        Include any background context, user stories, or pain points that drive this request.
+      placeholder: |
+        As a [type of user], I want [goal] so that [reason].
+        Currently, [describe the limitation or gap].
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposed-solution
+    attributes:
+      label: Proposed Solution
+      description: >
+        Describe the desired behavior in detail.
+        Include API signatures, function names, module locations, data structures,
+        and any other implementation specifics the AI agent needs to build this.
+      placeholder: |
+        1. Create a new module `src/project_name/feature.py` with:
+           - Function `do_something(param: str) -> bool` that ...
+        2. Update `src/project_name/__init__.py` to export ...
+        3. Add configuration in `pyproject.toml` if needed.
+      render: markdown
+    validations:
+      required: true
+
+  - type: textarea
+    id: acceptance-criteria
+    attributes:
+      label: Acceptance Criteria
+      description: >
+        A checklist of specific, testable conditions that must ALL be met
+        for this feature to be considered complete.
+        Each criterion should be verifiable by running a test or inspecting the code.
+        The standard quality gates (listed below) are always enforced — add feature-specific criteria on top.
+      placeholder: |
+        **Feature-specific criteria:**
+        - [ ] Function `do_something()` exists in `src/project_name/feature.py`
+        - [ ] Function returns `True` when given valid input
+        - [ ] Function raises `ValueError` for invalid input
+
+        **Standard quality gates (always required):**
+        - [ ] Code follows PEP 8, uses `snake_case`, and has type hints on all signatures
+        - [ ] All public functions/classes have docstrings
+        - [ ] Unit tests cover happy path, edge cases, and error scenarios
+        - [ ] All existing tests still pass (`pytest`)
+        - [ ] Code is formatted with `black`
+        - [ ] Code passes `mypy src/` with no errors
+        - [ ] No hardcoded secrets or credentials
+        - [ ] `.github/copilot-instructions.md` standards are followed
+      render: markdown
+    validations:
+      required: true
+
+  - type: textarea
+    id: test-plan
+    attributes:
+      label: Test Plan
+      description: >
+        Describe the tests that should be written to validate this feature.
+        Include specific test cases with expected inputs and outputs.
+        Tests should go in `tests/` mirroring the `src/` structure.
+      placeholder: |
+        File: `tests/test_feature.py`
+
+        - `test_do_something_with_valid_input`: Input "hello" → returns True
+        - `test_do_something_with_empty_string`: Input "" → raises ValueError
+        - `test_do_something_with_none`: Input None → raises TypeError
+      render: markdown
+    validations:
+      required: true
+
+  - type: textarea
+    id: related-files
+    attributes:
+      label: Related Files & Code
+      description: >
+        List existing files, modules, or functions that the AI agent should read
+        or extend when implementing this feature.
+        This saves investigation time and ensures the agent builds on existing patterns.
+      placeholder: |
+        - `src/project_name/utils.py` — Contains helper functions to reuse
+        - `src/project_name/__init__.py` — Must be updated to export the new feature
+        - `tests/test_utils.py` — Follow the same test patterns used here
+      render: markdown
+    validations:
+      required: false
+
+  - type: dropdown
+    id: breaking-changes
+    attributes:
+      label: Breaking Changes
+      description: >
+        Does this feature introduce breaking changes to existing APIs, interfaces, or behavior?
+        If yes, describe what breaks in the Proposed Solution section.
+      options:
+        - "No — Fully backward compatible"
+        - "Yes — Existing behavior or API will change (describe in Proposed Solution)"
+    validations:
+      required: true
+
+  - type: textarea
+    id: technical-notes
+    attributes:
+      label: Technical Notes & Constraints
+      description: >
+        Any technical details, constraints, or implementation hints.
+        Include dependencies, performance requirements, security considerations,
+        or references to existing code that should be reused or extended.
+      placeholder: |
+        - Must be compatible with Python 3.12
+        - No new runtime dependencies (dev dependencies are OK)
+        - Should follow existing code patterns in `src/project_name/`
+        - Reference: https://docs.python.org/3.12/library/...
+      render: markdown
+    validations:
+      required: false
+
+  - type: textarea
+    id: out-of-scope
+    attributes:
+      label: Out of Scope
+      description: >
+        Explicitly list anything that should NOT be done as part of this feature.
+        This helps the AI agent stay focused and avoid unnecessary work.
+      placeholder: |
+        - Do NOT modify the Dockerfile
+        - Do NOT add CLI arguments
+        - Do NOT refactor existing modules
+    validations:
+      required: false
+
+  - type: textarea
+    id: dependencies
+    attributes:
+      label: Dependencies on Other Issues
+      description: >
+        List any issues that must be completed before this feature can be implemented.
+        The AI agent will check these are resolved before starting work.
+      placeholder: |
+        - Blocked by: #10 (needs the new config module first)
+        - Depends on: #15 (API client must be refactored)
+    validations:
+      required: false
+
+  - type: textarea
+    id: references
+    attributes:
+      label: References & Resources
+      description: >
+        Links to documentation, examples, related issues, or PRs
+        that provide additional context for the implementation.
+      placeholder: |
+        - Related issue: #123
+        - Documentation: https://...
+        - Example implementation: https://...
+    validations:
+      required: false

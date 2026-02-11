@@ -1,0 +1,5 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Documentation
+    url: https://github.com/REPLACE_WITH_OWNER/REPLACE_WITH_REPO#readme
+    about: Check the project README before opening an issue. Update .github/ISSUE_TEMPLATE/config.yml with your repository URL before using this template.

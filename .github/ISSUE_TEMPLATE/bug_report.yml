@@ -1,0 +1,257 @@
+name: "Bug Report"
+description: "Report a bug to be fixed by an AI agent."
+title: "[Bug]: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        ## Bug Report
+        Fill out all sections below with enough detail for an AI agent to diagnose and fix this bug autonomously.
+        Be precise — include exact error messages, inputs, and expected outputs.
+
+        ### Project Standards (AI Agent must follow these)
+        - **Instructions:** The AI agent MUST read and follow `.github/copilot-instructions.md` before starting any work.
+        - **Language:** Python 3.12 — all code must be compatible.
+        - **Code style:** PEP 8, `snake_case`, explicit type hints on all function signatures, formatted with `black`.
+        - **Type checking:** Code must pass `mypy src/` with no errors.
+        - **Testing:** Use `pytest`. When fixing a bug, first write a failing test that reproduces it, then write the fix.
+        - **Imports:** Use absolute imports relative to `src/` (e.g., `from project_name.module import ...`).
+        - **Dependencies:** Managed via `uv` and `pyproject.toml` only. No `requirements.txt`.
+        - **Security:** No hardcoded secrets. Sanitize external inputs.
+        - **Docstrings:** Update docstrings for any function whose behavior changes.
+        - **Validation:** Run `black . && mypy src/ && pytest` before considering work complete.
+        - **Missing information:** If any section is incomplete, ambiguous, or lacks detail needed to diagnose and fix the bug, the AI agent MUST ask the issue author for clarification before proceeding. Do NOT guess or make assumptions about unclear requirements.
+
+  - type: dropdown
+    id: priority
+    attributes:
+      label: Priority
+      description: How urgent is this bug?
+      options:
+        - "Low — Minor inconvenience, cosmetic, or edge case"
+        - "Medium — Affects functionality but has a workaround"
+        - "High — Blocks usage, data loss, or security issue"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: complexity
+    attributes:
+      label: Estimated Complexity
+      description: How complex do you expect the fix to be?
+      options:
+        - "Small — Likely a one-line or single-file fix"
+        - "Medium — Multiple files or moderate logic changes"
+        - "Large — Deep investigation and significant refactoring needed"
+    validations:
+      required: true
+
+  - type: textarea
+    id: summary
+    attributes:
+      label: Bug Summary
+      description: >
+        A clear, concise description of the bug.
+        What is broken? When does it happen?
+      placeholder: "The function `process_data()` raises a `KeyError` when the input dictionary is missing the 'name' key."
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps-to-reproduce
+    attributes:
+      label: Steps to Reproduce
+      description: >
+        Provide exact, numbered steps to reproduce the bug.
+        Include code snippets, commands, or input data.
+        The AI agent will follow these steps exactly.
+      placeholder: |
+        1. Import the module: `from project_name.module import process_data`
+        2. Call with missing key: `process_data({"age": 30})`
+        3. Observe the `KeyError: 'name'` exception
+      render: markdown
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected-behavior
+    attributes:
+      label: Expected Behavior
+      description: >
+        What SHOULD happen when the steps above are followed?
+        Be specific about return values, state changes, or output.
+      placeholder: "The function should return a default value or raise a descriptive `ValueError` with the message 'Missing required key: name'."
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual-behavior
+    attributes:
+      label: Actual Behavior
+      description: >
+        What ACTUALLY happens? Include the full error message, traceback,
+        or incorrect output. Copy-paste from the terminal if possible.
+      placeholder: |
+        ```
+        Traceback (most recent call last):
+          File "src/project_name/module.py", line 42, in process_data
+            name = data["name"]
+        KeyError: 'name'
+        ```
+      render: markdown
+    validations:
+      required: true
+
+  - type: textarea
+    id: affected-code
+    attributes:
+      label: Affected Code & Location
+      description: >
+        Point to the specific file(s), function(s), and line(s) where the bug exists.
+        This helps the AI agent navigate directly to the problem.
+      placeholder: |
+        - File: `src/project_name/module.py`
+        - Function: `process_data()` (line ~42)
+        - Related: `src/project_name/utils.py` → `validate_input()`
+      render: markdown
+    validations:
+      required: true
+
+  - type: textarea
+    id: workaround
+    attributes:
+      label: Current Workaround
+      description: >
+        Is there a temporary workaround in place? If so, describe it here.
+        The AI agent should be aware of it to avoid breaking it, or to remove it
+        as part of the proper fix.
+      placeholder: |
+        Currently, callers wrap the function in a try/except:
+        ```python
+        try:
+            result = process_data(data)
+        except KeyError:
+            result = default_value
+        ```
+        This workaround should be removed once the fix is in place.
+      render: markdown
+    validations:
+      required: false
+
+  - type: textarea
+    id: root-cause
+    attributes:
+      label: Root Cause Analysis (if known)
+      description: >
+        If you have identified or suspect the root cause, describe it here.
+        This saves the AI agent diagnostic time.
+      placeholder: |
+        The function accesses `data["name"]` directly without checking
+        if the key exists. It should use `data.get("name")` with a default
+        or validate the input before accessing it.
+      render: markdown
+    validations:
+      required: false
+
+  - type: textarea
+    id: proposed-fix
+    attributes:
+      label: Proposed Fix
+      description: >
+        Describe how this bug should be fixed.
+        Include specific code changes, new validation logic, or error handling.
+        The more prescriptive, the better the AI agent can implement it.
+      placeholder: |
+        1. Add input validation at the top of `process_data()`:
+           - Check that `data` contains the required keys: `name`, `age`
+           - Raise `ValueError` with a descriptive message if keys are missing
+        2. Add a default value fallback using `data.get("name", "Unknown")`
+        3. Update the docstring to document the required keys
+      render: markdown
+    validations:
+      required: true
+
+  - type: textarea
+    id: acceptance-criteria
+    attributes:
+      label: Acceptance Criteria
+      description: >
+        A checklist of specific, testable conditions that must ALL be met
+        for this bug to be considered fixed.
+        The standard quality gates (listed below) are always enforced — add bug-specific criteria on top.
+      placeholder: |
+        **Bug-specific criteria:**
+        - [ ] `process_data({"age": 30})` raises `ValueError` with message "Missing required key: name"
+        - [ ] `process_data({"name": "Alice", "age": 30})` works correctly (no regression)
+        - [ ] A regression test reproduces the original bug and confirms the fix
+
+        **Standard quality gates (always required):**
+        - [ ] Code follows PEP 8, uses `snake_case`, and has type hints on all signatures
+        - [ ] Docstrings updated for any changed functions
+        - [ ] A failing test was written FIRST to reproduce the bug, then the fix was applied
+        - [ ] All existing tests still pass (`pytest`)
+        - [ ] Code is formatted with `black`
+        - [ ] Code passes `mypy src/` with no errors
+        - [ ] No hardcoded secrets or credentials
+        - [ ] `.github/copilot-instructions.md` standards are followed
+      render: markdown
+    validations:
+      required: true
+
+  - type: textarea
+    id: test-plan
+    attributes:
+      label: Test Plan
+      description: >
+        Describe the tests that should be written to validate the fix.
+        Include a regression test that reproduces the original bug,
+        plus tests for the corrected behavior.
+      placeholder: |
+        File: `tests/test_module.py`
+
+        - `test_process_data_missing_name_key`: Input `{"age": 30}` → raises `ValueError`
+        - `test_process_data_missing_age_key`: Input `{"name": "Alice"}` → raises `ValueError`
+        - `test_process_data_valid_input`: Input `{"name": "Alice", "age": 30}` → returns expected result (regression)
+        - `test_process_data_empty_dict`: Input `{}` → raises `ValueError`
+      render: markdown
+    validations:
+      required: true
+
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: >
+        Relevant environment details where the bug was observed.
+      placeholder: |
+        - Python version: 3.12.x
+        - OS: Ubuntu 24.04 (Dev Container)
+        - Dependencies: (output of `uv pip list` if relevant)
+    validations:
+      required: false
+
+  - type: textarea
+    id: dependencies
+    attributes:
+      label: Dependencies on Other Issues
+      description: >
+        List any issues that must be completed before this bug can be fixed.
+        The AI agent will check these are resolved before starting work.
+      placeholder: |
+        - Blocked by: #10 (needs the refactored config module first)
+        - Depends on: #15 (upstream fix required)
+    validations:
+      required: false
+
+  - type: textarea
+    id: references
+    attributes:
+      label: References & Resources
+      description: >
+        Links to related issues, documentation, or discussions.
+      placeholder: |
+        - Related issue: #456
+        - Documentation: https://...
+    validations:
+      required: false

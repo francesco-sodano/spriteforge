@@ -1,0 +1,35 @@
+# Ignore Python virtual environments
+.venv/
+
+# Ignore Python cache and test cache
+__pycache__/
+.pytest_cache/
+.mypy_cache/
+
+# Ignore git and editor files
+.git/
+*.swp
+*.swo
+
+# Ignore coverage and build outputs
+.coverage
+htmlcov/
+dist/
+build/
+
+# Ignore OS junk
+.DS_Store
+Thumbs.db
+
+# Ignore test results
+*.log
+
+# Ignore environment files
+.env
+.env.*
+
+# Ignore other common files
+*.egg-info/
+
+# Ignore scripts output (if any)
+scripts/*.log

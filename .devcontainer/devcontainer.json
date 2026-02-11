@@ -1,0 +1,79 @@
+// For format details, see https://aka.ms/devcontainer.json. For config options, see the
+// README at: https://github.com/devcontainers/templates/tree/main/src/ubuntu
+{
+	"name": "Ubuntu-Python",
+	// Use the repo root as build context so shared files (e.g., requirements-dev.txt) are available during image build.
+	"context": "..",
+	// Use local Dockerfile for build. More info: https://containers.dev/guide/dockerfile
+	"dockerFile": "Dockerfile",
+
+	// Features to add to the dev container. More info: https://containers.dev/features.
+	"features": {
+		"ghcr.io/devcontainers/features/powershell:1": {},
+		"ghcr.io/devcontainers/features/git:1": {},
+		"ghcr.io/devcontainers/features/azure-cli:1": {
+			"installBicep": "true"
+		},
+		"ghcr.io/devcontainers/features/node:1": {
+			"version": "lts"
+		},
+		"ghcr.io/devcontainers/features/docker-in-docker:2": {
+			"moby": "false"
+		},
+		"ghcr.io/azure/azure-dev/azd:0": {},
+		"ghcr.io/devcontainers/features/copilot-cli:1": {}
+	},
+
+	// Use 'forwardPorts' to make a list of ports inside the container available locally.
+	// "forwardPorts": [],
+
+	// Use 'postCreateCommand' to run commands after the container is created.
+	"postCreateCommand": ".devcontainer/scripts/postCreate.sh",
+
+	// Configure tool-specific properties.
+	"customizations": {
+		"vscode": {
+			"settings": {
+				"files.eol": "\n",
+				"editor.formatOnSave": true,
+				// Copilot agent settings: autoApprove lets agent tools run without manual
+				// confirmation; maxRequests caps the number of agent requests per session.
+				// Set autoApprove to false or lower maxRequests if you prefer manual control.
+				"chat.tools.global.autoApprove": true,
+				"chat.agent.maxRequests": 100,
+				"python.testing.pytestArgs": ["."],
+				"python.testing.unittestEnabled": false,
+				"python.testing.pytestEnabled": true,
+				"[python]": {
+					"editor.defaultFormatter": "ms-python.black-formatter"
+				},
+				"remote.extensionKind": {
+					"ms-azuretools.vscode-docker": "workspace"
+				}
+			},
+			// Add the IDs of extensions you want installed when the container is created.
+			"extensions": [
+				"github.copilot",
+				"github.copilot-chat",
+				"github.vscode-pull-request-github",
+				"ms-vscode.azurecli",
+				"ms-azuretools.vscode-azure-github-copilot",
+				"ms-azuretools.vscode-azure-mcp-server",
+				"ms-azuretools.vscode-azureresourcegroups",
+				"ms-azuretools.vscode-docker",
+				"ms-python.black-formatter",
+				"ms-python.debugpy",
+				"ms-python.mypy-type-checker",
+				"ms-python.python",
+				"ms-python.vscode-pylance",
+				"ms-python.vscode-python-envs",
+				"ms-toolsai.jupyter",
+				"ms-vscode.azure-repos",
+				"ms-vscode.powershell"
+			]
+		}
+	},
+
+	// Uncomment to connect as root instead. More info: https://aka.ms/dev-containers-non-root.
+	"remoteUser": "root"
+}

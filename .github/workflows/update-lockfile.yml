@@ -1,0 +1,44 @@
+# Regenerate uv.lock whenever pyproject.toml changes.
+# Typical trigger: a Dependabot PR bumps a dependency in pyproject.toml and
+# the lockfile needs to be re-resolved so the PR stays consistent.
+name: Update uv.lock
+
+on:
+  push:
+    branches:
+      - "dependabot/**"
+    paths:
+      - "pyproject.toml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  update-lockfile:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ github.head_ref || github.ref_name }}
+          fetch-depth: 0
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+
+      - name: Update uv.lock
+        run: uv lock
+
+      - name: Commit and push updated lockfile
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add uv.lock
+          if git diff --cached --quiet; then
+            echo "uv.lock is already up to date."
+          else
+            git commit -m "chore: update uv.lock after dependency change"
+            git push
+          fi
