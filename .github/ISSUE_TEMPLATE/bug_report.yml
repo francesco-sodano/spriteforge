@@ -16,7 +16,7 @@ body:
         - **Code style:** PEP 8, `snake_case`, explicit type hints on all function signatures, formatted with `black`.
         - **Type checking:** Code must pass `mypy src/` with no errors.
         - **Testing:** Use `pytest`. When fixing a bug, first write a failing test that reproduces it, then write the fix.
-        - **Imports:** Use absolute imports relative to `src/` (e.g., `from project_name.module import ...`).
+        - **Imports:** Use absolute imports relative to `src/` (e.g., `from spriteforge.module import ...`).
         - **Dependencies:** Managed via `uv` and `pyproject.toml` only. No `requirements.txt`.
         - **Security:** No hardcoded secrets. Sanitize external inputs.
         - **Docstrings:** Update docstrings for any function whose behavior changes.
@@ -67,7 +67,7 @@ body:
         Include code snippets, commands, or input data.
         The AI agent will follow these steps exactly.
       placeholder: |
-        1. Import the module: `from project_name.module import process_data`
+        1. Import the module: `from spriteforge.module import process_data`
         2. Call with missing key: `process_data({"age": 30})`
         3. Observe the `KeyError: 'name'` exception
       render: markdown
@@ -95,7 +95,7 @@ body:
       placeholder: |
         ```
         Traceback (most recent call last):
-          File "src/project_name/module.py", line 42, in process_data
+          File "src/spriteforge/module.py", line 42, in process_data
             name = data["name"]
         KeyError: 'name'
         ```
@@ -111,9 +111,9 @@ body:
         Point to the specific file(s), function(s), and line(s) where the bug exists.
         This helps the AI agent navigate directly to the problem.
       placeholder: |
-        - File: `src/project_name/module.py`
+        - File: `src/spriteforge/module.py`
         - Function: `process_data()` (line ~42)
-        - Related: `src/project_name/utils.py` → `validate_input()`
+        - Related: `src/spriteforge/utils.py` → `validate_input()`
       render: markdown
     validations:
       required: true

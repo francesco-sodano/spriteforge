@@ -16,7 +16,7 @@ body:
         - **Code style:** PEP 8, `snake_case`, explicit type hints on all function signatures, formatted with `black`.
         - **Type checking:** Code must pass `mypy src/` with no errors.
         - **Testing:** Use `pytest`. Tests go in `tests/` mirroring `src/` structure. Cover happy paths, edge cases, and error scenarios.
-        - **Imports:** Use absolute imports relative to `src/` (e.g., `from project_name.module import ...`).
+        - **Imports:** Use absolute imports relative to `src/` (e.g., `from spriteforge.module import ...`).
         - **Dependencies:** Managed via `uv` and `pyproject.toml` only. No `requirements.txt`.
         - **Security:** No hardcoded secrets. Sanitize external inputs. Prefer well-maintained packages.
         - **Docstrings:** Required for all public modules, classes, and functions.
@@ -80,9 +80,9 @@ body:
         Include API signatures, function names, module locations, data structures,
         and any other implementation specifics the AI agent needs to build this.
       placeholder: |
-        1. Create a new module `src/project_name/feature.py` with:
+        1. Create a new module `src/spriteforge/feature.py` with:
            - Function `do_something(param: str) -> bool` that ...
-        2. Update `src/project_name/__init__.py` to export ...
+        2. Update `src/spriteforge/__init__.py` to export ...
         3. Add configuration in `pyproject.toml` if needed.
       render: markdown
     validations:
@@ -99,7 +99,7 @@ body:
         The standard quality gates (listed below) are always enforced — add feature-specific criteria on top.
       placeholder: |
         **Feature-specific criteria:**
-        - [ ] Function `do_something()` exists in `src/project_name/feature.py`
+        - [ ] Function `do_something()` exists in `src/spriteforge/feature.py`
         - [ ] Function returns `True` when given valid input
         - [ ] Function raises `ValueError` for invalid input
 
@@ -143,8 +143,8 @@ body:
         or extend when implementing this feature.
         This saves investigation time and ensures the agent builds on existing patterns.
       placeholder: |
-        - `src/project_name/utils.py` — Contains helper functions to reuse
-        - `src/project_name/__init__.py` — Must be updated to export the new feature
+        - `src/spriteforge/utils.py` — Contains helper functions to reuse
+        - `src/spriteforge/__init__.py` — Must be updated to export the new feature
         - `tests/test_utils.py` — Follow the same test patterns used here
       render: markdown
     validations:
@@ -174,7 +174,7 @@ body:
       placeholder: |
         - Must be compatible with Python 3.12
         - No new runtime dependencies (dev dependencies are OK)
-        - Should follow existing code patterns in `src/project_name/`
+        - Should follow existing code patterns in `src/spriteforge/`
         - Reference: https://docs.python.org/3.12/library/...
       render: markdown
     validations:

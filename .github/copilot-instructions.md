@@ -14,7 +14,7 @@ The project in this repository has the following specifications:
 - Package manager: uv; `pyproject.toml` is the single source of truth for all project metadata, dependencies, and tool configurations.
 - Dependencies: Runtime dependencies are in `[project.dependencies]`; dev tools (e.g., black, mypy, pytest) are in the `dev` group under `[dependency-groups]`. No `requirements.txt` files are used.
 - Post-create: `postCreate.sh` installs the latest Python 3.12 via `uv`, creates a `.venv`, and runs `uv sync --group dev`.
-- Layout: `src/project_name/` for package code, `tests/` for pytest, `scripts/` for helpers, `Dockerfile` and `.dockerignore` at the repo root.
+- Layout: `src/spriteforge/` for package code, `tests/` for pytest, `scripts/` for helpers, `Dockerfile` and `.dockerignore` at the repo root.
 - Builds: hatchling backend.
 - Docker: Respect `.dockerignore`; keep image builds using `uv` for installs.
 
@@ -46,7 +46,7 @@ The project in this repository has the following specifications:
 - Use explicit type hints for all function signatures.
 - Keep functions small, focused, and pure where practical. Avoid side effects and hidden global state.
 - Write clear docstrings for all public modules, classes, and functions.
-- Default to absolute imports relative to the `src` directory (e.g., `from project_name.module import ...`).
+- Default to absolute imports relative to the `src` directory (e.g., `from spriteforge.module import ...`).
 
 ## Testing
 - Use `pytest` as the test runner.

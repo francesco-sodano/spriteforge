@@ -21,5 +21,5 @@ COPY src/ ./src/
 RUN uv venv .venv && . .venv/bin/activate && uv sync --no-dev
 ENV PATH="/app/.venv/bin:$PATH"
 
-# Default entrypoint — replace project_name with your package name
-CMD ["python", "-m", "project_name"]
+# Default entrypoint
+CMD ["python", "-m", "spriteforge"]
