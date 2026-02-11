@@ -40,7 +40,7 @@ def _parse_yaml(path: Path) -> dict:
     Raises:
         ValueError: If the YAML is malformed or not a mapping.
     """
-    with open(path, "r") as fh:
+    with open(path, "r", encoding="utf-8") as fh:
         try:
             data = yaml.safe_load(fh)
         except yaml.YAMLError as exc:
@@ -78,7 +78,7 @@ def load_config(path: str | Path) -> SpritesheetSpec:
         raise ValueError("Missing required 'animations' section in config")
 
     # --- Build CharacterConfig ---
-    char_raw = dict(data["character"])
+    char_raw = data["character"].copy()
 
     # Map YAML 'class' → model 'character_class'
     if "class" in char_raw:
