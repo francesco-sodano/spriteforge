@@ -4,6 +4,7 @@ from spriteforge.config import load_config
 from spriteforge.models import (
     AnimationDef,
     CharacterConfig,
+    GenerationConfig,
     PaletteColor,
     PaletteConfig,
     SpritesheetSpec,
@@ -25,6 +26,7 @@ __all__ = [
     "CharacterConfig",
     "DRUNN_OUTLINE_RGBA",
     "DRUNN_P1_COLORS",
+    "GenerationConfig",
     "PaletteColor",
     "PaletteConfig",
     "SYLARA_OUTLINE_RGBA",

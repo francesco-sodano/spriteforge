@@ -7,7 +7,14 @@ from pathlib import Path
 import yaml
 from pydantic import ValidationError
 
-from spriteforge.models import AnimationDef, CharacterConfig, SpritesheetSpec
+from spriteforge.models import (
+    AnimationDef,
+    CharacterConfig,
+    GenerationConfig,
+    PaletteColor,
+    PaletteConfig,
+    SpritesheetSpec,
+)
 
 
 def validate_config_path(path: str | Path) -> Path:
@@ -52,6 +59,84 @@ def _parse_yaml(path: Path) -> dict:
         )
 
     return data
+
+
+def _parse_palette(data: dict) -> PaletteConfig:
+    """Parse a YAML palette section into a PaletteConfig.
+
+    Expected YAML shape::
+
+        palette:
+          outline:
+            symbol: "O"
+            name: "Outline"
+            rgb: [20, 15, 10]
+          colors:
+            - symbol: "s"
+              name: "Skin"
+              rgb: [235, 210, 185]
+            ...
+
+    Args:
+        data: Parsed YAML dict for the palette section.
+
+    Returns:
+        A validated PaletteConfig instance.
+
+    Raises:
+        ValueError: If palette structure is invalid.
+    """
+    if not isinstance(data, dict):
+        raise ValueError(
+            f"'palette' section must be a YAML mapping, got {type(data).__name__}"
+        )
+
+    kwargs: dict = {"name": "P1"}
+
+    # --- Parse outline ---
+    if "outline" in data:
+        outline_raw = data["outline"]
+        if not isinstance(outline_raw, dict):
+            raise ValueError("'palette.outline' must be a mapping")
+        rgb = outline_raw.get("rgb", [20, 40, 40])
+        if not isinstance(rgb, list) or len(rgb) != 3:
+            raise ValueError(
+                f"'palette.outline.rgb' must be a list of 3 ints, got {rgb!r}"
+            )
+        kwargs["outline"] = PaletteColor(
+            element=outline_raw.get("name", "Outline"),
+            symbol=outline_raw.get("symbol", "O"),
+            r=rgb[0],
+            g=rgb[1],
+            b=rgb[2],
+        )
+
+    # --- Parse colors ---
+    if "colors" in data:
+        colors_raw = data["colors"]
+        if not isinstance(colors_raw, list):
+            raise ValueError("'palette.colors' must be a YAML sequence")
+        colors: list[PaletteColor] = []
+        for entry in colors_raw:
+            if not isinstance(entry, dict):
+                raise ValueError("Each palette color entry must be a mapping")
+            rgb = entry.get("rgb")
+            if not isinstance(rgb, list) or len(rgb) != 3:
+                raise ValueError(
+                    f"'palette.colors[].rgb' must be a list of 3 ints, got {rgb!r}"
+                )
+            colors.append(
+                PaletteColor(
+                    element=entry.get("name", ""),
+                    symbol=entry.get("symbol", ""),
+                    r=rgb[0],
+                    g=rgb[1],
+                    b=rgb[2],
+                )
+            )
+        kwargs["colors"] = colors
+
+    return PaletteConfig(**kwargs)
 
 
 def load_config(path: str | Path) -> SpritesheetSpec:
@@ -127,9 +212,28 @@ def load_config(path: str | Path) -> SpritesheetSpec:
         "animations": animations,
     }
 
+    # --- Build PaletteConfig from YAML palette section ---
+    if "palette" in data:
+        palette = _parse_palette(data["palette"])
+        spec_kwargs["palettes"] = {"P1": palette}
+
+    # --- Build GenerationConfig from YAML generation section ---
+    if "generation" in data:
+        gen_data = data["generation"]
+        if not isinstance(gen_data, dict):
+            raise ValueError(
+                "'generation' section must be a YAML mapping, "
+                f"got {type(gen_data).__name__}"
+            )
+        spec_kwargs["generation"] = GenerationConfig(**gen_data)
+
     if "base_image_path" in data:
         spec_kwargs["base_image_path"] = data["base_image_path"]
+
+    # --- Output path (top-level string or nested dict) ---
     if "output_path" in data:
         spec_kwargs["output_path"] = data["output_path"]
+    elif "output" in data and isinstance(data["output"], dict):
+        spec_kwargs["output_path"] = data["output"].get("path", "")
 
     return SpritesheetSpec(**spec_kwargs)

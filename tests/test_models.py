@@ -8,6 +8,7 @@ from pydantic import ValidationError
 from spriteforge.models import (
     AnimationDef,
     CharacterConfig,
+    GenerationConfig,
     PaletteColor,
     PaletteConfig,
     SpritesheetSpec,
@@ -187,6 +188,17 @@ class TestCharacterConfig:
         with pytest.raises(ValidationError):
             CharacterConfig(name="Bad", frame_width=0)
 
+    def test_character_config_description_default(self) -> None:
+        char = CharacterConfig(name="Test")
+        assert char.description == ""
+
+    def test_character_config_description_custom(self) -> None:
+        char = CharacterConfig(
+            name="Goblin",
+            description="Small green goblin with tattered armor.",
+        )
+        assert char.description == "Small green goblin with tattered armor."
+
 
 # ---------------------------------------------------------------------------
 # SpritesheetSpec
@@ -270,3 +282,56 @@ class TestSpritesheetSpec:
         )
         assert "P1" in spec.palettes
         assert spec.palettes["P1"].name == "P1"
+
+    def test_spritesheet_spec_generation_default(self) -> None:
+        spec = SpritesheetSpec(character=CharacterConfig(name="Hero"))
+        assert isinstance(spec.generation, GenerationConfig)
+        assert spec.generation.facing == "right"
+        assert spec.generation.feet_row == 56
+
+
+# ---------------------------------------------------------------------------
+# GenerationConfig
+# ---------------------------------------------------------------------------
+
+
+class TestGenerationConfig:
+    """Tests for the GenerationConfig model."""
+
+    def test_generation_config_defaults(self) -> None:
+        gen = GenerationConfig()
+        assert gen.style == "Modern HD pixel art (Dead Cells / Owlboy style)"
+        assert gen.facing == "right"
+        assert gen.feet_row == 56
+        assert gen.outline_width == 1
+        assert gen.rules == ""
+
+    def test_generation_config_facing_right(self) -> None:
+        gen = GenerationConfig(facing="right")
+        assert gen.facing == "right"
+
+    def test_generation_config_facing_left(self) -> None:
+        gen = GenerationConfig(facing="left")
+        assert gen.facing == "left"
+
+    def test_generation_config_facing_invalid(self) -> None:
+        with pytest.raises(ValidationError, match="facing must be 'right' or 'left'"):
+            GenerationConfig(facing="up")
+
+    def test_generation_config_facing_normalized(self) -> None:
+        gen = GenerationConfig(facing="LEFT")
+        assert gen.facing == "left"
+
+    def test_generation_config_custom_values(self) -> None:
+        gen = GenerationConfig(
+            style="Retro 8-bit",
+            facing="left",
+            feet_row=48,
+            outline_width=2,
+            rules="No anti-aliasing.",
+        )
+        assert gen.style == "Retro 8-bit"
+        assert gen.facing == "left"
+        assert gen.feet_row == 48
+        assert gen.outline_width == 2
+        assert gen.rules == "No anti-aliasing."

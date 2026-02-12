@@ -180,8 +180,8 @@ src/spriteforge/
 ├── __init__.py          # Package exports
 ├── __main__.py          # CLI entry point (argparse → asyncio.run)
 ├── app.py               # Programmatic API (run_spriteforge())
-├── models.py            # Pydantic data models (SpritesheetSpec, CharacterSpec, AnimationSpec, PaletteConfig, etc.)
-├── config.py            # YAML config loading and validation
+├── models.py            # Pydantic data models (SpritesheetSpec, CharacterConfig, AnimationDef, PaletteConfig, GenerationConfig, etc.)
+├── config.py            # YAML config loading and validation (palette, generation, character sections)
 ├── palette.py           # Palette symbol → RGBA mapping, validation
 ├── renderer.py          # Grid (list[str]) → PIL Image rendering
 ├── assembler.py         # Row images → final spritesheet assembly (EXISTING)
