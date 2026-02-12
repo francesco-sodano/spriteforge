@@ -4,68 +4,6 @@ from __future__ import annotations
 
 from spriteforge.models import PaletteColor, PaletteConfig
 
-# ---------------------------------------------------------------------------
-# Default palette constants — Sylara Windarrow P1
-# (element_name, symbol, (R, G, B, A))
-# Source: docs_assets/spritesheet_instructions_sylara.md
-# Outline: "dark teal or black"
-# ---------------------------------------------------------------------------
-
-SYLARA_OUTLINE_RGBA: tuple[int, int, int, int] = (0, 80, 80, 255)
-
-SYLARA_P1_COLORS: list[tuple[str, str, tuple[int, int, int, int]]] = [
-    ("Skin", "s", (235, 210, 185, 255)),
-    ("Hair", "h", (220, 185, 90, 255)),
-    ("Eyes", "e", (50, 180, 140, 255)),
-    ("Leather vest", "v", (50, 100, 45, 255)),
-    ("Leather pants", "p", (40, 75, 35, 255)),
-    ("Bracers/belt", "b", (110, 75, 40, 255)),
-    ("Boots", "t", (65, 45, 30, 255)),
-    ("Bow wood", "w", (180, 150, 90, 255)),
-    ("Blade steel", "d", (190, 200, 210, 255)),
-    ("Arrow fletching", "f", (255, 255, 240, 255)),
-]
-
-# ---------------------------------------------------------------------------
-# Default palette constants — Theron Ashblade P1
-# Source: docs_assets/spritesheet_instructions_theron.md
-# Outline: "dark brown or black"
-# ---------------------------------------------------------------------------
-
-THERON_OUTLINE_RGBA: tuple[int, int, int, int] = (30, 20, 15, 255)
-
-THERON_P1_COLORS: list[tuple[str, str, tuple[int, int, int, int]]] = [
-    ("Skin", "s", (210, 170, 130, 255)),
-    ("Hair", "h", (60, 40, 25, 255)),
-    ("Breastplate", "a", (80, 80, 95, 255)),
-    ("Tunic / Cloak", "c", (150, 30, 30, 255)),
-    ("Leather", "l", (100, 65, 35, 255)),
-    ("Steel trim", "t", (200, 190, 160, 255)),
-    ("Emberfang blade", "b", (140, 140, 150, 255)),
-    ("Boots", "B", (50, 35, 25, 255)),
-]
-
-# ---------------------------------------------------------------------------
-# Default palette constants — Drunn Ironhelm P1
-# Source: docs_assets/spritesheet_instructions_drunn.md
-# Outline: "dark brown or black"
-# ---------------------------------------------------------------------------
-
-DRUNN_OUTLINE_RGBA: tuple[int, int, int, int] = (30, 20, 15, 255)
-
-DRUNN_P1_COLORS: list[tuple[str, str, tuple[int, int, int, int]]] = [
-    ("Skin", "s", (190, 145, 110, 255)),
-    ("Beard/hair", "h", (180, 70, 20, 255)),
-    ("Helm/breastplate", "m", (170, 120, 50, 255)),
-    ("Pauldrons", "p", (160, 110, 45, 255)),
-    ("Chainmail", "c", (130, 130, 140, 255)),
-    ("Leather belt/pants", "l", (90, 60, 35, 255)),
-    ("Boots", "b", (60, 55, 50, 255)),
-    ("Axe heads (steel)", "a", (100, 100, 110, 255)),
-    ("Axe hafts (wood)", "w", (120, 80, 45, 255)),
-    ("Red accent", "r", (170, 35, 30, 255)),
-]
-
 
 def build_palette_map(
     palette: PaletteConfig,
