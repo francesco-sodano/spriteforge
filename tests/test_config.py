@@ -21,7 +21,9 @@ class TestLoadConfig:
 
     def test_valid_config(self, config_dir: Path) -> None:
         cfg = config_dir / "valid.yaml"
-        cfg.write_text(textwrap.dedent("""\
+        cfg.write_text(
+            textwrap.dedent(
+                """\
                 character:
                   name: "Theron Ashblade"
                   class: "Warrior"
@@ -40,7 +42,9 @@ class TestLoadConfig:
                     frames: 8
                     loop: true
                     timing_ms: 100
-            """))
+            """
+            )
+        )
         spec = load_config(cfg)
         assert spec.character.name == "Theron Ashblade"
         assert spec.character.character_class == "Warrior"
@@ -51,7 +55,9 @@ class TestLoadConfig:
 
     def test_config_with_hit_frame(self, config_dir: Path) -> None:
         cfg = config_dir / "hit.yaml"
-        cfg.write_text(textwrap.dedent("""\
+        cfg.write_text(
+            textwrap.dedent(
+                """\
                 character:
                   name: "Test"
                 animations:
@@ -61,7 +67,9 @@ class TestLoadConfig:
                     loop: false
                     timing_ms: 80
                     hit_frame: 2
-            """))
+            """
+            )
+        )
         spec = load_config(cfg)
         assert spec.animations[0].hit_frame == 2
 
@@ -83,7 +91,9 @@ class TestLoadConfig:
 
     def test_duplicate_row_indices(self, config_dir: Path) -> None:
         cfg = config_dir / "dupe.yaml"
-        cfg.write_text(textwrap.dedent("""\
+        cfg.write_text(
+            textwrap.dedent(
+                """\
                 character:
                   name: Test
                 animations:
@@ -95,13 +105,17 @@ class TestLoadConfig:
                     row: 0
                     frames: 8
                     timing_ms: 100
-            """))
+            """
+            )
+        )
         with pytest.raises(ValueError, match="Duplicate row"):
             load_config(cfg)
 
     def test_bad_frame_size(self, config_dir: Path) -> None:
         cfg = config_dir / "bad_fs.yaml"
-        cfg.write_text(textwrap.dedent("""\
+        cfg.write_text(
+            textwrap.dedent(
+                """\
                 character:
                   name: Test
                   frame_size: [64]
@@ -110,7 +124,9 @@ class TestLoadConfig:
                     row: 0
                     frames: 6
                     timing_ms: 150
-            """))
+            """
+            )
+        )
         with pytest.raises(ValueError, match="frame_size"):
             load_config(cfg)
 
@@ -122,7 +138,9 @@ class TestLoadConfig:
 
     def test_animations_sorted_by_row(self, config_dir: Path) -> None:
         cfg = config_dir / "unsorted.yaml"
-        cfg.write_text(textwrap.dedent("""\
+        cfg.write_text(
+            textwrap.dedent(
+                """\
                 character:
                   name: Test
                 animations:
@@ -134,14 +152,18 @@ class TestLoadConfig:
                     row: 0
                     frames: 6
                     timing_ms: 150
-            """))
+            """
+            )
+        )
         spec = load_config(cfg)
         assert spec.animations[0].row == 0
         assert spec.animations[1].row == 1
 
     def test_optional_paths(self, config_dir: Path) -> None:
         cfg = config_dir / "paths.yaml"
-        cfg.write_text(textwrap.dedent("""\
+        cfg.write_text(
+            textwrap.dedent(
+                """\
                 character:
                   name: Test
                 animations:
@@ -151,7 +173,9 @@ class TestLoadConfig:
                     timing_ms: 150
                 base_image_path: /tmp/ref.png
                 output_path: /tmp/out.png
-            """))
+            """
+            )
+        )
         spec = load_config(cfg)
         assert spec.base_image_path == "/tmp/ref.png"
         assert spec.output_path == "/tmp/out.png"
@@ -164,10 +188,14 @@ class TestLoadConfig:
 
     def test_character_section_not_a_mapping(self, config_dir: Path) -> None:
         cfg = config_dir / "char_str.yaml"
-        cfg.write_text(textwrap.dedent("""\
+        cfg.write_text(
+            textwrap.dedent(
+                """\
                 character: "just a string"
                 animations: []
-            """))
+            """
+            )
+        )
         with pytest.raises(
             ValueError, match="'character' section must be a YAML mapping"
         ):
@@ -175,11 +203,15 @@ class TestLoadConfig:
 
     def test_animations_section_not_a_sequence(self, config_dir: Path) -> None:
         cfg = config_dir / "anim_str.yaml"
-        cfg.write_text(textwrap.dedent("""\
+        cfg.write_text(
+            textwrap.dedent(
+                """\
                 character:
                   name: Test
                 animations: "not a list"
-            """))
+            """
+            )
+        )
         with pytest.raises(
             ValueError, match="'animations' section must be a YAML sequence"
         ):
