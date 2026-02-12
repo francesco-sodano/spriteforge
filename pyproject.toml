@@ -21,6 +21,20 @@ dev = [
     "black==26.1.0",
     "mypy==1.19.1",
     "pytest==9.0.2",
+    "pytest-asyncio>=0.23",
     "types-pillow>=10.2.0.20240822",
     "types-pyyaml>=6.0.12.20250915",
 ]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+
+[tool.mypy]
+python_version = "3.12"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = true
+
+[tool.black]
+target-version = ["py312"]
