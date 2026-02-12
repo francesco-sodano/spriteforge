@@ -23,18 +23,6 @@ from spriteforge.palette import (
 
 
 @pytest.fixture()
-def simple_palette() -> PaletteConfig:
-    """A minimal palette with two named colors for testing."""
-    return PaletteConfig(
-        outline=PaletteColor(element="Outline", symbol="O", r=20, g=40, b=40),
-        colors=[
-            PaletteColor(element="Skin", symbol="s", r=235, g=210, b=185),
-            PaletteColor(element="Hair", symbol="h", r=220, g=185, b=90),
-        ],
-    )
-
-
-@pytest.fixture()
 def alt_palette() -> PaletteConfig:
     """An alternate palette with the same color names but different symbols/RGB."""
     return PaletteConfig(
@@ -234,7 +222,7 @@ class TestTheronP1Constants:
             "Skin",
             "Hair",
             "Breastplate",
-            "Tunic/Cloak",
+            "Tunic / Cloak",
             "Leather",
             "Steel trim",
             "Emberfang blade",
@@ -286,8 +274,8 @@ class TestDrunnP1Constants:
             "Chainmail",
             "Leather belt/pants",
             "Boots",
-            "Axe heads",
-            "Axe hafts",
+            "Axe heads (steel)",
+            "Axe hafts (wood)",
             "Red accent",
         }
         assert names == expected
