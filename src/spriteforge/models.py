@@ -113,6 +113,7 @@ class CharacterConfig(BaseModel):
     Attributes:
         name: Character display name.
         character_class: RPG class (e.g. "Warrior", "Ranger").
+        description: Detailed visual description for AI prompt generation.
         frame_width: Pixel width of each frame.
         frame_height: Pixel height of each frame.
         spritesheet_columns: Maximum frames per row in the sheet.
@@ -120,6 +121,7 @@ class CharacterConfig(BaseModel):
 
     name: str
     character_class: str = ""
+    description: str = ""
     frame_width: int = Field(default=64, gt=0)
     frame_height: int = Field(default=64, gt=0)
     spritesheet_columns: int = Field(default=14, gt=0)
@@ -130,6 +132,31 @@ class CharacterConfig(BaseModel):
         return (self.frame_width, self.frame_height)
 
 
+class GenerationConfig(BaseModel):
+    """Generation settings that control Stage 1 and Stage 2 AI behavior.
+
+    Attributes:
+        style: Art style description for prompts (e.g., "Modern HD pixel art").
+        facing: Direction the character faces ("right" or "left").
+        feet_row: Y-coordinate where feet should be placed (~56 for 64px frames).
+        outline_width: Outline thickness in pixels.
+        rules: Additional generation rules as free-form text for prompts.
+    """
+
+    style: str = "Modern HD pixel art (Dead Cells / Owlboy style)"
+    facing: str = "right"
+    feet_row: int = Field(default=56, ge=0)
+    outline_width: int = Field(default=1, ge=0)
+    rules: str = ""
+
+    @field_validator("facing")
+    @classmethod
+    def _validate_facing(cls, v: str) -> str:
+        if v.lower() not in ("right", "left"):
+            raise ValueError(f"facing must be 'right' or 'left', got {v!r}")
+        return v.lower()
+
+
 class SpritesheetSpec(BaseModel):
     """Top-level model combining character, animations, and layout.
 
@@ -137,6 +164,7 @@ class SpritesheetSpec(BaseModel):
         character: The character this spritesheet belongs to.
         animations: Ordered list of animation definitions.
         palettes: Named palette configurations (e.g. "P1", "P2").
+        generation: Generation settings for AI pipeline behavior.
         base_image_path: Optional path to the base reference image.
         output_path: Optional path for the generated spritesheet.
     """
@@ -144,6 +172,7 @@ class SpritesheetSpec(BaseModel):
     character: CharacterConfig
     animations: list[AnimationDef] = []
     palettes: dict[str, PaletteConfig] = {}
+    generation: GenerationConfig = GenerationConfig()
     base_image_path: str = ""
     output_path: str = ""
 
