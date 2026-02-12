@@ -8,9 +8,11 @@ You are an expert, world-class software engineering assistant. Your goal is to h
 ## Project Overview
 The project overview is the README.md file. It provides a high-level description of the project and its purpose. Always keep that in consideration and remember it.
 
-**SpriteForge** is an AI-powered spritesheet generator for 2D pixel-art games. It takes a base character reference image and a YAML config file, then uses a **two-stage AI pipeline** to produce a game-ready 896×1024 spritesheet PNG with transparent backgrounds.
+**SpriteForge** is an AI-powered spritesheet generator for 2D pixel-art games. It takes a **self-contained YAML config file** and a **base character reference image**, then uses a **two-stage AI pipeline** to produce a game-ready spritesheet PNG with transparent backgrounds.
 
-The target game is **Blades of the Fallen Realm** — a Golden Axe-style beat 'em up. SpriteForge generates spritesheets for three playable characters: Theron Ashblade (Warrior), Sylara Windarrow (Ranger), and Drunn Ironhelm (Berserker).
+**One run = one character = one spritesheet.** SpriteForge works with **any character** — heroes, enemies, bosses, NPCs — as long as the character is defined in a self-contained YAML config. The YAML config is the single source of truth: it contains character metadata, palette definition, animation layout, and generation settings.
+
+The original target game is **Blades of the Fallen Realm** — a Golden Axe-style beat 'em up. The three original characters (Theron Ashblade, Sylara Windarrow, Drunn Ironhelm) serve as reference examples in `configs/`.
 
 ## Architecture
 
@@ -34,16 +36,16 @@ The LLM never outputs pixels directly. It outputs a structured grid of palette s
 ### Pipeline Flow (Per Character)
 
 ```
-1. Load config (YAML → SpritesheetSpec)
-2. For Row 0 (IDLE) — anchor row:
+1. Load config (YAML → SpritesheetSpec) — palette, animations, generation settings all from YAML
+2. For Row 0 (first animation, typically IDLE) — anchor row:
    a. Stage 1: Generate rough reference strip
    b. Gate -1: Validate reference quality (LLM)
-   c. Stage 2: Generate IDLE Frame 0 (the anchor frame)
+   c. Stage 2: Generate anchor frame (Frame 0 of first animation)
    d. Programmatic checks + Gate 0 + Gate 1 (LLM)
    e. Retry loop (up to 10 attempts with 3-tier escalation)
-   f. Generate remaining IDLE frames (with anchor + prev frame context)
-   g. Gate 3A: Validate assembled IDLE row coherence (LLM)
-3. For Rows 1–15:
+   f. Generate remaining frames (with anchor + prev frame context)
+   g. Gate 3A: Validate assembled row coherence (LLM)
+3. For remaining animation rows (count determined by YAML config):
    a. Stage 1: Generate rough reference strip for this animation
    b. Gate -1: Validate reference quality
    c. For each frame:
@@ -51,13 +53,13 @@ The LLM never outputs pixels directly. It outputs a structured grid of palette s
       - Programmatic checks → Gate 0 → Gate 1 (→ Gate 2 if not first frame)
       - Retry loop if any gate fails
    d. Gate 3A: Validate assembled row coherence
-4. Assemble all 16 rows into final 896×1024 spritesheet
+4. Assemble all rows into final spritesheet (dimensions determined by config)
 5. Save PNG output
 ```
 
 ### Row Independence
 
-Rows are **independent** of each other. Only **IDLE Frame 0** serves as the cross-row anchor. There is no dependency graph between rows — they are processed sequentially (Row 0 → Row 15) but each row only needs the anchor frame as shared context.
+Rows are **independent** of each other. Only the **first animation's Frame 0** (typically IDLE) serves as the cross-row anchor. There is no dependency graph between rows — they are processed sequentially but each row only needs the anchor frame as shared context.
 
 ### Verification Gates
 
@@ -104,65 +106,72 @@ Each character in the grid maps to a palette entry (e.g., `.` = transparent, `O`
 
 ### Palette System
 
-Each character has **10–12 symbols**: `.` (transparent), `O` (outline/dark border), plus 8–10 character-specific color symbols depending on the character's design complexity. Symbols are single characters, kept mnemonic (`s`=skin, `h`=hair, `v`=vest, etc.).
+Each character has a **palette defined in its YAML config** — typically 10–15 symbols: `.` (transparent), `O` (outline/dark border), plus 8–12 character-specific color symbols. Symbols are single characters, kept mnemonic (`s`=skin, `h`=hair, `v`=vest, etc.).
 
-**Note:** Outline color is **per-character** — each character has a different outline RGBA. The source of truth for palette colors (including outlines) is always `docs_assets/spritesheet_instructions_*.md`. The outline values below are derived from those docs:
-- **Sylara:** "dark teal or black" → `(0, 80, 80, 255)`
-- **Theron:** "dark brown or black" → `(30, 20, 15, 255)`
-- **Drunn:** "dark brown or black" → `(30, 20, 15, 255)`
+**The YAML config is the single source of truth for palette data.** Palette symbols, RGB values, and outline color are all defined per-character in their YAML config file. There are no hardcoded palette constants in the Python code.
 
-Example (Sylara):
+Example palette section (from a YAML config):
+```yaml
+palette:
+  outline:
+    symbol: "O"
+    name: "Outline"
+    rgba: [0, 80, 80, 255]
+  colors:
+    - symbol: "s"
+      name: "Skin"
+      rgba: [235, 210, 185, 255]
+    - symbol: "h"
+      name: "Hair"
+      rgba: [220, 185, 90, 255]
+    - symbol: "e"
+      name: "Eyes"
+      rgba: [50, 180, 140, 255]
+    # ... more colors as needed
 ```
-. = transparent (0, 0, 0, 0)
-O = outline (0, 80, 80, 255)
-s = skin (235, 210, 185, 255)
-h = hair (220, 185, 90, 255)
-e = eyes (50, 180, 140, 255)
-v = vest (50, 100, 45, 255)
-p = pants (40, 75, 35, 255)
-b = bracers (110, 75, 40, 255)
-t = boots (65, 45, 30, 255)
-w = bow wood (180, 150, 90, 255)
-d = blade steel (190, 200, 210, 255)
-f = fletching (255, 255, 240, 255)
-```
+
+**Key rules:**
+- `.` is always transparent `(0, 0, 0, 0)` — implicitly added, NOT listed in YAML
+- `O` is the outline symbol — its color is defined per-character in the `outline` section
+- All other symbols are defined in the `colors` list
+- Palette size is variable (different characters can have different numbers of colors)
 
 ### Spritesheet Dimensions
 
-- **Frame size:** 64×64 pixels
-- **Spritesheet:** 896×1024 pixels (14 columns × 64px, 16 rows × 64px)
-- **16 animation rows** per character, each with varying frame counts (3–8 frames)
-- **3 characters:** Sylara Windarrow, Theron Ashblade, Drunn Ironhelm
-- Unused cells are fully transparent; rows are padded right to 896px
+- **Frame size:** Configurable per character (default: 64×64 pixels)
+- **Spritesheet width:** `frame_width × max_columns` pixels (default: 14 columns → 896px)
+- **Spritesheet height:** `frame_height × number_of_animation_rows` pixels (varies per character)
+- **Animation rows:** Variable per character — defined in the YAML config (heroes may have 16 rows, enemies may have 5)
+- **Frame counts per row:** Variable (defined per animation in YAML config)
+- Unused cells are fully transparent; rows are padded right to spritesheet width
 
 ### Characters
 
-| Character | Class | Key Visual Features | Speed |
-|-----------|-------|---------------------|-------|
-| Theron Ashblade | Warrior | Crimson cape, longsword (Emberfang), dark steel breastplate | Medium |
-| Sylara Windarrow | Ranger | Elven ears, recurve bow, long golden hair, forest-green leather, no cape | Fast (10/10) |
-| Drunn Ironhelm | Berserker | Horned helm, braided red beard, twin axes, stocky/wide dwarf | Slow (4/10) |
+Characters are **not hardcoded** in SpriteForge. Any character can be generated by providing:
+1. A self-contained YAML config file (defines everything: metadata, palette, animations, generation rules)
+2. A base character reference image (PNG)
 
-### Animation Rows (Identical Layout for All 3 Characters)
+The three original reference characters for Blades of the Fallen Realm are:
 
-| Row | Animation | Frames | Looping | Notes |
-|-----|-----------|--------|---------|-------|
-| 0 | IDLE | 6 | Yes | Anchor row — Frame 0 is the cross-row anchor |
-| 1 | WALK | 8 | Yes | |
-| 2 | ATTACK1 | 5 | No | First hit of 3-hit combo |
-| 3 | ATTACK2 | 5 | No | Second hit |
-| 4 | ATTACK3 | 7 | No | Combo finisher (knockdown) |
-| 5 | JUMP | 4 | No | |
-| 6 | JUMP_ATTACK | 4 | No | |
-| 7 | MAGIC | 8 | No | 3 tiers (VFX overlay handled by game) |
-| 8 | HIT | 3 | No | |
-| 9 | KNOCKDOWN | 4 | No | |
-| 10 | GETUP | 4 | No | |
-| 11 | DEATH | 6 | No | Holds on last frame |
-| 12 | MOUNT_IDLE | 4 | Yes | Upper body only (waist up) |
-| 13 | MOUNT_ATTACK | 5 | No | Upper body only |
-| 14 | RUN | 6 | Yes | |
-| 15 | THROW | 6 | No | Enemy NOT shown |
+| Character | Class | Config | Notes |
+|-----------|-------|--------|-------|
+| Theron Ashblade | Warrior | `configs/theron.yaml` | 16 animation rows, medium speed |
+| Sylara Windarrow | Ranger | `configs/sylara.yaml` | 16 animation rows, fast |
+| Drunn Ironhelm | Berserker | `configs/drunn.yaml` | 16 animation rows, slow |
+
+These configs serve as **reference examples** for creating new character configs. New characters (enemies, bosses, NPCs) can have completely different animation sets, palette sizes, and frame counts.
+
+### Animation Layout
+
+Animation rows are **defined per character** in the YAML config. Different characters can have completely different animation sets. Example:
+
+**Hero character** (16 rows): IDLE, WALK, ATTACK1, ATTACK2, ATTACK3, JUMP, JUMP_ATTACK, MAGIC, HIT, KNOCKDOWN, GETUP, DEATH, MOUNT_IDLE, MOUNT_ATTACK, RUN, THROW
+
+**Enemy character** (5 rows): IDLE, WALK, ATTACK, HIT, DEATH
+
+**Boss character** (12 rows): IDLE, WALK, ATTACK1, ATTACK2, ATTACK3, SPECIAL, HIT, KNOCKDOWN, GETUP, DEATH, RAGE, SUMMON
+
+The only constraint is that **Row 0 Frame 0** is always the anchor frame used for cross-row consistency.
 
 ## Module Architecture
 
@@ -185,9 +194,10 @@ src/spriteforge/
     └── gpt_image.py     # GPT-Image-1.5 via Azure Foundry
 
 configs/                 # Character YAML configuration files
-├── sylara.yaml
-├── theron.yaml
-└── drunn.yaml
+├── template.yaml          # Annotated template for creating new characters
+├── sylara.yaml            # Example: Ranger (16 rows, full hero set)
+├── theron.yaml            # Example: Warrior (16 rows, full hero set)
+└── drunn.yaml             # Example: Berserker (16 rows, full hero set)
 
 tests/                   # pytest tests
 ├── conftest.py
@@ -202,14 +212,16 @@ tests/                   # pytest tests
 ├── test_workflow.py
 └── test_configs.py
 
-docs_assets/             # Character spritesheet instructions (source of truth)
-├── spritesheet_instructions_sylara.md
-├── spritesheet_instructions_theron.md
-├── spritesheet_instructions_drunn.md
+docs_assets/             # Reference documentation for original 3 characters
+├── spritesheet_instructions_sylara.md   # Source of truth for Sylara's design
+├── spritesheet_instructions_theron.md   # Source of truth for Theron's design
+├── spritesheet_instructions_drunn.md    # Source of truth for Drunn's design
 ├── sylara_base_reference.png
 ├── theron_base_reference.png
 └── drunn_base_reference.png
 ```
+
+**Note:** For new characters, the YAML config IS the source of truth. The `docs_assets/` files only serve as reference for the three original Blades of the Fallen Realm characters.
 
 ### Module Dependency Graph
 
@@ -235,6 +247,7 @@ retry.py ← workflow.py  (depends on gates.py)
 - **`assembler.py`** — Complete and working. Imports `SpritesheetSpec` from `spriteforge.models`. Functions: `assemble_spritesheet(row_images, spec, output_path)`, `_open_image(source)`.
 - **`tests/test_models.py`** — Has content (tests for models.py). Implementation must pass these.
 - **`tests/test_config.py`** — Has content (tests for config.py). Implementation must pass these.
+- **`tests/test_palette.py`** — Has content (tests for palette.py). Implementation must pass these.
 
 ## Technology Stack
 
@@ -266,7 +279,9 @@ Authentication to Azure uses `DefaultAzureCredential` — no API keys needed. Bo
 
 ## Project Plan (GitHub Issues)
 
-The full implementation is tracked as 11 GitHub issues in dependency order:
+The full implementation is tracked as GitHub issues in dependency order. Issues #1–#11 are the core implementation; issues #19–#21 are the generalization work to support any character.
+
+### Core Implementation
 
 | # | Issue | Module(s) | Complexity | Dependencies |
 |---|-------|-----------|------------|--------------|
@@ -280,9 +295,17 @@ The full implementation is tracked as 11 GitHub issues in dependency order:
 | [#8](https://github.com/francesco-sodano/spriteforge/issues/8) | Retry & Escalation Engine | `retry.py` | Medium | #7 |
 | [#9](https://github.com/francesco-sodano/spriteforge/issues/9) | Workflow Orchestrator | `workflow.py` | Large | #1–#8 |
 | [#10](https://github.com/francesco-sodano/spriteforge/issues/10) | CLI Entry Point | `__main__.py`, `app.py` | Small | #2, #3, #9 |
-| [#11](https://github.com/francesco-sodano/spriteforge/issues/11) | Character YAML Configs | `configs/` | Small | #1, #2 |
+| [#11](https://github.com/francesco-sodano/spriteforge/issues/11) | Character YAML Configs | `configs/` | Small | #1, #2, #19 |
 
-**Suggested execution order:** #1 → #2 + #3 (parallel) → #4 + #5 + #6 (parallel) → #7 → #8 → #11 → #9 → #10
+### Generalization (Any Character Support)
+
+| # | Issue | Module(s) | Complexity | Dependencies |
+|---|-------|-----------|------------|--------------|
+| [#19](https://github.com/francesco-sodano/spriteforge/issues/19) | Generalize Input Format — Self-Contained YAML | `models.py`, `config.py` | Medium | #1, #2 |
+| [#20](https://github.com/francesco-sodano/spriteforge/issues/20) | Remove Hardcoded Palette Constants | `palette.py`, `__init__.py` | Small | #3, #19 |
+| [#21](https://github.com/francesco-sodano/spriteforge/issues/21) | Character Config Template & Documentation | `configs/`, docs | Small | #19 |
+
+**Suggested execution order:** #1 → #2 + #3 (parallel) → #19 → #20 + #4 + #5 + #6 (parallel) → #7 → #8 → #11 + #21 (parallel) → #9 → #10
 
 Each issue contains: proposed solution with code signatures, acceptance criteria checklist, test plan, dependency cross-references, technical notes, and out-of-scope boundaries.
 
@@ -381,7 +404,7 @@ dependencies = [
 - Be mindful of I/O operations; batch them when possible and consider asynchronous methods for non-blocking tasks.
 - When dealing with large datasets, prefer memory-efficient approaches like generators over materializing large lists.
 - Process rows sequentially but run parallel LLM gates via `asyncio.gather()` where gates are independent.
-- Don't hold all 16 row images in memory simultaneously — process row by row and save to disk.
+- Don't hold all row images in memory simultaneously — process row by row and save to disk.
 
 ## Memory
 - Use the memory file at `.github/instructions/memory.instruction.md` to persist key information across sessions. Before starting a new task, review it for context.
@@ -433,18 +456,20 @@ When assigned a GitHub Issue created from one of these templates, follow this wo
 
 ### Grid Generation Rules
 - Grids are always 64 rows × 64 columns (64 strings of 64 characters)
-- Every character in a grid must be a valid palette symbol for that character
+- Every character in a grid must be a valid palette symbol for that character (as defined in the YAML config)
 - Transparent pixels use `.` — the background of every frame MUST be transparent
 - Outline pixels use `O` — every character sprite has a 1px dark outline
 - Grid is parsed from JSON: `{"grid": ["...", "...", ...]}`
 
 ### Frame Generation Context
 When generating a frame, the LLM receives:
-1. The **anchor frame** (IDLE F0) — always included for character consistency
+1. The **anchor frame** (Row 0, Frame 0) — always included for character consistency
 2. The **rough reference frame** — cropped from Stage 1's reference strip
 3. The **previous frame's grid** (if not first frame) — for animation continuity
-4. The **palette specification** — exact symbols and RGB values
+4. The **palette specification** — exact symbols and RGB values (from YAML config)
 5. The **animation description** — from the YAML config's `prompt_context` field
+6. The **character description** — from the YAML config's `character.description` field
+7. The **generation rules** — from the YAML config's `generation.rules` field
 
 ### Provider Architecture
 - `ReferenceProvider` is the base class for Stage 1 reference generation
