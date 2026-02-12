@@ -155,3 +155,9 @@ class TestLoadConfig:
         spec = load_config(cfg)
         assert spec.base_image_path == "/tmp/ref.png"
         assert spec.output_path == "/tmp/out.png"
+
+    def test_malformed_yaml_syntax(self, config_dir: Path) -> None:
+        cfg = config_dir / "broken.yaml"
+        cfg.write_text("{ bad yaml [")
+        with pytest.raises(ValueError, match="Malformed YAML"):
+            load_config(cfg)

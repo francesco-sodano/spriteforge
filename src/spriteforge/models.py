@@ -22,6 +22,13 @@ class PaletteColor(BaseModel):
     g: int = Field(..., ge=0, le=255)
     b: int = Field(..., ge=0, le=255)
 
+    @field_validator("symbol")
+    @classmethod
+    def _symbol_must_be_single_char(cls, v: str) -> str:
+        if len(v) != 1:
+            raise ValueError("symbol must be exactly one character")
+        return v
+
     @property
     def rgb(self) -> tuple[int, int, int]:
         """Return the color as an ``(R, G, B)`` tuple."""
@@ -48,6 +55,18 @@ class PaletteConfig(BaseModel):
     )
     colors: list[PaletteColor] = []
 
+    @model_validator(mode="after")
+    def _no_duplicate_symbols(self) -> "PaletteConfig":
+        symbols: list[str] = [self.transparent_symbol, self.outline.symbol]
+        for color in self.colors:
+            symbols.append(color.symbol)
+        seen: set[str] = set()
+        for s in symbols:
+            if s in seen:
+                raise ValueError(f"Duplicate palette symbol: {s!r}")
+            seen.add(s)
+        return self
+
 
 class AnimationDef(BaseModel):
     """Definition of a single animation row in the spritesheet.
@@ -59,6 +78,7 @@ class AnimationDef(BaseModel):
         loop: Whether the animation loops.
         timing_ms: Milliseconds per frame (> 0).
         hit_frame: Optional frame index that represents the hit point.
+        frame_descriptions: Optional per-frame pose descriptions for prompt generation.
     """
 
     name: str
@@ -67,6 +87,16 @@ class AnimationDef(BaseModel):
     loop: bool = False
     timing_ms: int = Field(..., gt=0)
     hit_frame: int | None = None
+    frame_descriptions: list[str] = []
+
+    @model_validator(mode="after")
+    def _frame_descriptions_length(self) -> "AnimationDef":
+        if self.frame_descriptions and len(self.frame_descriptions) != self.frames:
+            raise ValueError(
+                f"frame_descriptions length ({len(self.frame_descriptions)}) "
+                f"must equal frames ({self.frames})"
+            )
+        return self
 
 
 class CharacterConfig(BaseModel):
@@ -106,6 +136,24 @@ class SpritesheetSpec(BaseModel):
     animations: list[AnimationDef] = []
     base_image_path: str = ""
     output_path: str = ""
+
+    @model_validator(mode="after")
+    def _validate_animations(self) -> "SpritesheetSpec":
+        # Reject duplicate row indices
+        seen_rows: set[int] = set()
+        for anim in self.animations:
+            if anim.row in seen_rows:
+                raise ValueError(f"Duplicate row index: {anim.row}")
+            seen_rows.add(anim.row)
+        # Reject frames exceeding spritesheet columns
+        cols = self.character.spritesheet_columns
+        for anim in self.animations:
+            if anim.frames > cols:
+                raise ValueError(
+                    f"Animation {anim.name!r} has {anim.frames} frames, "
+                    f"exceeding spritesheet_columns ({cols})"
+                )
+        return self
 
     @property
     def total_rows(self) -> int:

@@ -9,6 +9,7 @@ from spriteforge.models import (
     AnimationDef,
     CharacterConfig,
     PaletteColor,
+    PaletteConfig,
     SpritesheetSpec,
 )
 
@@ -47,6 +48,30 @@ class TestAnimationDef:
         with pytest.raises(ValidationError):
             AnimationDef(name="bad", row=0, frames=1, timing_ms=0)
 
+    def test_animation_def_frame_descriptions_valid(self) -> None:
+        anim = AnimationDef(
+            name="idle",
+            row=0,
+            frames=3,
+            timing_ms=100,
+            frame_descriptions=["stand", "breathe", "blink"],
+        )
+        assert len(anim.frame_descriptions) == 3
+
+    def test_animation_def_frame_descriptions_empty_is_ok(self) -> None:
+        anim = AnimationDef(name="idle", row=0, frames=3, timing_ms=100)
+        assert anim.frame_descriptions == []
+
+    def test_animation_def_frame_descriptions_mismatch(self) -> None:
+        with pytest.raises(ValidationError, match="frame_descriptions length"):
+            AnimationDef(
+                name="idle",
+                row=0,
+                frames=3,
+                timing_ms=100,
+                frame_descriptions=["a", "b", "c", "d", "e"],
+            )
+
 
 # ---------------------------------------------------------------------------
 # PaletteColor
@@ -67,6 +92,32 @@ class TestPaletteColor:
     def test_negative_rejected(self) -> None:
         with pytest.raises(ValidationError):
             PaletteColor(element="Bad", r=-1, g=0, b=0)
+
+    def test_palette_color_rejects_multi_char_symbol(self) -> None:
+        with pytest.raises(ValidationError, match="exactly one character"):
+            PaletteColor(element="X", symbol="ab", r=0, g=0, b=0)
+
+    def test_palette_color_rejects_empty_symbol(self) -> None:
+        with pytest.raises(ValidationError, match="exactly one character"):
+            PaletteColor(element="X", symbol="", r=0, g=0, b=0)
+
+
+# ---------------------------------------------------------------------------
+# PaletteConfig
+# ---------------------------------------------------------------------------
+
+
+class TestPaletteConfig:
+    """Tests for the PaletteConfig model validators."""
+
+    def test_palette_config_rejects_duplicate_symbols(self) -> None:
+        with pytest.raises(ValidationError, match="Duplicate palette symbol"):
+            PaletteConfig(
+                colors=[
+                    PaletteColor(element="Skin", symbol="s", r=0, g=0, b=0),
+                    PaletteColor(element="Hair", symbol="s", r=0, g=0, b=0),
+                ],
+            )
 
 
 # ---------------------------------------------------------------------------
@@ -129,3 +180,32 @@ class TestSpritesheetSpec:
         )
         assert spec.base_image_path == "/tmp/ref.png"
         assert spec.output_path == "/tmp/out.png"
+
+    def test_spritesheet_spec_rejects_duplicate_rows(self) -> None:
+        with pytest.raises(ValidationError, match="Duplicate row index"):
+            SpritesheetSpec(
+                character=CharacterConfig(name="Hero"),
+                animations=[
+                    AnimationDef(name="idle", row=0, frames=6, timing_ms=150),
+                    AnimationDef(name="walk", row=0, frames=8, timing_ms=100),
+                ],
+            )
+
+    def test_spritesheet_spec_rejects_excess_frames(self) -> None:
+        with pytest.raises(ValidationError, match="exceeding spritesheet_columns"):
+            SpritesheetSpec(
+                character=CharacterConfig(name="Hero", spritesheet_columns=14),
+                animations=[
+                    AnimationDef(name="big", row=0, frames=15, timing_ms=100),
+                ],
+            )
+
+    def test_spritesheet_spec_total_frames(self) -> None:
+        spec = SpritesheetSpec(
+            character=CharacterConfig(name="Hero"),
+            animations=[
+                AnimationDef(name="idle", row=0, frames=6, timing_ms=150),
+                AnimationDef(name="walk", row=1, frames=8, timing_ms=100),
+            ],
+        )
+        assert spec.total_frames == 14
