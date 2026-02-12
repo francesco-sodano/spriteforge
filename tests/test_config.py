@@ -6,6 +6,7 @@ import textwrap
 from pathlib import Path
 
 import pytest
+from pydantic import ValidationError
 
 from spriteforge.config import load_config
 
@@ -356,7 +357,7 @@ class TestLoadConfig:
                       name: "Other"
                       rgb: [100, 100, 100]
             """))
-        with pytest.raises(Exception, match="[Dd]uplicate"):
+        with pytest.raises(ValidationError, match="[Dd]uplicate"):
             load_config(cfg)
 
     def test_load_config_full_generic_character(self, config_dir: Path) -> None:
