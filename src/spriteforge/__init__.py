@@ -16,6 +16,8 @@ from spriteforge.palette import (
     THERON_OUTLINE_RGBA,
     THERON_P1_COLORS,
     build_palette_map,
+    swap_palette_grid,
+    validate_grid_symbols,
 )
 
 __all__ = [
@@ -32,4 +34,6 @@ __all__ = [
     "THERON_P1_COLORS",
     "build_palette_map",
     "load_config",
+    "swap_palette_grid",
+    "validate_grid_symbols",
 ]

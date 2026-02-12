@@ -38,7 +38,7 @@ THERON_P1_COLORS: list[tuple[str, str, tuple[int, int, int, int]]] = [
     ("Skin", "s", (210, 170, 130, 255)),
     ("Hair", "h", (60, 40, 25, 255)),
     ("Breastplate", "a", (80, 80, 95, 255)),
-    ("Tunic/Cloak", "c", (150, 30, 30, 255)),
+    ("Tunic / Cloak", "c", (150, 30, 30, 255)),
     ("Leather", "l", (100, 65, 35, 255)),
     ("Steel trim", "t", (200, 190, 160, 255)),
     ("Emberfang blade", "b", (140, 140, 150, 255)),
@@ -61,8 +61,8 @@ DRUNN_P1_COLORS: list[tuple[str, str, tuple[int, int, int, int]]] = [
     ("Chainmail", "c", (130, 130, 140, 255)),
     ("Leather belt/pants", "l", (90, 60, 35, 255)),
     ("Boots", "b", (60, 55, 50, 255)),
-    ("Axe heads", "a", (100, 100, 110, 255)),
-    ("Axe hafts", "w", (120, 80, 45, 255)),
+    ("Axe heads (steel)", "a", (100, 100, 110, 255)),
+    ("Axe hafts (wood)", "w", (120, 80, 45, 255)),
     ("Red accent", "r", (170, 35, 30, 255)),
 ]
 
