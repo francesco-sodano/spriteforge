@@ -1,10 +1,10 @@
 # SpriteForge
 
-An AI-powered spritesheet generator for 2D games. Feed it a base character image and a YAML config file defining animations (frame count, size, timing), and it uses an Azure-hosted image-generation model to produce each animation row, then assembles them into a single, game-ready spritesheet PNG with transparent backgrounds.
+An AI-powered spritesheet generator for 2D games. Feed it a base character image and a YAML config file defining animations (frame count, size, timing), and it uses a **two-stage AI pipeline** — GPT-Image-1.5 for rough reference generation and Claude Opus 4.6 for pixel-precise grid generation — both hosted on **Azure AI Foundry**, to produce a game-ready spritesheet PNG with transparent backgrounds.
 
 ## Features
 
-- **AI-Powered Generation** — Uses Azure-hosted image-generation models to create pixel-art animation frames from a base character reference image.
+- **AI-Powered Generation** — Uses a two-stage AI pipeline: GPT-Image-1.5 generates rough animation references, then Claude Opus 4.6 (with vision) translates them into pixel-precise 64×64 grids. Both models are accessed via Azure AI Foundry.
 - **YAML-Driven Configuration** — Define animations, frame counts, sizes, and timing in a simple YAML config file.
 - **Automatic Spritesheet Assembly** — Generates individual animation rows and stitches them into a single, game-ready spritesheet PNG.
 - **Transparent Backgrounds** — All output sprites use PNG-32 with full alpha transparency, ready for any game engine.
@@ -14,7 +14,8 @@ An AI-powered spritesheet generator for 2D games. Feed it a base character image
 ## Requirements
 
 - Python 3.12
-- An Azure endpoint for image generation (e.g., Azure OpenAI with DALL-E or a custom model)
+- An Azure AI Foundry project endpoint (hosts both GPT-Image-1.5 and Claude Opus 4.6)
+- Azure authentication via `DefaultAzureCredential` (no API keys needed)
 - A base character reference image (PNG)
 - A YAML configuration file defining the spritesheet layout and animations
 
@@ -32,8 +33,9 @@ uv sync --group dev
 
 | Variable | Description |
 |---|---|
-| `AZURE_IMAGE_ENDPOINT` | The Azure image-generation model endpoint URL |
-| `AZURE_IMAGE_API_KEY` | API key for the Azure endpoint (optional if using `DefaultAzureCredential`) |
+| `AZURE_AI_PROJECT_ENDPOINT` | The Azure AI Foundry project endpoint (hosts both GPT-Image-1.5 and Claude Opus 4.6) |
+
+Authentication uses `DefaultAzureCredential` — no API keys needed.
 
 ### YAML Config File
 
@@ -90,9 +92,15 @@ src/spriteforge/        # Package source code
 ├── __init__.py         # Package exports
 ├── __main__.py         # CLI entry point
 ├── config.py           # YAML config loading and validation (Pydantic models)
-├── generator.py        # Azure image-generation client
+├── generator.py        # Claude Opus 4.6 grid generation (Stage 2)
 ├── assembler.py        # Sprite row assembly into final spritesheet
-└── models.py           # Data models for animations, characters, and spritesheets
+├── models.py           # Data models for animations, characters, and spritesheets
+├── palette.py          # Palette symbol → RGBA mapping
+├── renderer.py         # Grid → PNG rendering
+├── gates.py            # Verification gates (programmatic + LLM)
+├── retry.py            # Retry & escalation engine
+├── workflow.py         # Pipeline orchestrator (async Python)
+└── providers/          # Stage 1 reference image provider (GPT-Image-1.5)
 tests/                  # Tests (pytest)
 scripts/                # Helper scripts
 docs_assets/            # Spritesheet generation instructions for characters
@@ -122,8 +130,7 @@ black . && mypy src/ && pytest
 ```bash
 docker build -t spriteforge .
 docker run --rm \
-  -e AZURE_IMAGE_ENDPOINT="https://your-endpoint.openai.azure.com/" \
-  -e AZURE_IMAGE_API_KEY="your-key" \
+  -e AZURE_AI_PROJECT_ENDPOINT="https://your-project.services.ai.azure.com" \
   -v $(pwd)/assets:/app/assets \
   spriteforge --config config.yaml --base-image base.png --output output.png
 ```

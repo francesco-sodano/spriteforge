@@ -22,7 +22,7 @@ The core innovation is a **two-stage generation approach** that mimics how human
 Stage 1 (Image Model) → Gate -1 → Stage 2 (Claude Vision → Grid) → Gates → Retry → Render → Assemble
 ```
 
-- **Stage 1 — Reference Generation:** An image-generation model (Gemini 2.5/3 Image or GPT-Image-1.5) produces a rough, non-pixel-precise animation strip for each row. This is a visual reference, NOT the final output.
+- **Stage 1 — Reference Generation:** GPT-Image-1.5 (via Azure AI Foundry) produces a rough, non-pixel-precise animation strip for each row. This is a visual reference, NOT the final output.
 - **Stage 2 — Grid Generation:** Claude Opus 4.6 (with vision) receives the rough reference + anchor frame + palette spec, and outputs a **pixel-precise 64×64 JSON grid** (64 strings of 64 single-character palette symbols). This grid IS the final output — rendered to PNG by pure Python code.
 
 ### Key Design Principle
@@ -174,10 +174,9 @@ src/spriteforge/
 ├── generator.py         # Claude Opus 4.6 grid generation (Stage 2)
 ├── gates.py             # Verification gates (programmatic + LLM)
 ├── retry.py             # Retry & escalation engine (3-tier)
-├── workflow.py          # Full pipeline orchestrator (async)
-└── providers/           # Stage 1 reference image providers
-    ├── __init__.py      # ReferenceProvider ABC
-    ├── gemini.py        # Google Gemini Image (google-genai SDK)
+├── workflow.py          # Full pipeline orchestrator (async Python + optional Agent Framework)
+└── providers/           # Stage 1 reference image provider
+    ├── __init__.py      # ReferenceProvider base + factory
     └── gpt_image.py     # GPT-Image-1.5 via Azure Foundry
 
 configs/                 # Character YAML configuration files
@@ -239,16 +238,15 @@ retry.py ← workflow.py  (depends on gates.py)
 | Language | Python 3.12.12+ | `>=3.12.12,<3.13` |
 | Package Manager | uv | `pyproject.toml` as single source of truth |
 | Build Backend | hatchling | |
-| Stage 1 (Reference) | Gemini 2.5/3 Image OR GPT-Image-1.5 | Provider-agnostic interface, config-driven selection |
+| Stage 1 (Reference) | GPT-Image-1.5 | Via Azure AI Foundry (same project as Stage 2) |
 | Stage 2 (Grid Gen) | Claude Opus 4.6 (vision) | Via Azure AI Foundry |
 | Verification Gates | Claude Opus 4.6 | Temperature 0.0 for deterministic checks |
 | Azure Client | `azure-ai-projects` | `AzureAIClient` with `project_endpoint` + `model_deployment_name` |
 | Azure Auth | `azure-identity` | `DefaultAzureCredential` (async) |
-| Gemini Client | `google-genai` | Direct Google API (NOT through Azure Foundry) |
 | Image Processing | Pillow (PIL) | Grid → PNG rendering, image assembly |
 | Data Models | Pydantic v2 | Config validation, model serialization |
 | Config Format | YAML | `pyyaml` for loading |
-| Orchestration | Microsoft Agent Framework (optional) | `agent-framework` v1.0.0b* — WorkflowBuilder, Executor |
+| Orchestration | Plain async Python | `asyncio` loops + `asyncio.gather()` for parallel gates. Agent Framework (`agent-framework` v1.0.0b*) is an optional enhancement for observability. |
 | Formatting | black 26.1.0 | |
 | Type Checking | mypy 1.19.1 | |
 | Testing | pytest 9.0.2 | |
@@ -257,10 +255,9 @@ retry.py ← workflow.py  (depends on gates.py)
 
 | Variable | Provider | Description |
 |----------|----------|-------------|
-| `AZURE_AI_PROJECT_ENDPOINT` | Azure Foundry | Endpoint for Claude + GPT-Image |
-| `GOOGLE_API_KEY` or `GEMINI_API_KEY` | Google | API key for Gemini image generation |
+| `AZURE_AI_PROJECT_ENDPOINT` | Azure Foundry | Endpoint for Claude Opus 4.6 + GPT-Image-1.5 |
 
-Authentication to Azure uses `DefaultAzureCredential` — no API keys needed. Gemini requires a Google API key.
+Authentication to Azure uses `DefaultAzureCredential` — no API keys needed. Both models (Claude Opus 4.6 and GPT-Image-1.5) are accessed through the same Azure AI Foundry project.
 
 ## Project Plan (GitHub Issues)
 
@@ -272,12 +269,12 @@ The full implementation is tracked as 11 GitHub issues in dependency order:
 | [#2](https://github.com/francesco-sodano/spriteforge/issues/2) | YAML Config Loader | `config.py` | Small | #1 |
 | [#3](https://github.com/francesco-sodano/spriteforge/issues/3) | Palette System | `palette.py` | Small | #1 |
 | [#4](https://github.com/francesco-sodano/spriteforge/issues/4) | Grid Renderer | `renderer.py` | Medium | #1, #3 |
-| [#5](https://github.com/francesco-sodano/spriteforge/issues/5) | Reference Image Providers | `providers/` | Large | #1 |
+| [#5](https://github.com/francesco-sodano/spriteforge/issues/5) | Reference Image Provider | `providers/` | Medium | #1 |
 | [#6](https://github.com/francesco-sodano/spriteforge/issues/6) | Grid Generator | `generator.py` | Large | #1, #3 |
 | [#7](https://github.com/francesco-sodano/spriteforge/issues/7) | Verification Gates | `gates.py` | Large | #1, #3, #4 |
 | [#8](https://github.com/francesco-sodano/spriteforge/issues/8) | Retry & Escalation Engine | `retry.py` | Medium | #7 |
 | [#9](https://github.com/francesco-sodano/spriteforge/issues/9) | Workflow Orchestrator | `workflow.py` | Large | #1–#8 |
-| [#10](https://github.com/francesco-sodano/spriteforge/issues/10) | CLI Entry Point | `__main__.py`, `app.py` | Small | #2, #3, #5, #9 |
+| [#10](https://github.com/francesco-sodano/spriteforge/issues/10) | CLI Entry Point | `__main__.py`, `app.py` | Small | #2, #3, #9 |
 | [#11](https://github.com/francesco-sodano/spriteforge/issues/11) | Character YAML Configs | `configs/` | Small | #1, #2 |
 
 **Suggested execution order:** #1 → #2 + #3 (parallel) → #4 + #5 + #6 (parallel) → #7 → #8 → #11 → #9 → #10
@@ -315,8 +312,7 @@ dependencies = [
     "pillow>=10.0",
     "azure-ai-projects>=1.0.0b*",
     "azure-identity>=1.0",
-    "google-genai>=1.0",
-    # "agent-framework>=1.0.0b*",  # optional — for workflow orchestration
+    # Optional: "agent-framework>=1.0.0b*",  # for observability/streaming
 ]
 ```
 
@@ -369,7 +365,7 @@ dependencies = [
 - Always be mindful of security best practices.
 - Never hardcode secrets, API keys, or other sensitive credentials in the source code. Use environment variables or a secrets management system.
 - Azure authentication uses `DefaultAzureCredential` — never store Azure keys in code.
-- Google/Gemini API key comes from `GOOGLE_API_KEY` or `GEMINI_API_KEY` environment variable.
+- All models (Claude Opus 4.6 and GPT-Image-1.5) are accessed through Azure AI Foundry — no separate API keys needed.
 - Sanitize all external inputs to prevent injection attacks (e.g., SQL injection, command injection).
 - Be cautious when adding new dependencies and prefer packages with a good reputation and active maintenance.
 - Write code that is resilient to denial-of-service attacks (e.g., by avoiding unbounded resource allocation).
@@ -446,11 +442,11 @@ When generating a frame, the LLM receives:
 5. The **animation description** — from the YAML config's `prompt_context` field
 
 ### Provider Architecture
-- `ReferenceProvider` is an abstract base class
-- `GeminiImageProvider` uses the `google-genai` SDK (direct Google API, NOT through Azure)
-- `GPTImageProvider` uses `AzureAIClient` from `azure-ai-projects` (through Azure Foundry)
-- Provider is selected via config or `--provider` CLI flag
-- Both providers implement the same interface: `async generate_row_strip(base_ref, animation, char_desc) -> Image`
+- `ReferenceProvider` is the base class for Stage 1 reference generation
+- `GPTImageProvider` is the sole provider — uses `AzureAIClient` from `azure-ai-projects` (through Azure Foundry)
+- Both Stage 1 (GPT-Image-1.5) and Stage 2 (Claude Opus 4.6) use the **same Azure AI Foundry project** and `DefaultAzureCredential`
+- No provider selection needed — GPT-Image-1.5 is the only reference image provider
+- Provider interface: `async generate_row_strip(base_ref, animation, char_desc) -> Image`
 
 ### Retry Conventions
 - Max 10 retries per frame (hard limit)
