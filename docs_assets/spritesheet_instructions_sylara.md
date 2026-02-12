@@ -51,7 +51,7 @@ The image must follow this exact layout so all three character sheets are visual
   - Show **P1 palette only** in swatch order matching the P1 table below (left-to-right: Skin, Hair, Eyes, Vest, Pants, Bracers, Boots, Bow, Blades, Fletching, Quiver).
 
 **Character description:**
-- **Build:** Slender, athletic, graceful — elven proportions. Taller than average human but lean. ~46–50 pixels tall in-game sprite. Slightly shorter and more slender than the warrior character (Theron).
+- **Build:** Slender, athletic, graceful — elven proportions. Taller than average human but lean. ~46–50 pixels tall and ~18–22 pixels wide in-game sprite. Slightly shorter and more slender than the warrior character (Theron).
 - **Skin:** Light/fair with a slight warm tone (elven complexion) — RGB approximately (235, 210, 185).
 - **Hair:** Long, golden blonde (220, 185, 90), straight, reaching mid-back. Flows freely — significant hair movement expected in action animations. Pointed elven ears visible through the hair.
 - **Face:** Sharp elven features, high cheekbones, intense focused eyes — bright teal-green (50, 180, 140). Determined but elegant expression.

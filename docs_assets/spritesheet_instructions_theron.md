@@ -51,7 +51,7 @@ The image must follow this exact layout so all three character sheets are visual
   - Show **P1 palette only** in swatch order matching the P1 table below (left-to-right: Skin, Hair, Breastplate, Tunic/Cloak, Leather, Steel trim, Blade, Boots).
 
 **Character description:**
-- **Build:** Tall, muscular, athletic — classic heroic warrior proportions. ~48–52 pixels tall in-game sprite.
+- **Build:** Tall, muscular, athletic — classic heroic warrior proportions. ~48–52 pixels tall and ~24–28 pixels wide in-game sprite.
 - **Skin:** Fair/tanned Caucasian skin — RGB approximately (210, 170, 130).
 - **Hair:** Dark brown (60, 40, 25), medium-length, swept back or tied. Slight movement expected in animations.
 - **Face:** Strong jaw, determined expression, short stubble or clean-shaven.
