@@ -335,3 +335,39 @@ class TestGenerationConfig:
         assert gen.feet_row == 48
         assert gen.outline_width == 2
         assert gen.rules == "No anti-aliasing."
+
+    def test_generation_config_auto_palette_default_false(self) -> None:
+        gen = GenerationConfig()
+        assert gen.auto_palette is False
+
+    def test_generation_config_auto_palette_true(self) -> None:
+        gen = GenerationConfig(auto_palette=True)
+        assert gen.auto_palette is True
+
+    def test_generation_config_max_palette_colors_default(self) -> None:
+        gen = GenerationConfig()
+        assert gen.max_palette_colors == 16
+
+    def test_generation_config_max_palette_colors_custom(self) -> None:
+        gen = GenerationConfig(max_palette_colors=12)
+        assert gen.max_palette_colors == 12
+
+    def test_generation_config_max_palette_colors_min_boundary(self) -> None:
+        gen = GenerationConfig(max_palette_colors=2)
+        assert gen.max_palette_colors == 2
+
+    def test_generation_config_max_palette_colors_max_boundary(self) -> None:
+        gen = GenerationConfig(max_palette_colors=64)
+        assert gen.max_palette_colors == 64
+
+    def test_generation_config_max_palette_colors_below_min(self) -> None:
+        with pytest.raises(ValidationError):
+            GenerationConfig(max_palette_colors=1)
+
+    def test_generation_config_max_palette_colors_above_max(self) -> None:
+        with pytest.raises(ValidationError):
+            GenerationConfig(max_palette_colors=65)
+
+    def test_generation_config_max_palette_colors_zero(self) -> None:
+        with pytest.raises(ValidationError):
+            GenerationConfig(max_palette_colors=0)

@@ -485,3 +485,93 @@ class TestLoadConfig:
         assert spec.character.name == "Bat"
         assert len(spec.animations) == 3
         assert len(spec.palettes["P1"].colors) == 4
+
+    def test_load_config_with_auto_palette(self, config_dir: Path) -> None:
+        cfg = config_dir / "auto_palette.yaml"
+        cfg.write_text(textwrap.dedent("""\
+                character:
+                  name: "Auto"
+                animations:
+                  - name: idle
+                    row: 0
+                    frames: 4
+                    timing_ms: 150
+                generation:
+                  auto_palette: true
+                  max_palette_colors: 12
+            """))
+        spec = load_config(cfg)
+        assert spec.generation.auto_palette is True
+        assert spec.generation.max_palette_colors == 12
+
+    def test_load_config_auto_palette_no_palette_section(
+        self, config_dir: Path
+    ) -> None:
+        """When auto_palette is true and no palette section, config still loads."""
+        cfg = config_dir / "auto_no_pal.yaml"
+        cfg.write_text(textwrap.dedent("""\
+                character:
+                  name: "NoPalette"
+                animations:
+                  - name: idle
+                    row: 0
+                    frames: 4
+                    timing_ms: 150
+                generation:
+                  auto_palette: true
+            """))
+        spec = load_config(cfg)
+        assert spec.generation.auto_palette is True
+        assert spec.palettes == {}
+
+    def test_load_config_auto_palette_with_palette_section(
+        self, config_dir: Path
+    ) -> None:
+        """auto_palette + explicit palette section both load (palette usable as fallback)."""
+        cfg = config_dir / "auto_with_pal.yaml"
+        cfg.write_text(textwrap.dedent("""\
+                character:
+                  name: "Both"
+                animations:
+                  - name: idle
+                    row: 0
+                    frames: 4
+                    timing_ms: 150
+                palette:
+                  outline:
+                    symbol: "O"
+                    name: "Outline"
+                    rgb: [20, 15, 10]
+                  colors:
+                    - symbol: "s"
+                      name: "Skin"
+                      rgb: [80, 140, 60]
+                generation:
+                  auto_palette: true
+                  max_palette_colors: 8
+            """))
+        spec = load_config(cfg)
+        assert spec.generation.auto_palette is True
+        assert spec.generation.max_palette_colors == 8
+        assert "P1" in spec.palettes
+        assert len(spec.palettes["P1"].colors) == 1
+
+    def test_load_config_generation_max_palette_colors_default(
+        self, config_dir: Path
+    ) -> None:
+        """max_palette_colors defaults to 16 when not specified."""
+        cfg = config_dir / "gen_defaults.yaml"
+        cfg.write_text(textwrap.dedent("""\
+                character:
+                  name: "Defaults"
+                animations:
+                  - name: idle
+                    row: 0
+                    frames: 4
+                    timing_ms: 150
+                generation:
+                  facing: "left"
+            """))
+        spec = load_config(cfg)
+        assert spec.generation.auto_palette is False
+        assert spec.generation.max_palette_colors == 16

@@ -141,6 +141,12 @@ class GenerationConfig(BaseModel):
         feet_row: Y-coordinate where feet should be placed (~56 for 64px frames).
         outline_width: Outline thickness in pixels.
         rules: Additional generation rules as free-form text for prompts.
+        auto_palette: When True, palette is auto-extracted from the base
+            reference image by the preprocessor instead of using the
+            YAML-defined palette.
+        max_palette_colors: Maximum number of palette colors (excluding
+            transparent) to extract via quantization when *auto_palette*
+            is enabled.  Default 16 (1 outline + 15 character colors).
     """
 
     style: str = "Modern HD pixel art (Dead Cells / Owlboy style)"
@@ -148,6 +154,8 @@ class GenerationConfig(BaseModel):
     feet_row: int = Field(default=56, ge=0)
     outline_width: int = Field(default=1, ge=0)
     rules: str = ""
+    auto_palette: bool = False
+    max_palette_colors: int = Field(default=16, ge=2, le=64)
 
     @field_validator("facing")
     @classmethod
