@@ -10,12 +10,14 @@ class PaletteColor(BaseModel):
 
     Attributes:
         element: Human-readable name (e.g. "Skin", "Hair").
+        symbol: Single-character palette symbol (e.g. "s", "h").
         r: Red channel (0–255).
         g: Green channel (0–255).
         b: Blue channel (0–255).
     """
 
     element: str
+    symbol: str = ""
     r: int = Field(..., ge=0, le=255)
     g: int = Field(..., ge=0, le=255)
     b: int = Field(..., ge=0, le=255)
@@ -24,6 +26,27 @@ class PaletteColor(BaseModel):
     def rgb(self) -> tuple[int, int, int]:
         """Return the color as an ``(R, G, B)`` tuple."""
         return (self.r, self.g, self.b)
+
+    @property
+    def rgba(self) -> tuple[int, int, int, int]:
+        """Return the color as an ``(R, G, B, A)`` tuple (always fully opaque)."""
+        return (self.r, self.g, self.b, 255)
+
+
+class PaletteConfig(BaseModel):
+    """Palette configuration mapping symbols to RGBA colors.
+
+    Attributes:
+        transparent_symbol: Symbol for fully transparent pixels.
+        outline: The outline color entry (symbol + RGB).
+        colors: List of named palette color entries.
+    """
+
+    transparent_symbol: str = "."
+    outline: PaletteColor = PaletteColor(
+        element="Outline", symbol="O", r=20, g=40, b=40
+    )
+    colors: list[PaletteColor] = []
 
 
 class AnimationDef(BaseModel):
