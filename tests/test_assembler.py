@@ -109,6 +109,16 @@ class TestAssembleSpritesheet:
         with pytest.raises(ValueError, match="does not match frame height"):
             assemble_spritesheet(row_images, two_row_spec)
 
+    def test_assemble_spritesheet_width_exceeds_sheet(
+        self, two_row_spec: SpritesheetSpec
+    ) -> None:
+        row_images = {
+            0: _make_row_png(6 * 64, 64),
+            1: _make_row_png(896 + 64, 64),  # wider than sheet
+        }
+        with pytest.raises(ValueError, match="exceeds sheet width"):
+            assemble_spritesheet(row_images, two_row_spec)
+
     def test_assemble_spritesheet_saves_to_file(
         self, two_row_spec: SpritesheetSpec, tmp_path: Path
     ) -> None:

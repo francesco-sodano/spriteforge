@@ -17,7 +17,7 @@ class PaletteColor(BaseModel):
     """
 
     element: str
-    symbol: str = ""
+    symbol: str
     r: int = Field(..., ge=0, le=255)
     g: int = Field(..., ge=0, le=255)
     b: int = Field(..., ge=0, le=255)
@@ -44,11 +44,13 @@ class PaletteConfig(BaseModel):
     """Palette configuration mapping symbols to RGBA colors.
 
     Attributes:
+        name: Palette identifier (e.g. "P1", "P2").
         transparent_symbol: Symbol for fully transparent pixels.
         outline: The outline color entry (symbol + RGB).
         colors: List of named palette color entries.
     """
 
+    name: str = ""
     transparent_symbol: str = "."
     outline: PaletteColor = PaletteColor(
         element="Outline", symbol="O", r=20, g=40, b=40
@@ -79,6 +81,7 @@ class AnimationDef(BaseModel):
         timing_ms: Milliseconds per frame (> 0).
         hit_frame: Optional frame index that represents the hit point.
         frame_descriptions: Optional per-frame pose descriptions for prompt generation.
+        prompt_context: Animation-specific context used in Stage 2 prompt generation.
     """
 
     name: str
@@ -88,13 +91,18 @@ class AnimationDef(BaseModel):
     timing_ms: int = Field(..., gt=0)
     hit_frame: int | None = None
     frame_descriptions: list[str] = []
+    prompt_context: str = ""
 
     @model_validator(mode="after")
-    def _frame_descriptions_length(self) -> "AnimationDef":
+    def _validate_animation_constraints(self) -> "AnimationDef":
         if self.frame_descriptions and len(self.frame_descriptions) != self.frames:
             raise ValueError(
                 f"frame_descriptions length ({len(self.frame_descriptions)}) "
                 f"must equal frames ({self.frames})"
+            )
+        if self.hit_frame is not None and self.hit_frame >= self.frames:
+            raise ValueError(
+                f"hit_frame ({self.hit_frame}) must be < frames ({self.frames})"
             )
         return self
 
@@ -128,12 +136,14 @@ class SpritesheetSpec(BaseModel):
     Attributes:
         character: The character this spritesheet belongs to.
         animations: Ordered list of animation definitions.
+        palettes: Named palette configurations (e.g. "P1", "P2").
         base_image_path: Optional path to the base reference image.
         output_path: Optional path for the generated spritesheet.
     """
 
     character: CharacterConfig
     animations: list[AnimationDef] = []
+    palettes: dict[str, PaletteConfig] = {}
     base_image_path: str = ""
     output_path: str = ""
 

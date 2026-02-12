@@ -77,6 +77,18 @@ def load_config(path: str | Path) -> SpritesheetSpec:
     if "animations" not in data:
         raise ValueError("Missing required 'animations' section in config")
 
+    # --- Type-check top-level sections ---
+    if not isinstance(data["character"], dict):
+        raise ValueError(
+            "'character' section must be a YAML mapping, "
+            f"got {type(data['character']).__name__}"
+        )
+    if not isinstance(data["animations"], list):
+        raise ValueError(
+            "'animations' section must be a YAML sequence, "
+            f"got {type(data['animations']).__name__}"
+        )
+
     # --- Build CharacterConfig ---
     char_raw = data["character"].copy()
 

@@ -28,7 +28,9 @@ dev = [
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-asyncio_mode = "auto"
+
+[tool.pytest-asyncio]
+mode = "auto"
 
 [tool.mypy]
 python_version = "3.12"

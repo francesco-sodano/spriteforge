@@ -78,6 +78,13 @@ def assemble_spritesheet(
                 f"{row_img.height}px does not match frame height {frame_h}px"
             )
 
+        # Validate width does not exceed sheet width
+        if row_img.width > sheet_w:
+            raise ValueError(
+                f"Row {row_idx} ({animation.name}) image width "
+                f"{row_img.width}px exceeds sheet width {sheet_w}px"
+            )
+
         y_offset = row_idx * frame_h
         sheet.paste(row_img, (0, y_offset), row_img)
 

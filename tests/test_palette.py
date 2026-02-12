@@ -6,7 +6,12 @@ import pytest
 
 from spriteforge.models import PaletteColor, PaletteConfig
 from spriteforge.palette import (
+    DRUNN_OUTLINE_RGBA,
+    DRUNN_P1_COLORS,
+    SYLARA_OUTLINE_RGBA,
     SYLARA_P1_COLORS,
+    THERON_OUTLINE_RGBA,
+    THERON_P1_COLORS,
     build_palette_map,
     swap_palette_grid,
     validate_grid_symbols,
@@ -193,3 +198,119 @@ class TestSylaraP1Constants:
     def test_sylara_p1_all_symbols_unique(self) -> None:
         symbols = [sym for _name, sym, _rgba in SYLARA_P1_COLORS]
         assert len(symbols) == len(set(symbols))
+
+
+# ---------------------------------------------------------------------------
+# Theron P1 palette constants
+# ---------------------------------------------------------------------------
+
+
+class TestTheronP1Constants:
+    """Tests for the THERON_P1_COLORS constant.
+
+    Source of truth: docs_assets/spritesheet_instructions_theron.md
+    """
+
+    def test_theron_p1_has_eight_colors(self) -> None:
+        assert len(THERON_P1_COLORS) == 8
+
+    def test_theron_p1_skin_values(self) -> None:
+        skin = next(c for c in THERON_P1_COLORS if c[0] == "Skin")
+        assert skin[1] == "s"
+        assert skin[2] == (210, 170, 130, 255)
+
+    def test_theron_p1_hair_values(self) -> None:
+        hair = next(c for c in THERON_P1_COLORS if c[0] == "Hair")
+        assert hair[1] == "h"
+        assert hair[2] == (60, 40, 25, 255)
+
+    def test_theron_p1_all_symbols_unique(self) -> None:
+        symbols = [sym for _name, sym, _rgba in THERON_P1_COLORS]
+        assert len(symbols) == len(set(symbols))
+
+    def test_theron_p1_all_names_present(self) -> None:
+        names = {name for name, _sym, _rgba in THERON_P1_COLORS}
+        expected = {
+            "Skin",
+            "Hair",
+            "Breastplate",
+            "Tunic/Cloak",
+            "Leather",
+            "Steel trim",
+            "Emberfang blade",
+            "Boots",
+        }
+        assert names == expected
+
+    def test_theron_outline_rgba(self) -> None:
+        # "dark brown or black" per spritesheet_instructions_theron.md
+        assert len(THERON_OUTLINE_RGBA) == 4
+        assert THERON_OUTLINE_RGBA[3] == 255  # fully opaque
+
+
+# ---------------------------------------------------------------------------
+# Drunn P1 palette constants
+# ---------------------------------------------------------------------------
+
+
+class TestDrunnP1Constants:
+    """Tests for the DRUNN_P1_COLORS constant.
+
+    Source of truth: docs_assets/spritesheet_instructions_drunn.md
+    """
+
+    def test_drunn_p1_has_ten_colors(self) -> None:
+        assert len(DRUNN_P1_COLORS) == 10
+
+    def test_drunn_p1_skin_values(self) -> None:
+        skin = next(c for c in DRUNN_P1_COLORS if c[0] == "Skin")
+        assert skin[1] == "s"
+        assert skin[2] == (190, 145, 110, 255)
+
+    def test_drunn_p1_beard_values(self) -> None:
+        beard = next(c for c in DRUNN_P1_COLORS if c[0] == "Beard/hair")
+        assert beard[1] == "h"
+        assert beard[2] == (180, 70, 20, 255)
+
+    def test_drunn_p1_all_symbols_unique(self) -> None:
+        symbols = [sym for _name, sym, _rgba in DRUNN_P1_COLORS]
+        assert len(symbols) == len(set(symbols))
+
+    def test_drunn_p1_all_names_present(self) -> None:
+        names = {name for name, _sym, _rgba in DRUNN_P1_COLORS}
+        expected = {
+            "Skin",
+            "Beard/hair",
+            "Helm/breastplate",
+            "Pauldrons",
+            "Chainmail",
+            "Leather belt/pants",
+            "Boots",
+            "Axe heads",
+            "Axe hafts",
+            "Red accent",
+        }
+        assert names == expected
+
+    def test_drunn_outline_rgba(self) -> None:
+        # "dark brown or black" per spritesheet_instructions_drunn.md
+        assert len(DRUNN_OUTLINE_RGBA) == 4
+        assert DRUNN_OUTLINE_RGBA[3] == 255  # fully opaque
+
+
+# ---------------------------------------------------------------------------
+# Outline RGBA constants
+# ---------------------------------------------------------------------------
+
+
+class TestOutlineConstants:
+    """Tests for per-character outline RGBA constants."""
+
+    def test_sylara_outline_is_dark_teal(self) -> None:
+        # "dark teal or black" per spritesheet_instructions_sylara.md
+        assert SYLARA_OUTLINE_RGBA == (0, 80, 80, 255)
+
+    def test_all_outlines_fully_opaque(self) -> None:
+        assert SYLARA_OUTLINE_RGBA[3] == 255
+        assert THERON_OUTLINE_RGBA[3] == 255
+        assert DRUNN_OUTLINE_RGBA[3] == 255

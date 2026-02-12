@@ -72,6 +72,32 @@ class TestAnimationDef:
                 frame_descriptions=["a", "b", "c", "d", "e"],
             )
 
+    def test_animation_def_hit_frame_out_of_range(self) -> None:
+        with pytest.raises(ValidationError, match="hit_frame.*must be < frames"):
+            AnimationDef(name="attack1", row=2, frames=5, timing_ms=80, hit_frame=5)
+
+    def test_animation_def_hit_frame_way_out_of_range(self) -> None:
+        with pytest.raises(ValidationError, match="hit_frame.*must be < frames"):
+            AnimationDef(name="attack1", row=2, frames=5, timing_ms=80, hit_frame=10)
+
+    def test_animation_def_hit_frame_at_last_valid_index(self) -> None:
+        anim = AnimationDef(name="attack1", row=2, frames=5, timing_ms=80, hit_frame=4)
+        assert anim.hit_frame == 4
+
+    def test_animation_def_prompt_context_default(self) -> None:
+        anim = AnimationDef(name="idle", row=0, frames=6, timing_ms=150)
+        assert anim.prompt_context == ""
+
+    def test_animation_def_prompt_context_custom(self) -> None:
+        anim = AnimationDef(
+            name="idle",
+            row=0,
+            frames=6,
+            timing_ms=150,
+            prompt_context="Relaxed ready stance with bow at side",
+        )
+        assert anim.prompt_context == "Relaxed ready stance with bow at side"
+
 
 # ---------------------------------------------------------------------------
 # PaletteColor
@@ -82,16 +108,17 @@ class TestPaletteColor:
     """Tests for the PaletteColor model."""
 
     def test_valid_color(self) -> None:
-        color = PaletteColor(element="Skin", r=210, g=170, b=130)
+        color = PaletteColor(element="Skin", symbol="s", r=210, g=170, b=130)
         assert color.rgb == (210, 170, 130)
+        assert color.symbol == "s"
 
     def test_out_of_range_rejected(self) -> None:
         with pytest.raises(ValidationError):
-            PaletteColor(element="Bad", r=256, g=0, b=0)
+            PaletteColor(element="Bad", symbol="x", r=256, g=0, b=0)
 
     def test_negative_rejected(self) -> None:
         with pytest.raises(ValidationError):
-            PaletteColor(element="Bad", r=-1, g=0, b=0)
+            PaletteColor(element="Bad", symbol="x", r=-1, g=0, b=0)
 
     def test_palette_color_rejects_multi_char_symbol(self) -> None:
         with pytest.raises(ValidationError, match="exactly one character"):
@@ -100,6 +127,14 @@ class TestPaletteColor:
     def test_palette_color_rejects_empty_symbol(self) -> None:
         with pytest.raises(ValidationError, match="exactly one character"):
             PaletteColor(element="X", symbol="", r=0, g=0, b=0)
+
+    def test_palette_color_symbol_is_required(self) -> None:
+        with pytest.raises(ValidationError):
+            PaletteColor(element="Skin", r=210, g=170, b=130)  # type: ignore[call-arg]
+
+    def test_palette_color_rgba(self) -> None:
+        color = PaletteColor(element="Skin", symbol="s", r=100, g=150, b=200)
+        assert color.rgba == (100, 150, 200, 255)
 
 
 # ---------------------------------------------------------------------------
@@ -118,6 +153,14 @@ class TestPaletteConfig:
                     PaletteColor(element="Hair", symbol="s", r=0, g=0, b=0),
                 ],
             )
+
+    def test_palette_config_name_default(self) -> None:
+        palette = PaletteConfig()
+        assert palette.name == ""
+
+    def test_palette_config_name_custom(self) -> None:
+        palette = PaletteConfig(name="P1")
+        assert palette.name == "P1"
 
 
 # ---------------------------------------------------------------------------
@@ -209,3 +252,21 @@ class TestSpritesheetSpec:
             ],
         )
         assert spec.total_frames == 14
+
+    def test_spritesheet_spec_palettes_default_empty(self) -> None:
+        spec = SpritesheetSpec(character=CharacterConfig(name="Hero"))
+        assert spec.palettes == {}
+
+    def test_spritesheet_spec_palettes_with_entries(self) -> None:
+        p1 = PaletteConfig(
+            name="P1",
+            colors=[
+                PaletteColor(element="Skin", symbol="s", r=235, g=210, b=185),
+            ],
+        )
+        spec = SpritesheetSpec(
+            character=CharacterConfig(name="Hero"),
+            palettes={"P1": p1},
+        )
+        assert "P1" in spec.palettes
+        assert spec.palettes["P1"].name == "P1"

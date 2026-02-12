@@ -106,6 +106,11 @@ Each character in the grid maps to a palette entry (e.g., `.` = transparent, `O`
 
 Each character has **12 symbols**: `.` (transparent), `O` (outline/dark border), plus 10 character-specific color symbols. Symbols are single characters, kept mnemonic (`s`=skin, `h`=hair, `v`=vest, etc.).
 
+**Note:** Outline color is **per-character** — each character has a different outline RGBA. The source of truth for palette colors (including outlines) is always `docs_assets/spritesheet_instructions_*.md`. The outline values below are derived from those docs:
+- **Sylara:** "dark teal or black" → `(0, 80, 80, 255)`
+- **Theron:** "dark brown or black" → `(30, 20, 15, 255)`
+- **Drunn:** "dark brown or black" → `(30, 20, 15, 255)`
+
 Example (Sylara):
 ```
 . = transparent (0, 0, 0, 0)

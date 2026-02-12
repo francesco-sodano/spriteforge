@@ -161,3 +161,26 @@ class TestLoadConfig:
         cfg.write_text("{ bad yaml [")
         with pytest.raises(ValueError, match="Malformed YAML"):
             load_config(cfg)
+
+    def test_character_section_not_a_mapping(self, config_dir: Path) -> None:
+        cfg = config_dir / "char_str.yaml"
+        cfg.write_text(textwrap.dedent("""\
+                character: "just a string"
+                animations: []
+            """))
+        with pytest.raises(
+            ValueError, match="'character' section must be a YAML mapping"
+        ):
+            load_config(cfg)
+
+    def test_animations_section_not_a_sequence(self, config_dir: Path) -> None:
+        cfg = config_dir / "anim_str.yaml"
+        cfg.write_text(textwrap.dedent("""\
+                character:
+                  name: Test
+                animations: "not a list"
+            """))
+        with pytest.raises(
+            ValueError, match="'animations' section must be a YAML sequence"
+        ):
+            load_config(cfg)
