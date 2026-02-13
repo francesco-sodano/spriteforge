@@ -9,6 +9,17 @@ WORKSPACE_DIR="$(dirname "$(dirname "$SCRIPT_DIR")")"
 VENV_PATH="$WORKSPACE_DIR/.venv"
 PYTHON_VERSION="3.12.12"
 
+# ── .NET 10 SDK ──────────────────────────────────────────────────────────────
+# Install .NET 10 SDK on Ubuntu 24.04 via apt
+# Ref: https://learn.microsoft.com/dotnet/core/install/linux-ubuntu
+if ! dotnet --list-sdks 2>/dev/null | grep -q '^10\.'; then
+	echo "Installing .NET 10 SDK..."
+	sudo apt-get update -qq && sudo apt-get install -y -qq dotnet-sdk-10.0
+	echo ".NET $(dotnet --version) installed."
+else
+	echo ".NET 10 SDK already installed: $(dotnet --list-sdks | grep '^10\.')"
+fi
+
 # Always ensure the required managed Python is installed (survives container rebuilds)
 uv python install "$PYTHON_VERSION"
 
