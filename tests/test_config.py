@@ -22,7 +22,9 @@ class TestLoadConfig:
 
     def test_valid_config(self, config_dir: Path) -> None:
         cfg = config_dir / "valid.yaml"
-        cfg.write_text(textwrap.dedent("""\
+        cfg.write_text(
+            textwrap.dedent(
+                """\
                 character:
                   name: "Theron Ashblade"
                   class: "Warrior"
@@ -41,7 +43,9 @@ class TestLoadConfig:
                     frames: 8
                     loop: true
                     timing_ms: 100
-            """))
+            """
+            )
+        )
         spec = load_config(cfg)
         assert spec.character.name == "Theron Ashblade"
         assert spec.character.character_class == "Warrior"
@@ -52,7 +56,9 @@ class TestLoadConfig:
 
     def test_config_with_hit_frame(self, config_dir: Path) -> None:
         cfg = config_dir / "hit.yaml"
-        cfg.write_text(textwrap.dedent("""\
+        cfg.write_text(
+            textwrap.dedent(
+                """\
                 character:
                   name: "Test"
                 animations:
@@ -62,7 +68,9 @@ class TestLoadConfig:
                     loop: false
                     timing_ms: 80
                     hit_frame: 2
-            """))
+            """
+            )
+        )
         spec = load_config(cfg)
         assert spec.animations[0].hit_frame == 2
 
@@ -84,7 +92,9 @@ class TestLoadConfig:
 
     def test_duplicate_row_indices(self, config_dir: Path) -> None:
         cfg = config_dir / "dupe.yaml"
-        cfg.write_text(textwrap.dedent("""\
+        cfg.write_text(
+            textwrap.dedent(
+                """\
                 character:
                   name: Test
                 animations:
@@ -96,13 +106,17 @@ class TestLoadConfig:
                     row: 0
                     frames: 8
                     timing_ms: 100
-            """))
+            """
+            )
+        )
         with pytest.raises(ValueError, match="Duplicate row"):
             load_config(cfg)
 
     def test_bad_frame_size(self, config_dir: Path) -> None:
         cfg = config_dir / "bad_fs.yaml"
-        cfg.write_text(textwrap.dedent("""\
+        cfg.write_text(
+            textwrap.dedent(
+                """\
                 character:
                   name: Test
                   frame_size: [64]
@@ -111,7 +125,9 @@ class TestLoadConfig:
                     row: 0
                     frames: 6
                     timing_ms: 150
-            """))
+            """
+            )
+        )
         with pytest.raises(ValueError, match="frame_size"):
             load_config(cfg)
 
@@ -123,7 +139,9 @@ class TestLoadConfig:
 
     def test_animations_sorted_by_row(self, config_dir: Path) -> None:
         cfg = config_dir / "unsorted.yaml"
-        cfg.write_text(textwrap.dedent("""\
+        cfg.write_text(
+            textwrap.dedent(
+                """\
                 character:
                   name: Test
                 animations:
@@ -135,14 +153,18 @@ class TestLoadConfig:
                     row: 0
                     frames: 6
                     timing_ms: 150
-            """))
+            """
+            )
+        )
         spec = load_config(cfg)
         assert spec.animations[0].row == 0
         assert spec.animations[1].row == 1
 
     def test_optional_paths(self, config_dir: Path) -> None:
         cfg = config_dir / "paths.yaml"
-        cfg.write_text(textwrap.dedent("""\
+        cfg.write_text(
+            textwrap.dedent(
+                """\
                 character:
                   name: Test
                 animations:
@@ -152,7 +174,9 @@ class TestLoadConfig:
                     timing_ms: 150
                 base_image_path: /tmp/ref.png
                 output_path: /tmp/out.png
-            """))
+            """
+            )
+        )
         spec = load_config(cfg)
         assert spec.base_image_path == "/tmp/ref.png"
         assert spec.output_path == "/tmp/out.png"
@@ -165,10 +189,14 @@ class TestLoadConfig:
 
     def test_character_section_not_a_mapping(self, config_dir: Path) -> None:
         cfg = config_dir / "char_str.yaml"
-        cfg.write_text(textwrap.dedent("""\
+        cfg.write_text(
+            textwrap.dedent(
+                """\
                 character: "just a string"
                 animations: []
-            """))
+            """
+            )
+        )
         with pytest.raises(
             ValueError, match="'character' section must be a YAML mapping"
         ):
@@ -176,11 +204,15 @@ class TestLoadConfig:
 
     def test_animations_section_not_a_sequence(self, config_dir: Path) -> None:
         cfg = config_dir / "anim_str.yaml"
-        cfg.write_text(textwrap.dedent("""\
+        cfg.write_text(
+            textwrap.dedent(
+                """\
                 character:
                   name: Test
                 animations: "not a list"
-            """))
+            """
+            )
+        )
         with pytest.raises(
             ValueError, match="'animations' section must be a YAML sequence"
         ):
@@ -188,7 +220,9 @@ class TestLoadConfig:
 
     def test_load_config_with_palette(self, config_dir: Path) -> None:
         cfg = config_dir / "palette.yaml"
-        cfg.write_text(textwrap.dedent("""\
+        cfg.write_text(
+            textwrap.dedent(
+                """\
                 character:
                   name: Goblin
                 animations:
@@ -205,7 +239,9 @@ class TestLoadConfig:
                     - symbol: "s"
                       name: "Skin"
                       rgb: [80, 140, 60]
-            """))
+            """
+            )
+        )
         spec = load_config(cfg)
         assert "P1" in spec.palettes
         assert spec.palettes["P1"].name == "P1"
@@ -213,7 +249,9 @@ class TestLoadConfig:
 
     def test_load_config_with_generation(self, config_dir: Path) -> None:
         cfg = config_dir / "gen.yaml"
-        cfg.write_text(textwrap.dedent("""\
+        cfg.write_text(
+            textwrap.dedent(
+                """\
                 character:
                   name: Goblin
                 animations:
@@ -227,7 +265,9 @@ class TestLoadConfig:
                   feet_row: 48
                   outline_width: 2
                   rules: "No anti-aliasing."
-            """))
+            """
+            )
+        )
         spec = load_config(cfg)
         assert spec.generation.style == "Retro 8-bit"
         assert spec.generation.facing == "left"
@@ -237,7 +277,9 @@ class TestLoadConfig:
 
     def test_load_config_without_palette(self, config_dir: Path) -> None:
         cfg = config_dir / "no_palette.yaml"
-        cfg.write_text(textwrap.dedent("""\
+        cfg.write_text(
+            textwrap.dedent(
+                """\
                 character:
                   name: Test
                 animations:
@@ -245,13 +287,17 @@ class TestLoadConfig:
                     row: 0
                     frames: 4
                     timing_ms: 150
-            """))
+            """
+            )
+        )
         spec = load_config(cfg)
         assert spec.palettes == {}
 
     def test_load_config_without_generation(self, config_dir: Path) -> None:
         cfg = config_dir / "no_gen.yaml"
-        cfg.write_text(textwrap.dedent("""\
+        cfg.write_text(
+            textwrap.dedent(
+                """\
                 character:
                   name: Test
                 animations:
@@ -259,14 +305,18 @@ class TestLoadConfig:
                     row: 0
                     frames: 4
                     timing_ms: 150
-            """))
+            """
+            )
+        )
         spec = load_config(cfg)
         assert spec.generation.facing == "right"
         assert spec.generation.feet_row == 56
 
     def test_load_config_with_description(self, config_dir: Path) -> None:
         cfg = config_dir / "desc.yaml"
-        cfg.write_text(textwrap.dedent("""\
+        cfg.write_text(
+            textwrap.dedent(
+                """\
                 character:
                   name: Goblin
                   description: "Small green goblin with tattered armor."
@@ -275,13 +325,17 @@ class TestLoadConfig:
                     row: 0
                     frames: 4
                     timing_ms: 150
-            """))
+            """
+            )
+        )
         spec = load_config(cfg)
         assert spec.character.description == "Small green goblin with tattered armor."
 
     def test_load_config_palette_outline(self, config_dir: Path) -> None:
         cfg = config_dir / "outline.yaml"
-        cfg.write_text(textwrap.dedent("""\
+        cfg.write_text(
+            textwrap.dedent(
+                """\
                 character:
                   name: Test
                 animations:
@@ -295,7 +349,9 @@ class TestLoadConfig:
                     name: "Outline"
                     rgb: [20, 15, 10]
                   colors: []
-            """))
+            """
+            )
+        )
         spec = load_config(cfg)
         palette = spec.palettes["P1"]
         assert palette.outline.symbol == "O"
@@ -303,7 +359,9 @@ class TestLoadConfig:
 
     def test_load_config_palette_colors(self, config_dir: Path) -> None:
         cfg = config_dir / "colors.yaml"
-        cfg.write_text(textwrap.dedent("""\
+        cfg.write_text(
+            textwrap.dedent(
+                """\
                 character:
                   name: Test
                 animations:
@@ -323,7 +381,9 @@ class TestLoadConfig:
                     - symbol: "e"
                       name: "Eyes"
                       rgb: [200, 30, 30]
-            """))
+            """
+            )
+        )
         spec = load_config(cfg)
         palette = spec.palettes["P1"]
         assert len(palette.colors) == 2
@@ -336,7 +396,9 @@ class TestLoadConfig:
 
     def test_load_config_palette_duplicate_symbols(self, config_dir: Path) -> None:
         cfg = config_dir / "dup_sym.yaml"
-        cfg.write_text(textwrap.dedent("""\
+        cfg.write_text(
+            textwrap.dedent(
+                """\
                 character:
                   name: Test
                 animations:
@@ -356,13 +418,17 @@ class TestLoadConfig:
                     - symbol: "s"
                       name: "Other"
                       rgb: [100, 100, 100]
-            """))
+            """
+            )
+        )
         with pytest.raises(ValidationError, match="[Dd]uplicate"):
             load_config(cfg)
 
     def test_load_config_full_generic_character(self, config_dir: Path) -> None:
         cfg = config_dir / "goblin.yaml"
-        cfg.write_text(textwrap.dedent("""\
+        cfg.write_text(
+            textwrap.dedent(
+                """\
                 character:
                   name: "Goblin Scout"
                   class: "Enemy"
@@ -431,7 +497,9 @@ class TestLoadConfig:
                   rules: "64x64 pixel frames."
                 base_image_path: "assets/goblin_scout_reference.png"
                 output_path: "output/goblin_scout_spritesheet.png"
-            """))
+            """
+            )
+        )
         spec = load_config(cfg)
         assert spec.character.name == "Goblin Scout"
         assert spec.character.character_class == "Enemy"
@@ -445,7 +513,9 @@ class TestLoadConfig:
 
     def test_load_config_minimal_enemy(self, config_dir: Path) -> None:
         cfg = config_dir / "minimal.yaml"
-        cfg.write_text(textwrap.dedent("""\
+        cfg.write_text(
+            textwrap.dedent(
+                """\
                 character:
                   name: "Bat"
                   class: "Enemy"
@@ -480,7 +550,9 @@ class TestLoadConfig:
                     - symbol: "t"
                       name: "Teeth"
                       rgb: [240, 240, 230]
-            """))
+            """
+            )
+        )
         spec = load_config(cfg)
         assert spec.character.name == "Bat"
         assert len(spec.animations) == 3
@@ -488,7 +560,9 @@ class TestLoadConfig:
 
     def test_load_config_with_auto_palette(self, config_dir: Path) -> None:
         cfg = config_dir / "auto_palette.yaml"
-        cfg.write_text(textwrap.dedent("""\
+        cfg.write_text(
+            textwrap.dedent(
+                """\
                 character:
                   name: "Auto"
                 animations:
@@ -499,7 +573,9 @@ class TestLoadConfig:
                 generation:
                   auto_palette: true
                   max_palette_colors: 12
-            """))
+            """
+            )
+        )
         spec = load_config(cfg)
         assert spec.generation.auto_palette is True
         assert spec.generation.max_palette_colors == 12
@@ -509,7 +585,9 @@ class TestLoadConfig:
     ) -> None:
         """When auto_palette is true and no palette section, config still loads."""
         cfg = config_dir / "auto_no_pal.yaml"
-        cfg.write_text(textwrap.dedent("""\
+        cfg.write_text(
+            textwrap.dedent(
+                """\
                 character:
                   name: "NoPalette"
                 animations:
@@ -519,7 +597,9 @@ class TestLoadConfig:
                     timing_ms: 150
                 generation:
                   auto_palette: true
-            """))
+            """
+            )
+        )
         spec = load_config(cfg)
         assert spec.generation.auto_palette is True
         assert spec.palettes == {}
@@ -529,7 +609,9 @@ class TestLoadConfig:
     ) -> None:
         """auto_palette + explicit palette section both load (palette usable as fallback)."""
         cfg = config_dir / "auto_with_pal.yaml"
-        cfg.write_text(textwrap.dedent("""\
+        cfg.write_text(
+            textwrap.dedent(
+                """\
                 character:
                   name: "Both"
                 animations:
@@ -549,7 +631,9 @@ class TestLoadConfig:
                 generation:
                   auto_palette: true
                   max_palette_colors: 8
-            """))
+            """
+            )
+        )
         spec = load_config(cfg)
         assert spec.generation.auto_palette is True
         assert spec.generation.max_palette_colors == 8
@@ -561,7 +645,9 @@ class TestLoadConfig:
     ) -> None:
         """max_palette_colors defaults to 16 when not specified."""
         cfg = config_dir / "gen_defaults.yaml"
-        cfg.write_text(textwrap.dedent("""\
+        cfg.write_text(
+            textwrap.dedent(
+                """\
                 character:
                   name: "Defaults"
                 animations:
@@ -571,7 +657,9 @@ class TestLoadConfig:
                     timing_ms: 150
                 generation:
                   facing: "left"
-            """))
+            """
+            )
+        )
         spec = load_config(cfg)
         assert spec.generation.auto_palette is False
         assert spec.generation.max_palette_colors == 16
