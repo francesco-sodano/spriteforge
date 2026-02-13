@@ -14,6 +14,13 @@ from spriteforge.palette import (
     swap_palette_grid,
     validate_grid_symbols,
 )
+from spriteforge.preprocessor import (
+    PreprocessResult,
+    extract_palette_from_image,
+    preprocess_reference,
+    resize_reference,
+    validate_reference_image,
+)
 from spriteforge.renderer import (
     frame_to_png_bytes,
     render_frame,
@@ -27,13 +34,18 @@ __all__ = [
     "GenerationConfig",
     "PaletteColor",
     "PaletteConfig",
+    "PreprocessResult",
     "SpritesheetSpec",
     "build_palette_map",
+    "extract_palette_from_image",
     "frame_to_png_bytes",
     "load_config",
+    "preprocess_reference",
     "render_frame",
     "render_row_strip",
     "render_spritesheet",
+    "resize_reference",
     "swap_palette_grid",
     "validate_grid_symbols",
+    "validate_reference_image",
 ]
