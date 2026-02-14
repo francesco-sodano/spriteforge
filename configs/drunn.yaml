@@ -1,0 +1,232 @@
+# Drunn Ironhelm — Berserker
+# Source of truth: docs_assets/spritesheet_instructions_drunn.md
+
+character:
+  name: "Drunn Ironhelm"
+  class: "Berserker"
+  description: |
+    Stocky, barrel-chested dwarven berserker. The shortest but widest
+    character. Bronze horned Viking helm, fiery red-orange braided beard,
+    twin heavy war axes. Massive pauldrons, chainmail over leather.
+    ~42–46 pixels tall, ~36–40 pixels wide in-game sprite.
+    Squat, fire-hydrant proportions — low center of gravity.
+  frame_size: [64, 64]
+  spritesheet_columns: 14
+
+palette:
+  outline:
+    symbol: "O"
+    name: "Outline"
+    rgb: [20, 15, 10]
+  colors:
+    - symbol: "s"
+      name: "Skin"
+      rgb: [190, 145, 110]
+    - symbol: "b"
+      name: "Beard/hair"
+      rgb: [180, 70, 20]
+    - symbol: "h"
+      name: "Helm/breastplate"
+      rgb: [170, 120, 50]
+    - symbol: "p"
+      name: "Pauldrons"
+      rgb: [160, 110, 45]
+    - symbol: "c"
+      name: "Chainmail"
+      rgb: [130, 130, 140]
+    - symbol: "l"
+      name: "Leather belt/pants"
+      rgb: [90, 60, 35]
+    - symbol: "t"
+      name: "Boots"
+      rgb: [60, 55, 50]
+    - symbol: "a"
+      name: "Axe heads"
+      rgb: [100, 100, 110]
+    - symbol: "w"
+      name: "Axe hafts"
+      rgb: [120, 80, 45]
+    - symbol: "r"
+      name: "Red accent"
+      rgb: [170, 35, 30]
+
+animations:
+  - name: "idle"
+    row: 0
+    frames: 6
+    loop: true
+    timing_ms: 160
+    prompt_context: |
+      Impatient, aggressive idle. Both axes held at sides, gripped tightly.
+      Heavy breathing — large chest heaving. Occasional foot stomp.
+      Beard sways with breath.
+
+  - name: "walk"
+    row: 1
+    frames: 8
+    loop: true
+    timing_ms: 120
+    prompt_context: |
+      Stomping, heavy walk — ground should practically shake.
+      Short-legged stride, body stays very low. Both axes swing with steps.
+      Beard sways. Heavy boot impacts.
+
+  - name: "attack1"
+    row: 2
+    frames: 5
+    loop: false
+    timing_ms: 100
+    hit_frame: 2
+    prompt_context: |
+      Right axe overhead chop — brutal, heavy downward strike.
+      First hit of 3-hit combo. Axe reared back over shoulder,
+      slams down with extended reach ~18px past body.
+
+  - name: "attack2"
+    row: 3
+    frames: 5
+    loop: false
+    timing_ms: 90
+    hit_frame: 2
+    prompt_context: |
+      Left axe horizontal sweep — wide arc at torso height.
+      Second hit of combo. Torso twisting with rotational momentum.
+
+  - name: "attack3"
+    row: 4
+    frames: 7
+    loop: false
+    timing_ms: 110
+    hit_frame: 3
+    prompt_context: |
+      Both axes double-overhead slam — devastating combo finisher.
+      Both axes hoisted high, leaping slightly, slamming down simultaneously.
+      Shockwave pose on impact.
+
+  - name: "jump"
+    row: 5
+    frames: 4
+    loop: false
+    timing_ms: 110
+    prompt_context: |
+      Stubby, labored jump — barely gets off the ground.
+      Deep squat, straining under his own weight. Arms spread for balance.
+      Crashing back down with heavy landing.
+
+  - name: "jump_attack"
+    row: 6
+    frames: 4
+    loop: false
+    timing_ms: 90
+    hit_frame: 2
+    prompt_context: |
+      Aerial axe slam — body-slam style. Both axes above head,
+      plummeting down like a boulder. Full body weight committed.
+      Smashing into ground on landing.
+
+  - name: "magic"
+    row: 7
+    frames: 8
+    loop: false
+    timing_ms: 140
+    prompt_context: |
+      Earth/fire dwarven runic magic channeled through axes.
+      Axes crossed, then raised skyward. Runes on breastplate glow.
+      Slams both axes into ground, channeling energy outward.
+      Beard and braids blown outward by shockwave.
+
+  - name: "hit"
+    row: 8
+    frames: 3
+    loop: false
+    timing_ms: 100
+    prompt_context: |
+      Barely flinching — toughest character with most HP.
+      Head tilts slightly, body shifts back barely. More annoyed than hurt.
+      Axes stay gripped.
+
+  - name: "knockdown"
+    row: 9
+    frames: 4
+    loop: false
+    timing_ms: 110
+    prompt_context: |
+      Toppled like a felled tree — takes serious force.
+      Body jolts, losing balance. Crashing sideways, beard whipping.
+      Fully prone on back, helm askew.
+
+  - name: "getup"
+    row: 10
+    frames: 4
+    loop: false
+    timing_ms: 130
+    prompt_context: |
+      Slow, angry getup — pure stubborn dwarven will. No acrobatics.
+      Rolling over, pushing up with arms straining.
+      On one knee scooping axes, standing furious.
+
+  - name: "death"
+    row: 11
+    frames: 6
+    loop: false
+    timing_ms: 140
+    prompt_context: |
+      Epic death — the mighty dwarf finally falls.
+      Fatal blow, helm flies off. Dropping one axe, clutching wound.
+      Massive body crashing to ground face-down.
+      Final frame motionless, beard spread, slightly faded/darkened.
+
+  - name: "mount_idle"
+    row: 12
+    frames: 4
+    loop: true
+    timing_ms: 160
+    prompt_context: |
+      Seated on mount. Both axes resting on thighs/lap.
+      Heavy breathing. Beard sway. Hips at y=48. Upper body only.
+
+  - name: "mount_attack"
+    row: 13
+    frames: 5
+    loop: false
+    timing_ms: 90
+    hit_frame: 2
+    prompt_context: |
+      Mounted axe swing — wide horizontal sweep while riding.
+      Right axe reared back, twisting torso, sweeping in massive arc.
+      Hips at y=48. Upper body only.
+
+  - name: "run"
+    row: 14
+    frames: 6
+    loop: true
+    timing_ms: 100
+    prompt_context: |
+      Lumbering run — slowest character. Determined heavy charge.
+      Short legs pumping, body low. Both axes at sides swinging.
+      Beard streaming behind. Pure forward momentum.
+
+  - name: "throw"
+    row: 15
+    frames: 6
+    loop: false
+    timing_ms: 110
+    hit_frame: 4
+    prompt_context: |
+      Power throw — pure brute-force overhead hurl.
+      Axes stowed, both hands grabbing. Hoisting overhead,
+      massive overhead toss forward. Enemy NOT shown.
+
+generation:
+  style: "Modern HD pixel art (Dead Cells / Owlboy style)"
+  facing: "right"
+  feet_row: 56
+  rules: |
+    64×64 pixel frames. Transparent PNG-32 background.
+    No anti-aliasing to background. 1px dark outline.
+    Character centered horizontally. Feet at y=56.
+    Drunn is shortest but widest: ~42–46px tall, ~36–40px wide.
+    Unused cells fully transparent.
+
+base_image_path: "docs_assets/drunn_base_reference.png"
+output_path: "output/drunn_spritesheet.png"
