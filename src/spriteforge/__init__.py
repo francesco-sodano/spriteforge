@@ -45,6 +45,7 @@ from spriteforge.retry import (
     RetryManager,
     RetryTier,
 )
+from spriteforge.workflow import SpriteForgeWorkflow
 
 __all__ = [
     "AnimationDef",
@@ -66,6 +67,7 @@ __all__ = [
     "RetryManager",
     "RetryTier",
     "SpritesheetSpec",
+    "SpriteForgeWorkflow",
     "build_palette_map",
     "extract_palette_from_image",
     "frame_to_png_bytes",
