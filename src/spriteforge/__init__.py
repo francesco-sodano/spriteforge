@@ -1,6 +1,12 @@
 """SpriteForge — AI-powered spritesheet generator for 2D pixel-art games."""
 
 from spriteforge.config import load_config
+from spriteforge.gates import (
+    GateVerdict,
+    LLMGateChecker,
+    ProgrammaticChecker,
+    parse_verdict_response,
+)
 from spriteforge.generator import GenerationError, GridGenerator, parse_grid_response
 from spriteforge.models import (
     AnimationDef,
@@ -38,12 +44,15 @@ __all__ = [
     "AnimationDef",
     "CharacterConfig",
     "GPTImageProvider",
+    "GateVerdict",
     "GenerationConfig",
     "GenerationError",
     "GridGenerator",
+    "LLMGateChecker",
     "PaletteColor",
     "PaletteConfig",
     "PreprocessResult",
+    "ProgrammaticChecker",
     "ProviderError",
     "ReferenceProvider",
     "SpritesheetSpec",
@@ -52,6 +61,7 @@ __all__ = [
     "frame_to_png_bytes",
     "load_config",
     "parse_grid_response",
+    "parse_verdict_response",
     "preprocess_reference",
     "render_frame",
     "render_row_strip",
