@@ -98,12 +98,12 @@ class TestStripCodeFences:
     """Tests for strip_code_fences()."""
 
     def test_strip_code_fences_json(self) -> None:
-        """```json\\n{...}\\n``` → {..}"""
+        """Fenced JSON block is extracted correctly."""
         text = '```json\n{"key": "value"}\n```'
         assert strip_code_fences(text) == '{"key": "value"}'
 
     def test_strip_code_fences_plain(self) -> None:
-        """```\\n{...}\\n``` → {..}"""
+        """Fenced block without language tag is extracted correctly."""
         text = '```\n{"key": "value"}\n```'
         assert strip_code_fences(text) == '{"key": "value"}'
 
