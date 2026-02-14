@@ -1,6 +1,7 @@
 """SpriteForge — AI-powered spritesheet generator for 2D pixel-art games."""
 
 from spriteforge.config import load_config
+from spriteforge.generator import GenerationError, GridGenerator, parse_grid_response
 from spriteforge.models import (
     AnimationDef,
     CharacterConfig,
@@ -32,6 +33,8 @@ __all__ = [
     "AnimationDef",
     "CharacterConfig",
     "GenerationConfig",
+    "GenerationError",
+    "GridGenerator",
     "PaletteColor",
     "PaletteConfig",
     "PreprocessResult",
@@ -40,6 +43,7 @@ __all__ = [
     "extract_palette_from_image",
     "frame_to_png_bytes",
     "load_config",
+    "parse_grid_response",
     "preprocess_reference",
     "render_frame",
     "render_row_strip",
