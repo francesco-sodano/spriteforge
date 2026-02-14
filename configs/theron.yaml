@@ -1,0 +1,218 @@
+# Theron Ashblade — Warrior
+# Source of truth: docs_assets/spritesheet_instructions_theron.md
+
+character:
+  name: "Theron Ashblade"
+  class: "Warrior"
+  description: |
+    Tall, muscular, athletic warrior with classic heroic proportions.
+    Dark brown hair, dark steel breastplate, crimson tunic and cloak
+    flowing from left shoulder. Longsword (Emberfang) in right hand.
+    Asymmetric pauldrons — larger on left shoulder.
+    ~48–52 pixels tall and ~24–28 pixels wide in-game sprite.
+  frame_size: [64, 64]
+  spritesheet_columns: 14
+
+palette:
+  outline:
+    symbol: "O"
+    name: "Outline"
+    rgb: [20, 15, 10]
+  colors:
+    - symbol: "s"
+      name: "Skin"
+      rgb: [210, 170, 130]
+    - symbol: "h"
+      name: "Hair"
+      rgb: [60, 40, 25]
+    - symbol: "a"
+      name: "Breastplate"
+      rgb: [80, 80, 95]
+    - symbol: "c"
+      name: "Tunic/Cloak"
+      rgb: [150, 30, 30]
+    - symbol: "l"
+      name: "Leather"
+      rgb: [100, 65, 35]
+    - symbol: "m"
+      name: "Steel trim"
+      rgb: [200, 190, 160]
+    - symbol: "d"
+      name: "Emberfang blade"
+      rgb: [140, 140, 150]
+    - symbol: "t"
+      name: "Boots"
+      rgb: [50, 35, 25]
+    - symbol: "g"
+      name: "Edge glow"
+      rgb: [255, 140, 40]
+
+animations:
+  - name: "idle"
+    row: 0
+    frames: 6
+    loop: true
+    timing_ms: 150
+    prompt_context: |
+      Relaxed combat-ready stance, sword in right hand pointing slightly
+      downward and to the side. Weight shifted to one leg.
+      Gentle chest rise/fall, cloak swaying slightly.
+
+  - name: "walk"
+    row: 1
+    frames: 8
+    loop: true
+    timing_ms: 100
+    prompt_context: |
+      Purposeful stride. Sword held at side in right hand.
+      Cape/cloak bounces with each step. Arms swing naturally.
+
+  - name: "attack1"
+    row: 2
+    frames: 5
+    loop: false
+    timing_ms: 80
+    hit_frame: 2
+    prompt_context: |
+      Quick horizontal sword slash, right to left (forehand swing).
+      First hit of 3-hit combo. Blade extends ~20px beyond body.
+
+  - name: "attack2"
+    row: 3
+    frames: 5
+    loop: false
+    timing_ms: 70
+    hit_frame: 2
+    prompt_context: |
+      Reverse backhand horizontal slash, left to right.
+      Second hit of combo, flows naturally from attack1.
+
+  - name: "attack3"
+    row: 4
+    frames: 7
+    loop: false
+    timing_ms: 90
+    hit_frame: 3
+    prompt_context: |
+      Powerful overhead downward chop — combo finisher.
+      Sword raised high with both hands, swings down through center.
+      Deep lunge on impact. Cape dramatically settling on recovery.
+
+  - name: "jump"
+    row: 5
+    frames: 4
+    loop: false
+    timing_ms: 100
+    prompt_context: |
+      Vertical jump arc. Crouch, launch, apex with sword held
+      defensively, landing with legs extending down.
+
+  - name: "jump_attack"
+    row: 6
+    frames: 4
+    loop: false
+    timing_ms: 80
+    hit_frame: 2
+    prompt_context: |
+      Aerial downward sword strike. Sword raised above head,
+      full downward slash while falling. Landing impact with
+      sword planted forward.
+
+  - name: "magic"
+    row: 7
+    frames: 8
+    loop: false
+    timing_ms: 120
+    prompt_context: |
+      Channeling fire magic through Emberfang. Raises sword overhead,
+      blade ignites with orange/red ember glow. Thrust forward to
+      release fire burst. Settling with brief exhausted pose.
+
+  - name: "hit"
+    row: 8
+    frames: 3
+    loop: false
+    timing_ms: 100
+    prompt_context: |
+      Recoil from being struck. Head snaps back, body shifts backward.
+      Slight stagger, then recovering to ready stance.
+
+  - name: "knockdown"
+    row: 9
+    frames: 4
+    loop: false
+    timing_ms: 100
+    prompt_context: |
+      Knocked to the ground by a heavy hit. Body jolts backward,
+      tilting back, falling flat on back. Sword dropped to side.
+
+  - name: "getup"
+    row: 10
+    frames: 4
+    loop: false
+    timing_ms: 120
+    prompt_context: |
+      Recovering from knockdown. Pushing up with one arm,
+      rising to one knee, retrieving sword, standing combat-ready.
+
+  - name: "death"
+    row: 11
+    frames: 6
+    loop: false
+    timing_ms: 130
+    prompt_context: |
+      Fatal hit — dramatic recoil. Stumbling forward, knees buckling.
+      Falling forward, body collapsing face-down. Sword falling from hand.
+      Final frame motionless, slightly faded/darkened.
+
+  - name: "mount_idle"
+    row: 12
+    frames: 4
+    loop: true
+    timing_ms: 150
+    prompt_context: |
+      Seated on mount, sword held upright in right hand.
+      Subtle breathing/sway. Hips at y=48. Upper body only.
+
+  - name: "mount_attack"
+    row: 13
+    frames: 5
+    loop: false
+    timing_ms: 80
+    hit_frame: 2
+    prompt_context: |
+      Mounted horizontal sword slash while riding. Wide sweeping slash
+      to the right. Hips at y=48. Upper body only.
+
+  - name: "run"
+    row: 14
+    frames: 6
+    loop: true
+    timing_ms: 80
+    prompt_context: |
+      Fast sprint — body leaning forward, cape streaming behind.
+      Sword held at side, ready to strike. Dynamic arm/leg motion.
+
+  - name: "throw"
+    row: 15
+    frames: 6
+    loop: false
+    timing_ms: 100
+    hit_frame: 4
+    prompt_context: |
+      Grab-and-throw. Reaching forward with left hand (sword stowed).
+      Hoisting enemy overhead with both hands. Throwing motion forward.
+      Enemy NOT shown.
+
+generation:
+  style: "Modern HD pixel art (Dead Cells / Owlboy style)"
+  facing: "right"
+  feet_row: 56
+  rules: |
+    64×64 pixel frames. Transparent PNG-32 background.
+    No anti-aliasing to background. 1px dark outline.
+    Character centered horizontally. Feet at y=56.
+    Unused cells fully transparent.
+
+base_image_path: "docs_assets/theron_base_reference.png"
+output_path: "output/theron_spritesheet.png"

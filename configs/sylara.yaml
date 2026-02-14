@@ -1,0 +1,214 @@
+# Sylara Windarrow — Ranger
+# Source of truth: docs_assets/spritesheet_instructions_sylara.md
+
+character:
+  name: "Sylara Windarrow"
+  class: "Ranger"
+  description: |
+    Slender, athletic, graceful elven ranger. Long golden blonde hair,
+    pointed ears, forest-green leather vest, elven recurve bow in left hand,
+    quiver on back. Taller than average but lean. No cape.
+    ~46–50 pixels tall and ~18–22 pixels wide in-game sprite.
+  frame_size: [64, 64]
+  spritesheet_columns: 14
+
+palette:
+  outline:
+    symbol: "O"
+    name: "Outline"
+    rgb: [0, 80, 80]
+  colors:
+    - symbol: "s"
+      name: "Skin"
+      rgb: [235, 210, 185]
+    - symbol: "h"
+      name: "Hair"
+      rgb: [220, 185, 90]
+    - symbol: "e"
+      name: "Eyes"
+      rgb: [50, 180, 140]
+    - symbol: "v"
+      name: "Leather vest"
+      rgb: [50, 100, 45]
+    - symbol: "p"
+      name: "Leather pants"
+      rgb: [40, 75, 35]
+    - symbol: "b"
+      name: "Bracers/belt"
+      rgb: [110, 75, 40]
+    - symbol: "t"
+      name: "Boots"
+      rgb: [65, 45, 30]
+    - symbol: "w"
+      name: "Bow wood"
+      rgb: [180, 150, 90]
+    - symbol: "d"
+      name: "Blade steel"
+      rgb: [190, 200, 210]
+    - symbol: "f"
+      name: "Arrow fletching"
+      rgb: [255, 255, 240]
+
+animations:
+  - name: "idle"
+    row: 0
+    frames: 6
+    loop: true
+    timing_ms: 150
+    prompt_context: |
+      Bow held loosely in left hand at her side. Weight shifted to one hip.
+      Hair sways gently. Quiver visible on back. Pointed ears visible.
+
+  - name: "walk"
+    row: 1
+    frames: 8
+    loop: true
+    timing_ms: 100
+    prompt_context: |
+      Bow held down in left hand. Hair flows behind her with movement.
+      Barely any vertical bobbing — smooth, cat-like stride.
+
+  - name: "attack1"
+    row: 2
+    frames: 5
+    loop: false
+    timing_ms: 70
+    hit_frame: 2
+    prompt_context: |
+      Switches from bow to dual daggers. Right blade sweeps right to left.
+      First hit of 3-hit melee combo.
+
+  - name: "attack2"
+    row: 3
+    frames: 5
+    loop: false
+    timing_ms: 65
+    hit_frame: 2
+    prompt_context: |
+      Flowing combo from attack1 — continuous, dance-like motion.
+      Body spins slightly during dual-blade choreography.
+
+  - name: "attack3"
+    row: 4
+    frames: 7
+    loop: false
+    timing_ms: 80
+    hit_frame: 3
+    prompt_context: |
+      Both blades sweep in an X pattern. Body rotates, hair whipping.
+      Blades re-sheathed after, bow returns to hand.
+
+  - name: "jump"
+    row: 5
+    frames: 4
+    loop: false
+    timing_ms: 90
+    prompt_context: |
+      Spinning/flipping upward. Hair trailing behind. Bow held to side.
+      More acrobatic than other characters.
+
+  - name: "jump_attack"
+    row: 6
+    frames: 4
+    loop: false
+    timing_ms: 80
+    hit_frame: 2
+    prompt_context: |
+      Draws arrow from quiver mid-air, nocks and fires downward.
+      Body angled down during shot.
+
+  - name: "magic"
+    row: 7
+    frames: 8
+    loop: false
+    timing_ms: 120
+    prompt_context: |
+      Plants feet apart. Raises free hand skyward. Green/teal glow.
+      Hair floats upward. Nature energy spiraling. Arms thrust forward to release.
+
+  - name: "hit"
+    row: 8
+    frames: 3
+    loop: false
+    timing_ms: 100
+    prompt_context: |
+      Head whips back, hair flies forward, body jerks backward.
+      More dramatic than warrior (less HP, bigger reaction).
+
+  - name: "knockdown"
+    row: 9
+    frames: 4
+    loop: false
+    timing_ms: 100
+    prompt_context: |
+      Body jolts, arching backward. Hair whipping.
+      Falls to side, then fully prone. Hair spread on ground.
+
+  - name: "getup"
+    row: 10
+    frames: 4
+    loop: false
+    timing_ms: 100
+    prompt_context: |
+      Rolling, kip-up spring, landing on feet, ready stance.
+      Agile recovery fitting her nature.
+
+  - name: "death"
+    row: 11
+    frames: 6
+    loop: false
+    timing_ms: 130
+    prompt_context: |
+      Fatal hit, bow falling. Knees giving way. Collapsing gracefully.
+      Hair spread around head in final frame. Slightly faded/darkened.
+
+  - name: "mount_idle"
+    row: 12
+    frames: 4
+    loop: true
+    timing_ms: 150
+    prompt_context: |
+      Bow held upright in left hand. Looking forward, scanning.
+      Hips at y=48 (seated position). Upper body only.
+
+  - name: "mount_attack"
+    row: 13
+    frames: 5
+    loop: false
+    timing_ms: 80
+    hit_frame: 2
+    prompt_context: |
+      Draws arrow, nocks, aims right, releases. Upper body only.
+      Hips at y=48.
+
+  - name: "run"
+    row: 14
+    frames: 6
+    loop: true
+    timing_ms: 70
+    prompt_context: |
+      Body leaned forward sharply. Hair streaming far behind.
+      Bow held in left hand at side. Long, rapid strides.
+
+  - name: "throw"
+    row: 15
+    frames: 6
+    loop: false
+    timing_ms: 100
+    hit_frame: 4
+    prompt_context: |
+      Reaches with right hand (bow stowed). Uses opponent's momentum.
+      Hip throw / judo technique. Enemy NOT shown.
+
+generation:
+  style: "Modern HD pixel art (Dead Cells / Owlboy style)"
+  facing: "right"
+  feet_row: 56
+  rules: |
+    64×64 pixel frames. Transparent PNG-32 background.
+    No anti-aliasing to background. 1px dark outline.
+    Character centered horizontally. Feet at y=56.
+    Unused cells fully transparent.
+
+base_image_path: "docs_assets/sylara_base_reference.png"
+output_path: "output/sylara_spritesheet.png"
