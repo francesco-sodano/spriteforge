@@ -831,5 +831,6 @@ class TestPreprocessorResultReplacesPalette:
         await wf.run(ref_path, out_path)
 
         # palette_map should have been rebuilt with new colors
+        assert wf.palette_map != original_map
         assert wf.palette_map["O"] == (0, 0, 0, 255)
         assert wf.palette_map["s"] == (255, 0, 0, 255)

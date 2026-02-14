@@ -605,9 +605,16 @@ class SpriteForgeWorkflow:
     # ------------------------------------------------------------------
 
     def _get_palette(self) -> PaletteConfig:
-        """Get the primary palette from the config."""
+        """Get the primary palette from the config.
+
+        Raises:
+            ValueError: If no palette is configured.
+        """
         if "P1" in self.config.palettes:
             return self.config.palettes["P1"]
         if self.config.palettes:
             return next(iter(self.config.palettes.values()))
-        return PaletteConfig()
+        raise ValueError(
+            "No palette configured. Provide a palette in the YAML config "
+            "or enable auto_palette with a preprocessor."
+        )
