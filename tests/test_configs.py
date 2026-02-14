@@ -5,6 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
+import yaml
 
 from spriteforge.config import load_config
 from spriteforge.models import SpritesheetSpec
@@ -348,3 +349,61 @@ class TestCrossCharacterConsistency:
             assert spec.base_image_path, f"{name} has no base_image_path"
             assert spec.base_image_path.startswith("docs_assets/")
             assert spec.base_image_path.endswith(".png")
+
+
+# ── Template and example config tests ────────────────────────────────
+
+
+EXAMPLES_DIR = CONFIGS_DIR / "examples"
+
+
+class TestTemplateConfig:
+    """Tests for the annotated template config file."""
+
+    def test_template_is_valid_yaml(self) -> None:
+        """configs/template.yaml must parse as valid YAML."""
+        with open(CONFIGS_DIR / "template.yaml", encoding="utf-8") as fh:
+            data = yaml.safe_load(fh)
+        assert isinstance(data, dict)
+        assert "character" in data
+        assert "animations" in data
+        assert "palette" in data
+
+
+class TestExampleConfigs:
+    """Tests for the example config files in configs/examples/."""
+
+    def test_simple_enemy_example_loads(self) -> None:
+        """configs/examples/simple_enemy.yaml loads via load_config()."""
+        spec = load_config(EXAMPLES_DIR / "simple_enemy.yaml")
+        assert isinstance(spec, SpritesheetSpec)
+
+    def test_hero_example_loads(self) -> None:
+        """configs/examples/hero.yaml loads via load_config()."""
+        spec = load_config(EXAMPLES_DIR / "hero.yaml")
+        assert isinstance(spec, SpritesheetSpec)
+
+    def test_simple_enemy_has_minimal_animations(self) -> None:
+        """Simple enemy must have at least 3 animation rows."""
+        spec = load_config(EXAMPLES_DIR / "simple_enemy.yaml")
+        assert len(spec.animations) >= 3
+
+    def test_hero_has_full_animations(self) -> None:
+        """Hero example must have at least 10 animation rows."""
+        spec = load_config(EXAMPLES_DIR / "hero.yaml")
+        assert len(spec.animations) >= 10
+
+    def test_examples_have_palette(self) -> None:
+        """Both examples must have a palette section."""
+        for name in ("simple_enemy.yaml", "hero.yaml"):
+            spec = load_config(EXAMPLES_DIR / name)
+            assert "P1" in spec.palettes, f"{name} has no palette"
+            assert len(spec.palettes["P1"].colors) > 0, f"{name} has no colors"
+
+    def test_examples_have_description(self) -> None:
+        """Both examples must have a character description."""
+        for name in ("simple_enemy.yaml", "hero.yaml"):
+            spec = load_config(EXAMPLES_DIR / name)
+            assert spec.character.description.strip(), (
+                f"{name} has empty description"
+            )

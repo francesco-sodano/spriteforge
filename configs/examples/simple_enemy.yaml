@@ -1,0 +1,101 @@
+# Grukk the Goblin Scout — Simple Enemy Example
+# A minimal but complete config demonstrating a basic enemy character.
+
+character:
+  name: "Grukk"
+  class: "Enemy"
+  description: |
+    Small, hunched goblin scout with bright green skin and large pointed ears.
+    Wiry build, roughly 36-40 pixels tall in a 64x64 frame. Oversized head with
+    beady red eyes and a wide mouth full of jagged yellow teeth. Wears a ragged
+    brown leather vest and torn cloth shorts. Carries a crude rusty short sword
+    in the right hand. Bare feet with clawed toes. Long crooked nose. Moves in
+    a skulking, low-to-the-ground posture with knees bent. No helmet or shoulder
+    armor — just scrappy, expendable foot-soldier gear.
+  frame_size: [64, 64]
+  spritesheet_columns: 14
+
+palette:
+  outline:
+    symbol: "O"
+    name: "Outline"
+    rgb: [15, 30, 10]
+  colors:
+    - symbol: "s"
+      name: "Skin"
+      rgb: [80, 160, 50]
+    - symbol: "e"
+      name: "Eyes"
+      rgb: [200, 30, 30]
+    - symbol: "v"
+      name: "Vest"
+      rgb: [110, 75, 40]
+    - symbol: "w"
+      name: "Weapon"
+      rgb: [160, 140, 120]
+    - symbol: "t"
+      name: "Teeth"
+      rgb: [230, 210, 150]
+
+animations:
+  - name: idle
+    row: 0
+    frames: 4
+    loop: true
+    timing_ms: 160
+    prompt_context: |
+      Hunched standing pose, knees bent, sword held low in right hand.
+      Slight nervous shifting of weight side to side. Ears twitch.
+      Head darts around as if watching for threats.
+
+  - name: walk
+    row: 1
+    frames: 6
+    loop: true
+    timing_ms: 110
+    prompt_context: |
+      Skulking, low-to-the-ground walk. Knees deeply bent, body leaning
+      forward. Sword held at side. Arms swing with exaggerated motion.
+      Quick, scurrying footsteps.
+
+  - name: attack
+    row: 2
+    frames: 4
+    loop: false
+    timing_ms: 90
+    hit_frame: 2
+    prompt_context: |
+      Quick overhead chop with short sword. Rears back slightly, then
+      lunges forward with a wild downward slash. Stumbles slightly on
+      follow-through due to momentum.
+
+  - name: hit
+    row: 3
+    frames: 3
+    loop: false
+    timing_ms: 100
+    prompt_context: |
+      Recoils from being struck. Head snaps to the side, body lurches
+      backward. Brief stagger, then recovers to a wobbly stance.
+
+  - name: death
+    row: 4
+    frames: 5
+    loop: false
+    timing_ms: 130
+    prompt_context: |
+      Struck fatally — drops sword, clutches chest. Spins partway around,
+      knees buckle. Falls face-first to the ground. Final frame is
+      motionless, sprawled flat.
+
+generation:
+  style: "Modern HD pixel art (Dead Cells / Owlboy style)"
+  facing: "right"
+  feet_row: 56
+  rules: |
+    64x64 pixel frames. Transparent PNG-32 background.
+    No anti-aliasing to background. 1px dark outline.
+    Character centered horizontally. Feet at y=56.
+
+base_image_path: "assets/grukk_reference.png"
+output_path: "output/grukk_spritesheet.png"
