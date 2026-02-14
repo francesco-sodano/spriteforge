@@ -366,7 +366,7 @@ class GridGenerator:
             animation.frame_descriptions
         ):
             frame_desc = (
-                f"Frame description: " f"{animation.frame_descriptions[frame_index]}"
+                f"Frame description: {animation.frame_descriptions[frame_index]}"
             )
 
         animation_context = ""
