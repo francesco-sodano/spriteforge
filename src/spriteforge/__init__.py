@@ -1,13 +1,23 @@
 """SpriteForge — AI-powered spritesheet generator for 2D pixel-art games."""
 
 from spriteforge.config import load_config
+from spriteforge.errors import (
+    ConfigError,
+    GateError,
+    GenerationError,
+    PaletteError,
+    ProviderError,
+    RenderError,
+    RetryExhaustedError,
+    SpriteForgeError,
+)
 from spriteforge.gates import (
     GateVerdict,
     LLMGateChecker,
     ProgrammaticChecker,
     parse_verdict_response,
 )
-from spriteforge.generator import GenerationError, GridGenerator, parse_grid_response
+from spriteforge.generator import GridGenerator, parse_grid_response
 from spriteforge.models import (
     AnimationDef,
     CharacterConfig,
@@ -30,7 +40,6 @@ from spriteforge.preprocessor import (
 )
 from spriteforge.providers import (
     GPTImageProvider,
-    ProviderError,
     ReferenceProvider,
 )
 from spriteforge.renderer import (
@@ -45,12 +54,20 @@ from spriteforge.retry import (
     RetryManager,
     RetryTier,
 )
+from spriteforge.utils import (
+    image_to_base64,
+    image_to_data_url,
+    parse_json_from_llm,
+    strip_code_fences,
+)
 from spriteforge.workflow import SpriteForgeWorkflow
 
 __all__ = [
     "AnimationDef",
     "CharacterConfig",
+    "ConfigError",
     "GPTImageProvider",
+    "GateError",
     "GateVerdict",
     "GenerationConfig",
     "GenerationError",
@@ -58,27 +75,35 @@ __all__ = [
     "LLMGateChecker",
     "PaletteColor",
     "PaletteConfig",
+    "PaletteError",
     "PreprocessResult",
     "ProgrammaticChecker",
     "ProviderError",
     "ReferenceProvider",
+    "RenderError",
     "RetryConfig",
     "RetryContext",
+    "RetryExhaustedError",
     "RetryManager",
     "RetryTier",
     "SpritesheetSpec",
+    "SpriteForgeError",
     "SpriteForgeWorkflow",
     "build_palette_map",
     "extract_palette_from_image",
     "frame_to_png_bytes",
+    "image_to_base64",
+    "image_to_data_url",
     "load_config",
     "parse_grid_response",
+    "parse_json_from_llm",
     "parse_verdict_response",
     "preprocess_reference",
     "render_frame",
     "render_row_strip",
     "render_spritesheet",
     "resize_reference",
+    "strip_code_fences",
     "swap_palette_grid",
     "validate_grid_symbols",
     "validate_reference_image",

@@ -9,7 +9,6 @@ Gate verdicts carry structured feedback that feeds into the retry engine.
 
 from __future__ import annotations
 
-import base64
 import json
 import os
 import re
@@ -18,6 +17,7 @@ from typing import Any
 from pydantic import BaseModel, Field
 
 from spriteforge.models import AnimationDef, PaletteConfig
+from spriteforge.utils import image_to_data_url
 
 # ---------------------------------------------------------------------------
 # Verdict model
@@ -467,12 +467,6 @@ def parse_verdict_response(response_text: str, gate_name: str) -> GateVerdict:
 # ---------------------------------------------------------------------------
 
 
-def _image_to_data_url(image_bytes: bytes, media_type: str = "image/png") -> str:
-    """Encode image bytes as a base64 data URL."""
-    b64 = base64.b64encode(image_bytes).decode("ascii")
-    return f"data:{media_type};base64,{b64}"
-
-
 class LLMGateChecker:
     """Vision-based quality checks using Claude Opus 4.6.
 
@@ -531,11 +525,11 @@ class LLMGateChecker:
             {"type": "text", "text": prompt_text},
             {
                 "type": "image_url",
-                "image_url": {"url": _image_to_data_url(reference_strip)},
+                "image_url": {"url": image_to_data_url(reference_strip)},
             },
             {
                 "type": "image_url",
-                "image_url": {"url": _image_to_data_url(base_reference)},
+                "image_url": {"url": image_to_data_url(base_reference)},
             },
         ]
 
@@ -573,11 +567,11 @@ class LLMGateChecker:
             {"type": "text", "text": prompt_text},
             {
                 "type": "image_url",
-                "image_url": {"url": _image_to_data_url(rendered_frame)},
+                "image_url": {"url": image_to_data_url(rendered_frame)},
             },
             {
                 "type": "image_url",
-                "image_url": {"url": _image_to_data_url(reference_frame)},
+                "image_url": {"url": image_to_data_url(reference_frame)},
             },
         ]
 
@@ -608,11 +602,11 @@ class LLMGateChecker:
             {"type": "text", "text": prompt_text},
             {
                 "type": "image_url",
-                "image_url": {"url": _image_to_data_url(rendered_frame)},
+                "image_url": {"url": image_to_data_url(rendered_frame)},
             },
             {
                 "type": "image_url",
-                "image_url": {"url": _image_to_data_url(anchor_frame)},
+                "image_url": {"url": image_to_data_url(anchor_frame)},
             },
         ]
 
@@ -643,11 +637,11 @@ class LLMGateChecker:
             {"type": "text", "text": prompt_text},
             {
                 "type": "image_url",
-                "image_url": {"url": _image_to_data_url(rendered_frame)},
+                "image_url": {"url": image_to_data_url(rendered_frame)},
             },
             {
                 "type": "image_url",
-                "image_url": {"url": _image_to_data_url(prev_frame)},
+                "image_url": {"url": image_to_data_url(prev_frame)},
             },
         ]
 
@@ -682,11 +676,11 @@ class LLMGateChecker:
             {"type": "text", "text": prompt_text},
             {
                 "type": "image_url",
-                "image_url": {"url": _image_to_data_url(rendered_row_strip)},
+                "image_url": {"url": image_to_data_url(rendered_row_strip)},
             },
             {
                 "type": "image_url",
-                "image_url": {"url": _image_to_data_url(reference_strip)},
+                "image_url": {"url": image_to_data_url(reference_strip)},
             },
         ]
 
