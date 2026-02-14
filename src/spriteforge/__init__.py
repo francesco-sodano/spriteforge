@@ -39,6 +39,12 @@ from spriteforge.renderer import (
     render_row_strip,
     render_spritesheet,
 )
+from spriteforge.retry import (
+    RetryConfig,
+    RetryContext,
+    RetryManager,
+    RetryTier,
+)
 
 __all__ = [
     "AnimationDef",
@@ -55,6 +61,10 @@ __all__ = [
     "ProgrammaticChecker",
     "ProviderError",
     "ReferenceProvider",
+    "RetryConfig",
+    "RetryContext",
+    "RetryManager",
+    "RetryTier",
     "SpritesheetSpec",
     "build_palette_map",
     "extract_palette_from_image",
