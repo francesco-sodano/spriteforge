@@ -2,10 +2,9 @@
 
 from __future__ import annotations
 
+import base64
 import io
-import os
-from typing import Any
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from PIL import Image
@@ -107,8 +106,6 @@ class TestGPTImageProviderGenerate:
         dummy_strip = Image.new("RGBA", (512, 64), (100, 100, 100, 255))
         buf = io.BytesIO()
         dummy_strip.save(buf, format="PNG")
-        import base64
-
         b64_image = base64.b64encode(buf.getvalue()).decode("ascii")
 
         # Mock the response object
