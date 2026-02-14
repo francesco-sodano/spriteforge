@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+from typing import Any
 
 import pytest
 
@@ -49,7 +50,9 @@ def _is_azure_available() -> bool:
     return _AZURE_AVAILABLE
 
 
-def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item]) -> None:
+def pytest_collection_modifyitems(
+    config: pytest.Config, items: list[pytest.Item]
+) -> None:
     """Auto-skip integration tests when Azure is not available."""
     if _is_azure_available():
         return
@@ -76,7 +79,7 @@ def azure_project_endpoint() -> str:
 
 
 @pytest.fixture(scope="session")
-def azure_credential():
+def azure_credential() -> Any:
     """Return a DefaultAzureCredential for Azure AI Foundry access."""
     try:
         from azure.identity import DefaultAzureCredential  # type: ignore[import-untyped]
