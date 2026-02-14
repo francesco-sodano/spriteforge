@@ -1,4 +1,4 @@
-"""Tests for the reference image provider module."""
+"""Tests for the reference image provider module and chat provider abstraction."""
 
 from __future__ import annotations
 
@@ -10,8 +10,17 @@ import pytest
 from PIL import Image
 
 from spriteforge.models import AnimationDef, CharacterConfig
-from spriteforge.providers import GPTImageProvider, ProviderError, ReferenceProvider
+from spriteforge.providers import (
+    AzureChatProvider,
+    ChatProvider,
+    GPTImageProvider,
+    ProviderError,
+    ReferenceProvider,
+)
+from spriteforge.providers.chat import ChatProvider as ChatProviderDirect
 from spriteforge.providers.gpt_image import build_reference_prompt
+
+from mock_chat_provider import MockChatProvider
 
 # ---------------------------------------------------------------------------
 # Helper: create a small dummy PNG as bytes
@@ -301,3 +310,59 @@ class TestReferenceProviderAbstract:
     def test_gpt_image_provider_is_subclass(self) -> None:
         """GPTImageProvider is a subclass of ReferenceProvider."""
         assert issubclass(GPTImageProvider, ReferenceProvider)
+
+
+# ---------------------------------------------------------------------------
+# Tests: ChatProvider is abstract
+# ---------------------------------------------------------------------------
+
+
+class TestChatProviderAbstract:
+    """Verify the ChatProvider ABC contract."""
+
+    def test_chat_provider_is_abc(self) -> None:
+        """ChatProvider cannot be instantiated directly."""
+        with pytest.raises(TypeError):
+            ChatProviderDirect()  # type: ignore[abstract]
+
+    def test_azure_chat_provider_implements_interface(self) -> None:
+        """AzureChatProvider is a ChatProvider."""
+        assert issubclass(AzureChatProvider, ChatProvider)
+
+
+# ---------------------------------------------------------------------------
+# Tests: MockChatProvider
+# ---------------------------------------------------------------------------
+
+
+class TestMockChatProvider:
+    """Tests for MockChatProvider."""
+
+    @pytest.mark.asyncio
+    async def test_mock_chat_provider_returns_responses(self) -> None:
+        """Returns configured responses in order."""
+        mock = MockChatProvider(responses=["response1", "response2"])
+        result1 = await mock.chat(messages=[{"role": "user", "content": "hi"}])
+        result2 = await mock.chat(messages=[{"role": "user", "content": "bye"}])
+        assert result1 == "response1"
+        assert result2 == "response2"
+
+    @pytest.mark.asyncio
+    async def test_mock_chat_provider_records_history(self) -> None:
+        """Call history is recorded."""
+        mock = MockChatProvider(responses=["ok"])
+        messages = [{"role": "user", "content": "test"}]
+        await mock.chat(messages=messages, temperature=0.5, response_format="json")
+
+        assert len(mock._call_history) == 1
+        assert mock._call_history[0]["messages"] == messages
+        assert mock._call_history[0]["temperature"] == 0.5
+        assert mock._call_history[0]["response_format"] == "json"
+
+    @pytest.mark.asyncio
+    async def test_mock_chat_provider_exhausted(self) -> None:
+        """Raises when no more responses."""
+        mock = MockChatProvider(responses=["only_one"])
+        await mock.chat(messages=[])
+        with pytest.raises(ValueError, match="no more responses"):
+            await mock.chat(messages=[])

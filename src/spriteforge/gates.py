@@ -10,13 +10,13 @@ Gate verdicts carry structured feedback that feeds into the retry engine.
 from __future__ import annotations
 
 import json
-import os
 import re
 from typing import Any
 
 from pydantic import BaseModel, Field
 
 from spriteforge.models import AnimationDef, PaletteConfig
+from spriteforge.providers.chat import ChatProvider
 from spriteforge.utils import image_to_data_url
 
 # ---------------------------------------------------------------------------
@@ -476,20 +476,14 @@ class LLMGateChecker:
 
     def __init__(
         self,
-        project_endpoint: str | None = None,
-        model_deployment: str = "claude-opus-4-6",
+        chat_provider: ChatProvider,
     ) -> None:
         """Initialize the LLM gate checker.
 
         Args:
-            project_endpoint: Azure AI Foundry project endpoint.
-                If ``None``, reads from ``AZURE_AI_PROJECT_ENDPOINT`` env var.
-            model_deployment: Model deployment name in Foundry.
+            chat_provider: Chat provider for LLM calls.
         """
-        self._endpoint = project_endpoint or os.environ.get(
-            "AZURE_AI_PROJECT_ENDPOINT", ""
-        )
-        self._model_deployment = model_deployment
+        self._chat = chat_provider
 
     # ------------------------------------------------------------------
     # Gate methods
@@ -533,7 +527,9 @@ class LLMGateChecker:
             },
         ]
 
-        response_text = await self._call_llm(content)
+        response_text = await self._chat.chat(
+            [{"role": "user", "content": content}], temperature=0.0
+        )
         return parse_verdict_response(response_text, "gate_minus_1")
 
     async def gate_0(
@@ -575,7 +571,9 @@ class LLMGateChecker:
             },
         ]
 
-        response_text = await self._call_llm(content)
+        response_text = await self._chat.chat(
+            [{"role": "user", "content": content}], temperature=0.0
+        )
         return parse_verdict_response(response_text, "gate_0")
 
     async def gate_1(
@@ -610,7 +608,9 @@ class LLMGateChecker:
             },
         ]
 
-        response_text = await self._call_llm(content)
+        response_text = await self._chat.chat(
+            [{"role": "user", "content": content}], temperature=0.0
+        )
         return parse_verdict_response(response_text, "gate_1")
 
     async def gate_2(
@@ -645,7 +645,9 @@ class LLMGateChecker:
             },
         ]
 
-        response_text = await self._call_llm(content)
+        response_text = await self._chat.chat(
+            [{"role": "user", "content": content}], temperature=0.0
+        )
         return parse_verdict_response(response_text, "gate_2")
 
     async def gate_3a(
@@ -684,67 +686,7 @@ class LLMGateChecker:
             },
         ]
 
-        response_text = await self._call_llm(content)
+        response_text = await self._chat.chat(
+            [{"role": "user", "content": content}], temperature=0.0
+        )
         return parse_verdict_response(response_text, "gate_3a")
-
-    # ------------------------------------------------------------------
-    # Internal LLM call
-    # ------------------------------------------------------------------
-
-    async def _call_llm(self, content: list[dict[str, Any]]) -> str:
-        """Send a vision-based chat request to Claude Opus 4.6 via Azure AI Foundry.
-
-        All gate calls use temperature 0.0 for deterministic judgment.
-
-        Args:
-            content: OpenAI-style multimodal content parts.
-
-        Returns:
-            The text content of the first choice.
-
-        Raises:
-            RuntimeError: If the API call fails or returns no content.
-        """
-        from azure.ai.projects.aio import AIProjectClient  # type: ignore[import-untyped]
-        from azure.identity.aio import DefaultAzureCredential  # type: ignore[import-untyped]
-
-        if not self._endpoint:
-            raise RuntimeError(
-                "No Azure AI Foundry endpoint configured. "
-                "Set AZURE_AI_PROJECT_ENDPOINT or pass project_endpoint."
-            )
-
-        messages: list[dict[str, Any]] = [
-            {"role": "user", "content": content},
-        ]
-
-        credential = DefaultAzureCredential()
-        try:
-            project_client = AIProjectClient(
-                credential=credential,
-                endpoint=self._endpoint,
-            )
-            try:
-                openai_client = project_client.get_openai_client()
-                try:
-                    response = await openai_client.chat.completions.create(
-                        model=self._model_deployment,
-                        messages=messages,  # type: ignore[arg-type]
-                        temperature=0.0,
-                        max_tokens=1024,
-                    )
-                finally:
-                    await openai_client.close()
-            finally:
-                await project_client.close()
-        finally:
-            await credential.close()
-
-        if (
-            not response.choices
-            or not response.choices[0].message
-            or not response.choices[0].message.content
-        ):
-            raise RuntimeError("LLM returned no content")
-
-        return str(response.choices[0].message.content)

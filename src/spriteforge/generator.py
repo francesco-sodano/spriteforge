@@ -7,12 +7,12 @@ palette symbols using Claude Opus 4.6 with vision input via Azure AI Foundry.
 from __future__ import annotations
 
 import json
-import os
 import re
 from typing import Any
 
 from spriteforge.errors import GenerationError
 from spriteforge.models import AnimationDef, GenerationConfig, PaletteConfig
+from spriteforge.providers.chat import ChatProvider
 from spriteforge.utils import image_to_data_url
 
 # ---------------------------------------------------------------------------
@@ -197,26 +197,20 @@ def _build_system_prompt(
 class GridGenerator:
     """Generates pixel-precise 64×64 palette-indexed grids using Claude Opus 4.6.
 
-    Uses Azure AI Foundry to call Claude Opus 4.6 with vision input,
+    Uses a ``ChatProvider`` to call the LLM with vision input,
     translating rough reference frames into structured JSON grids.
     """
 
     def __init__(
         self,
-        project_endpoint: str | None = None,
-        model_deployment: str = "claude-opus-4-6",
+        chat_provider: ChatProvider,
     ) -> None:
         """Initialize the grid generator.
 
         Args:
-            project_endpoint: Azure AI Foundry project endpoint.
-                If ``None``, reads from ``AZURE_AI_PROJECT_ENDPOINT`` env var.
-            model_deployment: Model deployment name in Foundry.
+            chat_provider: Chat provider for LLM calls.
         """
-        self._endpoint = project_endpoint or os.environ.get(
-            "AZURE_AI_PROJECT_ENDPOINT", ""
-        )
-        self._model_deployment = model_deployment
+        self._chat = chat_provider
 
     # ------------------------------------------------------------------
     # Public generation methods
@@ -305,7 +299,7 @@ class GridGenerator:
             {"role": "user", "content": content},
         ]
 
-        response_text = await self._call_llm(messages, temperature=1.0)
+        response_text = await self._chat.chat(messages, temperature=1.0)
         return parse_grid_response(response_text)
 
     async def generate_frame(
@@ -407,66 +401,5 @@ class GridGenerator:
             {"role": "user", "content": content},
         ]
 
-        response_text = await self._call_llm(messages, temperature=temperature)
+        response_text = await self._chat.chat(messages, temperature=temperature)
         return parse_grid_response(response_text)
-
-    # ------------------------------------------------------------------
-    # Internal LLM call
-    # ------------------------------------------------------------------
-
-    async def _call_llm(
-        self,
-        messages: list[dict[str, Any]],
-        temperature: float = 1.0,
-    ) -> str:
-        """Send a chat completion request to Claude Opus 4.6 via Azure AI Foundry.
-
-        Args:
-            messages: OpenAI-style messages list.
-            temperature: Sampling temperature.
-
-        Returns:
-            The text content of the first choice.
-
-        Raises:
-            GenerationError: If the API call fails or returns no content.
-        """
-        from azure.ai.projects.aio import AIProjectClient  # type: ignore[import-untyped]
-        from azure.identity.aio import DefaultAzureCredential  # type: ignore[import-untyped]
-
-        if not self._endpoint:
-            raise GenerationError(
-                "No Azure AI Foundry endpoint configured. "
-                "Set AZURE_AI_PROJECT_ENDPOINT or pass project_endpoint."
-            )
-
-        credential = DefaultAzureCredential()
-        try:
-            project_client = AIProjectClient(
-                credential=credential,
-                endpoint=self._endpoint,
-            )
-            try:
-                openai_client = project_client.get_openai_client()
-                try:
-                    response = await openai_client.chat.completions.create(
-                        model=self._model_deployment,
-                        messages=messages,  # type: ignore[arg-type]
-                        temperature=temperature,
-                        max_tokens=16384,
-                    )
-                finally:
-                    await openai_client.close()
-            finally:
-                await project_client.close()
-        finally:
-            await credential.close()
-
-        if (
-            not response.choices
-            or not response.choices[0].message
-            or not response.choices[0].message.content
-        ):
-            raise GenerationError("LLM returned no content")
-
-        return str(response.choices[0].message.content)
