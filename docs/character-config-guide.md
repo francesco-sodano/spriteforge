@@ -272,7 +272,10 @@ from spriteforge.config import load_config
 spec = load_config("configs/my_character.yaml")
 print(f"Character: {spec.character.name}")
 print(f"Animations: {len(spec.animations)}")
-print(f"Palette colors: {len(spec.palettes.get('P1', {}).colors) if spec.palettes else 'auto'}")
+if "P1" in spec.palettes:
+    print(f"Palette colors: {len(spec.palettes['P1'].colors)}")
+else:
+    print("Palette: auto (no explicit palette defined)")
 print(f"Sheet size: {spec.sheet_width}x{spec.sheet_height}")
 ```
 
