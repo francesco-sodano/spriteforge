@@ -1,0 +1,147 @@
+# ============================================================
+# SpriteForge Character Configuration Template
+# ============================================================
+# Copy this file and fill in the values for your character.
+# This file + a base reference image is all SpriteForge needs.
+#
+# Usage:
+#   python -m spriteforge --config configs/my_character.yaml \
+#                          --base-image assets/my_character_ref.png
+# ============================================================
+
+# --- Character Metadata ---
+character:
+  # REQUIRED: Internal name (lowercase, no spaces — used in filenames)
+  name: "my_character"
+
+  # OPTIONAL: Class or role (for display purposes and prompt context)
+  class: "Enemy"
+
+  # REQUIRED: Detailed visual description of the character.
+  # This is the most important field for generation quality.
+  # Include: build, skin color, hair, face, armor/clothing, weapons,
+  #          distinctive features, approximate pixel height.
+  # Minimum ~100 words recommended for good AI generation.
+  description: |
+    Describe your character's physical appearance in detail here.
+    The AI uses this to generate the sprite. Be specific about:
+    body type, height, and build; skin, hair, and eye color and style;
+    armor, clothing, and accessories; weapons (type, size, which hand);
+    distinctive features (wings, horns, tail, etc.); and approximate
+    pixel height in the 64x64 frame.
+
+  # OPTIONAL: Frame dimensions (default: 64x64 — standard for most characters).
+  # Can also be specified as frame_size: [64, 64].
+  frame_width: 64
+  frame_height: 64
+
+  # OPTIONAL: Max frames per row (default: 14 — gives 896px wide spritesheet)
+  spritesheet_columns: 14
+
+# --- Color Palette ---
+# REQUIRED (unless using auto_palette in generation settings).
+# Define every color the character uses as a single-character symbol.
+# "." is always transparent (implicit — do NOT list it here).
+# "O" is the outline color.
+# Use mnemonic symbols: s=skin, h=hair, a=armor, etc.
+# Minimum: outline + 3 colors. Maximum recommended: 12 colors.
+palette:
+  outline:
+    symbol: "O"
+    name: "Outline"
+    # Dark outline color as [R, G, B] (0-255 each)
+    rgb: [20, 15, 10]
+
+  colors:
+    - symbol: "s"
+      name: "Skin"
+      rgb: [210, 170, 130]
+
+    - symbol: "h"
+      name: "Hair"
+      rgb: [60, 40, 25]
+
+    - symbol: "a"
+      name: "Armor"
+      rgb: [80, 80, 95]
+
+    # Add more colors as needed (one per visual element):
+    # - symbol: "w"
+    #   name: "Weapon"
+    #   rgb: [160, 160, 170]
+
+# --- Animations ---
+# REQUIRED: Define each animation row. Rows are placed top-to-bottom
+# in the spritesheet. Characters can have any number of rows (enemies
+# might have 5, heroes 16+). Row indices must be unique and start from 0.
+animations:
+  - name: idle            # Animation name (lowercase, used in filenames)
+    row: 0                # Row index in spritesheet (0-based)
+    frames: 4             # Number of frames (1-14)
+    loop: true            # OPTIONAL: Does this animation loop? (default: false)
+    timing_ms: 150        # REQUIRED: Milliseconds per frame
+    prompt_context: |     # REQUIRED: Visual description for AI generation
+      Relaxed standing pose, slight idle sway. Describe what the
+      character looks like at rest.
+
+  - name: walk
+    row: 1
+    frames: 6
+    loop: true
+    timing_ms: 100
+    prompt_context: |
+      Walk cycle description — how does the character move?
+
+  - name: attack
+    row: 2
+    frames: 4
+    loop: false
+    timing_ms: 80
+    hit_frame: 2          # OPTIONAL: Frame index where attack connects
+    prompt_context: |
+      Attack animation description — what weapon, what motion?
+
+  - name: hit
+    row: 3
+    frames: 3
+    loop: false
+    timing_ms: 100
+    prompt_context: |
+      Hit reaction description — recoil, stagger, recovery.
+
+  - name: death
+    row: 4
+    frames: 5
+    loop: false
+    timing_ms: 120
+    prompt_context: |
+      Death animation description — how does the character fall?
+
+  # Add more animations as needed...
+  # Common options: run, jump, magic, knockdown, getup, throw, etc.
+
+# --- Generation Settings ---
+# OPTIONAL: Controls how the AI generates frames.
+# Defaults work well for most characters.
+generation:
+  # OPTIONAL: Art style description (default shown below)
+  style: "Modern HD pixel art (Dead Cells / Owlboy style)"
+
+  # OPTIONAL: Direction the character faces — "right" or "left" (default: "right")
+  facing: "right"
+
+  # OPTIONAL: Y-position of feet in the frame (default: 56 for 64px frames)
+  feet_row: 56
+
+  # OPTIONAL: Generation rules passed to the AI
+  rules: |
+    64x64 pixel frames. Transparent PNG-32 background.
+    No anti-aliasing to background. 1px dark outline.
+    Character centered horizontally.
+
+# --- Paths ---
+# OPTIONAL: Base reference image (relative to repo root or absolute)
+base_image_path: "assets/my_character_reference.png"
+
+# OPTIONAL: Output spritesheet (will be created by SpriteForge)
+output_path: "output/my_character_spritesheet.png"

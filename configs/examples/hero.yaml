@@ -1,0 +1,242 @@
+# Kael Stormrider — Hero Example
+# A full hero config demonstrating all 16 animation rows and a rich palette.
+
+character:
+  name: "Kael Stormrider"
+  class: "Knight"
+  description: |
+    Tall, broad-shouldered human knight with a commanding presence. Approximately
+    48-52 pixels tall in the 64x64 frame. Fair skin with short-cropped silver-white
+    hair swept back from the forehead. Sharp blue eyes, strong jawline, and a small
+    scar across the left cheek. Wears segmented blue-steel plate armor with silver
+    trim on pauldrons and gauntlets. A deep blue surcoat with a silver lightning bolt
+    emblem over the breastplate. Heavy armored boots reaching mid-calf. Wields a
+    one-handed longsword with a crossguard shaped like lightning bolts in the right
+    hand. Left arm carries no shield — instead the gauntlet crackles with faint
+    storm energy. A short half-cape of dark navy cloth hangs from the right shoulder.
+  frame_size: [64, 64]
+  spritesheet_columns: 14
+
+palette:
+  outline:
+    symbol: "O"
+    name: "Outline"
+    rgb: [15, 20, 40]
+  colors:
+    - symbol: "s"
+      name: "Skin"
+      rgb: [225, 195, 165]
+    - symbol: "h"
+      name: "Hair"
+      rgb: [210, 215, 225]
+    - symbol: "a"
+      name: "Armor"
+      rgb: [70, 90, 130]
+    - symbol: "c"
+      name: "Surcoat"
+      rgb: [30, 50, 120]
+    - symbol: "m"
+      name: "Silver Trim"
+      rgb: [195, 200, 210]
+    - symbol: "l"
+      name: "Leather"
+      rgb: [90, 60, 35]
+    - symbol: "d"
+      name: "Blade"
+      rgb: [170, 175, 185]
+    - symbol: "e"
+      name: "Eyes"
+      rgb: [60, 140, 220]
+    - symbol: "t"
+      name: "Boots"
+      rgb: [50, 55, 70]
+    - symbol: "g"
+      name: "Storm Glow"
+      rgb: [130, 200, 255]
+    - symbol: "p"
+      name: "Cape"
+      rgb: [20, 30, 60]
+
+animations:
+  - name: idle
+    row: 0
+    frames: 6
+    loop: true
+    timing_ms: 150
+    prompt_context: |
+      Upright standing pose, sword held loosely at the right side pointing
+      slightly downward. Weight evenly distributed. Subtle chest rise and
+      fall from breathing. Half-cape sways gently. Left gauntlet has a
+      faint shimmer of storm energy.
+
+  - name: walk
+    row: 1
+    frames: 8
+    loop: true
+    timing_ms: 100
+    prompt_context: |
+      Confident marching stride. Sword held at side in right hand.
+      Armored boots strike firmly. Cape bounces with each step.
+      Arms swing naturally with a disciplined military gait.
+
+  - name: attack1
+    row: 2
+    frames: 5
+    loop: false
+    timing_ms: 80
+    hit_frame: 2
+    prompt_context: |
+      Quick horizontal sword slash from right to left. First hit
+      of a 3-hit combo. Blade extends ~20px beyond body at full
+      extension. Weight shifts forward on the strike.
+
+  - name: attack2
+    row: 3
+    frames: 5
+    loop: false
+    timing_ms: 70
+    hit_frame: 2
+    prompt_context: |
+      Reverse backhand horizontal slash from left to right. Second
+      hit of the combo, flowing naturally from attack1. Slightly
+      faster tempo than the first strike.
+
+  - name: attack3
+    row: 4
+    frames: 7
+    loop: false
+    timing_ms: 90
+    hit_frame: 3
+    prompt_context: |
+      Powerful overhead downward chop — combo finisher. Sword raised
+      high with both hands, swings down through center with full
+      body commitment. Deep lunge on impact. Cape dramatically
+      billows on the follow-through.
+
+  - name: jump
+    row: 5
+    frames: 4
+    loop: false
+    timing_ms: 100
+    prompt_context: |
+      Vertical jump arc. Crouches to launch, rises to apex with
+      sword held defensively across the body. Legs extend downward
+      on descent. Armored weight gives a grounded landing.
+
+  - name: jump_attack
+    row: 6
+    frames: 4
+    loop: false
+    timing_ms: 80
+    hit_frame: 2
+    prompt_context: |
+      Aerial downward sword strike. Sword raised above head at the
+      peak, full downward slash while falling. Landing with sword
+      planted forward and impact dust from heavy armor.
+
+  - name: magic
+    row: 7
+    frames: 8
+    loop: false
+    timing_ms: 120
+    prompt_context: |
+      Channeling storm magic through left gauntlet. Raises left arm
+      overhead, crackling lightning arcs between fingers. Thrusts
+      arm forward to release a burst of blue-white energy. Brief
+      exhaustion pose at the end. Sword stowed at side.
+
+  - name: hit
+    row: 8
+    frames: 3
+    loop: false
+    timing_ms: 100
+    prompt_context: |
+      Recoil from being struck. Head snaps to the side, body shifts
+      backward. Armor absorbs part of the blow. Slight stagger,
+      then recovering to a ready stance.
+
+  - name: knockdown
+    row: 9
+    frames: 4
+    loop: false
+    timing_ms: 100
+    prompt_context: |
+      Knocked to the ground by a heavy hit. Body jolts backward,
+      tilting back, crashing down on back. Sword drops to the side.
+      Armor clanks on impact.
+
+  - name: getup
+    row: 10
+    frames: 4
+    loop: false
+    timing_ms: 120
+    prompt_context: |
+      Recovering from knockdown. Pushes up with one arm, rises to
+      one knee. Retrieves sword, stands back to a combat-ready
+      stance with renewed determination.
+
+  - name: death
+    row: 11
+    frames: 6
+    loop: false
+    timing_ms: 130
+    prompt_context: |
+      Fatal blow received — dramatic recoil. Stumbles forward, knees
+      buckling under the weight of armor. Falls forward, body collapsing.
+      Sword clatters from hand. Final frame motionless, storm glow fades.
+
+  - name: mount_idle
+    row: 12
+    frames: 4
+    loop: true
+    timing_ms: 150
+    prompt_context: |
+      Seated on mount, sword held upright in right hand. Only upper body
+      visible from the hips up. Subtle breathing sway. Cape drapes over
+      the mount behind.
+
+  - name: mount_attack
+    row: 13
+    frames: 5
+    loop: false
+    timing_ms: 80
+    hit_frame: 2
+    prompt_context: |
+      Mounted horizontal sword slash while riding. Wide sweeping slash
+      to the right side. Only upper body visible. Cape streams behind
+      with the motion.
+
+  - name: run
+    row: 14
+    frames: 6
+    loop: true
+    timing_ms: 80
+    prompt_context: |
+      Fast sprint — body leaning forward despite heavy armor. Cape
+      streaming behind. Sword held at side ready to strike. Dynamic
+      arm and leg motion with armored footfalls.
+
+  - name: throw
+    row: 15
+    frames: 6
+    loop: false
+    timing_ms: 100
+    hit_frame: 4
+    prompt_context: |
+      Grab-and-throw technique. Reaches forward with left gauntlet
+      (sword stowed). Hoists enemy overhead using storm-enhanced
+      strength. Throws forward with a burst of lightning from the
+      gauntlet. Enemy NOT shown in frames.
+
+generation:
+  style: "Modern HD pixel art (Dead Cells / Owlboy style)"
+  facing: "right"
+  feet_row: 56
+  rules: |
+    64x64 pixel frames. Transparent PNG-32 background.
+    No anti-aliasing to background. 1px dark outline.
+    Character centered horizontally. Feet at y=56.
+    Unused cells fully transparent.
+
+base_image_path: "assets/kael_stormrider_reference.png"
+output_path: "output/kael_stormrider_spritesheet.png"
