@@ -10,6 +10,8 @@ dependencies = [
     "pillow>=12.1.1",
     "pydantic>=2.0",
     "pyyaml>=6.0",
+    "azure-ai-projects>=1.0.0b7",
+    "azure-identity>=1.21.0",
 ]
 
 [build-system]
@@ -28,6 +30,9 @@ dev = [
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+markers = [
+    "integration: tests that require live Azure AI Foundry access (DefaultAzureCredential + AZURE_AI_PROJECT_ENDPOINT)",
+]
 
 [tool.pytest-asyncio]
 mode = "auto"

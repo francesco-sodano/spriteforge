@@ -2,12 +2,93 @@
 
 from __future__ import annotations
 
+import os
+
 import pytest
 
 from spriteforge.models import (
     PaletteColor,
     PaletteConfig,
 )
+
+
+# ---------------------------------------------------------------------------
+# Auto-skip integration tests when Azure credentials are unavailable
+# ---------------------------------------------------------------------------
+
+
+def _azure_credentials_available() -> bool:
+    """Check whether Azure AI Foundry credentials are available.
+
+    Returns True when:
+    1. The AZURE_AI_PROJECT_ENDPOINT env var is set, AND
+    2. DefaultAzureCredential can obtain a token.
+    """
+    endpoint = os.environ.get("AZURE_AI_PROJECT_ENDPOINT", "")
+    if not endpoint:
+        return False
+    try:
+        from azure.identity import DefaultAzureCredential  # type: ignore[import-untyped]
+
+        cred = DefaultAzureCredential()
+        # Request a token for Azure Cognitive Services scope to validate auth
+        cred.get_token("https://cognitiveservices.azure.com/.default")
+        return True
+    except Exception:  # noqa: BLE001
+        return False
+
+
+# Cache the check once per session so we don't re-auth on every test.
+_AZURE_AVAILABLE: bool | None = None
+
+
+def _is_azure_available() -> bool:
+    global _AZURE_AVAILABLE  # noqa: PLW0603
+    if _AZURE_AVAILABLE is None:
+        _AZURE_AVAILABLE = _azure_credentials_available()
+    return _AZURE_AVAILABLE
+
+
+def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item]) -> None:
+    """Auto-skip integration tests when Azure is not available."""
+    if _is_azure_available():
+        return
+    skip_marker = pytest.mark.skip(
+        reason="Integration test skipped: AZURE_AI_PROJECT_ENDPOINT not set or DefaultAzureCredential cannot authenticate."
+    )
+    for item in items:
+        if "integration" in item.keywords:
+            item.add_marker(skip_marker)
+
+
+# ---------------------------------------------------------------------------
+# Azure fixtures (only used by integration tests)
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture(scope="session")
+def azure_project_endpoint() -> str:
+    """Return the Azure AI Foundry project endpoint from the environment."""
+    endpoint = os.environ.get("AZURE_AI_PROJECT_ENDPOINT", "")
+    if not endpoint:
+        pytest.skip("AZURE_AI_PROJECT_ENDPOINT not set")
+    return endpoint
+
+
+@pytest.fixture(scope="session")
+def azure_credential():
+    """Return a DefaultAzureCredential for Azure AI Foundry access."""
+    try:
+        from azure.identity import DefaultAzureCredential  # type: ignore[import-untyped]
+
+        return DefaultAzureCredential()
+    except Exception as exc:
+        pytest.skip(f"DefaultAzureCredential unavailable: {exc}")
+
+
+# ---------------------------------------------------------------------------
+# Palette fixtures (used by unit tests)
+# ---------------------------------------------------------------------------
 
 
 @pytest.fixture()

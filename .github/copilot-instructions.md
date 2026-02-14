@@ -386,7 +386,11 @@ dependencies = [
 - Use `pytest` fixtures for reusable setup and teardown logic.
 - When fixing a bug, first write a failing test that reproduces the bug, then write the code to make it pass.
 - **IMPORTANT:** `tests/test_models.py` and `tests/test_config.py` already exist with content — all implementations must pass these existing tests.
-- Mock all external API calls (Azure, Google, Claude) in tests — no real API calls in the test suite.
+- **Real Azure integration tests:** Do NOT mock Azure API calls. Tests for Azure-dependent modules (providers, generator, gates, retry, workflow) must use **real Azure AI Foundry calls** via `DefaultAzureCredential`. The Foundry project and models are live.
+- **Integration test marker:** Mark tests that require Azure with `@pytest.mark.integration`. These auto-skip when `AZURE_AI_PROJECT_ENDPOINT` is unset or credentials are unavailable (handled by `conftest.py`).
+- **Running tests:** `pytest` runs all tests (integration tests skip if Azure unavailable); `pytest -m "not integration"` runs only unit tests; `pytest -m integration` runs only integration tests.
+- **No secrets in tests:** Tests use `DefaultAzureCredential` + `AZURE_AI_PROJECT_ENDPOINT` env var. Never hardcode endpoints, keys, or tokens in test files.
+- Use shared fixtures from `conftest.py`: `azure_project_endpoint` and `azure_credential` for integration tests.
 - Use `pytest-asyncio` for testing async functions.
 
 ## Security

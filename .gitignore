@@ -214,5 +214,9 @@ __marimo__/
 .DS_Store
 Thumbs.db
 
+# SpriteForge — generated outputs and debug intermediates
+output/
+debug/
+
 # GitHub Memory
 .github/instructions/memory.instruction.md
