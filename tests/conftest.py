@@ -12,7 +12,6 @@ from spriteforge.models import (
     PaletteConfig,
 )
 
-
 # ---------------------------------------------------------------------------
 # Auto-skip integration tests when Azure credentials are unavailable
 # ---------------------------------------------------------------------------

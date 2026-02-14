@@ -21,6 +21,11 @@ from spriteforge.preprocessor import (
     resize_reference,
     validate_reference_image,
 )
+from spriteforge.providers import (
+    GPTImageProvider,
+    ProviderError,
+    ReferenceProvider,
+)
 from spriteforge.renderer import (
     frame_to_png_bytes,
     render_frame,
@@ -31,10 +36,13 @@ from spriteforge.renderer import (
 __all__ = [
     "AnimationDef",
     "CharacterConfig",
+    "GPTImageProvider",
     "GenerationConfig",
     "PaletteColor",
     "PaletteConfig",
     "PreprocessResult",
+    "ProviderError",
+    "ReferenceProvider",
     "SpritesheetSpec",
     "build_palette_map",
     "extract_palette_from_image",
