@@ -70,7 +70,7 @@ A multi-gate verification system ensures quality:
 | Gate -1 | LLM (vision) | Reference strip quality — correct pose, frame count, character identity |
 | Programmatic | Code | Grid dimensions (64×64), valid palette symbols, non-empty, transparent background % |
 | Gate 0 | LLM (vision) | Single-frame quality — anatomy, proportions, pose matches animation |
-| Gate 1 | LLM (vision) | Palette compliance — colors match spec, no off-palette pixels |
+| Gate 1 | LLM (vision) | Anchor consistency — same character as IDLE F0 (body proportions, colors, equipment, style) |
 | Gate 2 | LLM (vision) | Frame-to-frame continuity — smooth transition from previous frame |
 | Gate 3A | LLM (vision) | Row coherence — assembled strip looks like a valid animation sequence |
 
@@ -116,17 +116,17 @@ palette:
   outline:
     symbol: "O"
     name: "Outline"
-    rgba: [0, 80, 80, 255]
+    rgb: [20, 15, 10]
   colors:
     - symbol: "s"
       name: "Skin"
-      rgba: [235, 210, 185, 255]
+      rgb: [235, 210, 185]
     - symbol: "h"
       name: "Hair"
-      rgba: [220, 185, 90, 255]
+      rgb: [220, 185, 90]
     - symbol: "e"
       name: "Eyes"
-      rgba: [50, 180, 140, 255]
+      rgb: [50, 180, 140]
     # ... more colors as needed
 ```
 
@@ -178,8 +178,9 @@ The only constraint is that **Row 0 Frame 0** is always the anchor frame used fo
 ```
 src/spriteforge/
 ├── __init__.py          # Package exports
-├── __main__.py          # CLI entry point (argparse → asyncio.run)
-├── app.py               # Programmatic API (run_spriteforge())
+├── __main__.py          # CLI entry point (argparse → asyncio.run) (planned)
+├── app.py               # Programmatic API (run_spriteforge()) (planned)
+├── preprocessor.py      # Image preprocessing (resize, quantize, auto-palette)
 ├── models.py            # Pydantic data models (SpritesheetSpec, CharacterConfig, AnimationDef, PaletteConfig, GenerationConfig, etc.)
 ├── config.py            # YAML config loading and validation (palette, generation, character sections)
 ├── palette.py           # Palette symbol → RGBA mapping, validation
@@ -226,7 +227,7 @@ docs_assets/             # Reference documentation for original 3 characters
 ### Module Dependency Graph
 
 ```
-models.py ← config.py ← workflow.py ← app.py ← __main__.py
+models.py ← config.py ← workflow.py ← app.py (planned) ← __main__.py (planned)
     ↑          ↑
     |          |
 palette.py  configs/*.yaml
@@ -236,6 +237,7 @@ renderer.py ← workflow.py
     |
 assembler.py (existing)
 
+preprocessor.py ← workflow.py (optional, for auto-palette)
 providers/ ← workflow.py
 generator.py ← workflow.py
 gates.py ← workflow.py  (depends on renderer.py, palette.py)

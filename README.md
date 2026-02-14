@@ -13,6 +13,33 @@ An AI-powered spritesheet generator for 2D pixel-art games. Feed it a **base cha
 - **Transparent Backgrounds** — All output sprites use PNG-32 with full alpha transparency, ready for any game engine.
 - **Palette Swap Support** — Config files support P1/P2 color palettes for easy character recoloring via pixel-level color replacement.
 - **Flexible Animation System** — Define any number of animation rows per character with any frame count. Standard 2D game animations (idle, walk, attack, death, etc.) and custom animations are all supported.
+- **Auto-Palette Extraction** — Optionally skip manual palette definition: SpriteForge can auto-extract a color palette from the base reference image using median-cut quantization. Set `auto_palette: true` in the generation settings and the preprocessor handles resize, quantize, and symbol assignment automatically.
+
+## Preprocessor (Auto-Palette)
+
+SpriteForge includes an image preprocessor that can automatically extract a color palette from the base reference image, eliminating the need to manually define palette colors.
+
+### How It Works
+
+1. **Validate** — Checks the reference image for minimum size (32×32) and compatible aspect ratio.
+2. **Resize** — Scales the image to the target frame dimensions (default 64×64) using nearest-neighbor interpolation to preserve pixel-art sharpness.
+3. **Quantize** — Reduces colors to the target palette size using PIL's `MEDIANCUT` algorithm while preserving the alpha channel.
+4. **Extract Palette** — Builds a `PaletteConfig` from the quantized colors:
+   - The **darkest color** (by luminance) is automatically assigned as the outline (`O`).
+   - Remaining colors are assigned symbols from the priority pool: `s`, `h`, `e`, `a`, `v`, `b`, `c`, `d`, ...
+   - You can override outline selection by passing a specific `outline_color`.
+
+### Enabling Auto-Palette
+
+Set `auto_palette: true` in the `generation` section of your YAML config:
+
+```yaml
+generation:
+  auto_palette: true
+  max_palette_colors: 12  # optional, default: 16
+```
+
+When `auto_palette` is `true`, the `palette` section in the YAML becomes optional (it can still serve as a fallback). The quantized reference image is also used as a pixel-level visual guide for anchor frame generation.
 
 ## Requirements
 
@@ -169,12 +196,13 @@ This project uses [uv](https://docs.astral.sh/uv/) as the package manager and a 
 ```
 src/spriteforge/        # Package source code
 ├── __init__.py         # Package exports
-├── __main__.py         # CLI entry point
+├── __main__.py         # CLI entry point (planned)
 ├── config.py           # YAML config loading and validation (Pydantic models)
 ├── generator.py        # Claude Opus 4.6 grid generation (Stage 2)
 ├── assembler.py        # Sprite row assembly into final spritesheet
 ├── models.py           # Data models for animations, characters, and spritesheets
 ├── palette.py          # Palette symbol → RGBA mapping (generic, config-driven)
+├── preprocessor.py     # Image preprocessing (resize, quantize, auto-palette)
 ├── renderer.py         # Grid → PNG rendering
 ├── gates.py            # Verification gates (programmatic + LLM)
 ├── retry.py            # Retry & escalation engine

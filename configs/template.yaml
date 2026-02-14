@@ -31,7 +31,11 @@ character:
     pixel height in the 64x64 frame.
 
   # OPTIONAL: Frame dimensions (default: 64x64 — standard for most characters).
-  # Can also be specified as frame_size: [64, 64].
+  # Both formats are valid (equivalent):
+  #   frame_width: 64
+  #   frame_height: 64
+  # OR shorthand:
+  #   frame_size: [64, 64]
   frame_width: 64
   frame_height: 64
 
@@ -138,6 +142,17 @@ generation:
     64x64 pixel frames. Transparent PNG-32 background.
     No anti-aliasing to background. 1px dark outline.
     Character centered horizontally.
+
+  # When true, palette is automatically extracted from base_image_path
+  # using median-cut color quantization. The YAML palette section becomes
+  # optional (can still serve as fallback). Quantized reference image
+  # is used as pixel-level guide for anchor frame generation.
+  # auto_palette: false
+
+  # Maximum colors to extract when auto_palette is true (excluding transparent).
+  # Includes 1 outline + (max_palette_colors - 1) character colors.
+  # Valid range: 2–64. Default: 16.
+  # max_palette_colors: 16
 
 # --- Paths ---
 # OPTIONAL: Base reference image (relative to repo root or absolute)

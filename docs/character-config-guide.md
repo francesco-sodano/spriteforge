@@ -70,6 +70,19 @@ The `description` field is the **most important field for generation quality**. 
 
 The default `64×64` pixels works for most characters. You can also use `frame_size: [64, 64]` as a shorthand. Only change this if your character needs a different canvas size.
 
+Both formats are valid and equivalent:
+
+```yaml
+# Explicit width and height:
+frame_width: 64
+frame_height: 64
+
+# OR shorthand:
+frame_size: [64, 64]
+```
+
+The config loader maps `frame_size` to `frame_width` and `frame_height` internally.
+
 ---
 
 ## Palette Design
@@ -122,6 +135,18 @@ generation:
 ```
 
 When `auto_palette` is `true`, the `palette` section is optional (though it can still serve as a fallback).
+
+#### How Quantization Works
+
+The preprocessor uses PIL's **MEDIANCUT** color quantization algorithm to reduce the reference image to the target number of colors:
+
+1. The image is resized to the frame dimensions (default 64×64) using **nearest-neighbor** interpolation.
+2. Colors are quantized to `max_palette_colors` (default 16) distinct opaque colors. Transparent pixels are preserved — only the RGB channels are quantized, and the original alpha channel is re-applied.
+3. The **darkest color by luminance** (`0.299R + 0.587G + 0.114B`) is automatically selected as the outline color (`O` symbol).
+4. Remaining colors are assigned symbols from a priority pool: `s`, `h`, `e`, `a`, `v`, `b`, `c`, `d`, `g`, `i`, `k`, `l`, `m`, `n`, `p`, `r`, `t`, `u`, `w`, `x`, `y`, `z`.
+5. You can override the outline selection by providing a specific `outline_color` programmatically.
+
+The quantized reference image is also passed to the anchor frame generation (Stage 2) as a pixel-level visual guide, helping the AI match colors more accurately.
 
 ---
 
