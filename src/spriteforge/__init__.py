@@ -39,6 +39,8 @@ from spriteforge.preprocessor import (
     validate_reference_image,
 )
 from spriteforge.providers import (
+    AzureChatProvider,
+    ChatProvider,
     GPTImageProvider,
     ReferenceProvider,
 )
@@ -64,7 +66,9 @@ from spriteforge.workflow import SpriteForgeWorkflow
 
 __all__ = [
     "AnimationDef",
+    "AzureChatProvider",
     "CharacterConfig",
+    "ChatProvider",
     "ConfigError",
     "GPTImageProvider",
     "GateError",

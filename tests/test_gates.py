@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import json
 from typing import Any
-from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -19,6 +18,8 @@ from spriteforge.models import (
     PaletteColor,
     PaletteConfig,
 )
+
+from mock_chat_provider import MockChatProvider
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -301,41 +302,8 @@ class TestParseVerdictResponse:
 # ---------------------------------------------------------------------------
 
 
-def _mock_openai_response(content: str) -> MagicMock:
-    """Create a mock OpenAI chat completion response."""
-    choice = MagicMock()
-    choice.message.content = content
-    response = MagicMock()
-    response.choices = [choice]
-    return response
-
-
-def _setup_mock_azure(
-    response_content: str,
-) -> tuple[AsyncMock, AsyncMock, AsyncMock]:
-    """Create mock Azure objects returning the given response content."""
-    mock_response = _mock_openai_response(response_content)
-
-    mock_openai = AsyncMock()
-    mock_openai.chat.completions.create = AsyncMock(return_value=mock_response)
-    mock_openai.close = AsyncMock()
-
-    mock_project = AsyncMock()
-    mock_project.get_openai_client = MagicMock(return_value=mock_openai)
-    mock_project.close = AsyncMock()
-
-    mock_credential = AsyncMock()
-    mock_credential.close = AsyncMock()
-
-    return mock_credential, mock_project, mock_openai
-
-
 class TestLLMGateChecker:
-    """Tests for LLMGateChecker (mocked Azure API)."""
-
-    @pytest.fixture()
-    def gate_checker(self) -> LLMGateChecker:
-        return LLMGateChecker(project_endpoint="https://test.endpoint")
+    """Tests for LLMGateChecker (mocked chat provider)."""
 
     @pytest.fixture()
     def valid_verdict_json(self) -> str:
@@ -343,37 +311,33 @@ class TestLLMGateChecker:
             {"passed": True, "confidence": 0.9, "feedback": "Good quality"}
         )
 
+    @pytest.fixture()
+    def mock_provider(self, valid_verdict_json: str) -> MockChatProvider:
+        return MockChatProvider(responses=[valid_verdict_json])
+
+    @pytest.fixture()
+    def gate_checker(self, mock_provider: MockChatProvider) -> LLMGateChecker:
+        return LLMGateChecker(chat_provider=mock_provider)
+
     @pytest.mark.asyncio
     async def test_gate_minus_1_sends_images(
         self,
         gate_checker: LLMGateChecker,
+        mock_provider: MockChatProvider,
         sample_animation: AnimationDef,
-        valid_verdict_json: str,
     ) -> None:
-        """Mocked API receives reference strip + base ref."""
-        mock_cred, mock_proj, mock_openai = _setup_mock_azure(valid_verdict_json)
-
-        with (
-            patch(
-                "azure.identity.aio.DefaultAzureCredential",
-                return_value=mock_cred,
-            ),
-            patch(
-                "azure.ai.projects.aio.AIProjectClient",
-                return_value=mock_proj,
-            ),
-        ):
-            verdict = await gate_checker.gate_minus_1(
-                reference_strip=_TINY_PNG,
-                base_reference=_TINY_PNG,
-                animation=sample_animation,
-            )
+        """Chat provider receives reference strip + base ref."""
+        verdict = await gate_checker.gate_minus_1(
+            reference_strip=_TINY_PNG,
+            base_reference=_TINY_PNG,
+            animation=sample_animation,
+        )
 
         assert verdict.gate_name == "gate_minus_1"
         assert verdict.passed is True
+        assert len(mock_provider._call_history) == 1
 
-        call_kwargs = mock_openai.chat.completions.create.call_args
-        messages = call_kwargs.kwargs["messages"]
+        messages = mock_provider._call_history[0]["messages"]
         content = messages[0]["content"]
         image_parts = [p for p in content if p["type"] == "image_url"]
         assert len(image_parts) == 2
@@ -381,31 +345,20 @@ class TestLLMGateChecker:
     @pytest.mark.asyncio
     async def test_gate_0_sends_rendered_and_reference(
         self,
-        gate_checker: LLMGateChecker,
         valid_verdict_json: str,
     ) -> None:
         """Both images in request."""
-        mock_cred, mock_proj, mock_openai = _setup_mock_azure(valid_verdict_json)
+        mock = MockChatProvider(responses=[valid_verdict_json])
+        checker = LLMGateChecker(chat_provider=mock)
 
-        with (
-            patch(
-                "azure.identity.aio.DefaultAzureCredential",
-                return_value=mock_cred,
-            ),
-            patch(
-                "azure.ai.projects.aio.AIProjectClient",
-                return_value=mock_proj,
-            ),
-        ):
-            verdict = await gate_checker.gate_0(
-                rendered_frame=_TINY_PNG,
-                reference_frame=_TINY_PNG,
-            )
+        verdict = await checker.gate_0(
+            rendered_frame=_TINY_PNG,
+            reference_frame=_TINY_PNG,
+        )
 
         assert verdict.gate_name == "gate_0"
 
-        call_kwargs = mock_openai.chat.completions.create.call_args
-        messages = call_kwargs.kwargs["messages"]
+        messages = mock._call_history[0]["messages"]
         content = messages[0]["content"]
         image_parts = [p for p in content if p["type"] == "image_url"]
         assert len(image_parts) == 2
@@ -413,31 +366,20 @@ class TestLLMGateChecker:
     @pytest.mark.asyncio
     async def test_gate_1_sends_rendered_and_anchor(
         self,
-        gate_checker: LLMGateChecker,
         valid_verdict_json: str,
     ) -> None:
         """Both images in request."""
-        mock_cred, mock_proj, mock_openai = _setup_mock_azure(valid_verdict_json)
+        mock = MockChatProvider(responses=[valid_verdict_json])
+        checker = LLMGateChecker(chat_provider=mock)
 
-        with (
-            patch(
-                "azure.identity.aio.DefaultAzureCredential",
-                return_value=mock_cred,
-            ),
-            patch(
-                "azure.ai.projects.aio.AIProjectClient",
-                return_value=mock_proj,
-            ),
-        ):
-            verdict = await gate_checker.gate_1(
-                rendered_frame=_TINY_PNG,
-                anchor_frame=_TINY_PNG,
-            )
+        verdict = await checker.gate_1(
+            rendered_frame=_TINY_PNG,
+            anchor_frame=_TINY_PNG,
+        )
 
         assert verdict.gate_name == "gate_1"
 
-        call_kwargs = mock_openai.chat.completions.create.call_args
-        messages = call_kwargs.kwargs["messages"]
+        messages = mock._call_history[0]["messages"]
         content = messages[0]["content"]
         image_parts = [p for p in content if p["type"] == "image_url"]
         assert len(image_parts) == 2
@@ -445,31 +387,20 @@ class TestLLMGateChecker:
     @pytest.mark.asyncio
     async def test_gate_2_sends_rendered_and_prev(
         self,
-        gate_checker: LLMGateChecker,
         valid_verdict_json: str,
     ) -> None:
         """Both images in request."""
-        mock_cred, mock_proj, mock_openai = _setup_mock_azure(valid_verdict_json)
+        mock = MockChatProvider(responses=[valid_verdict_json])
+        checker = LLMGateChecker(chat_provider=mock)
 
-        with (
-            patch(
-                "azure.identity.aio.DefaultAzureCredential",
-                return_value=mock_cred,
-            ),
-            patch(
-                "azure.ai.projects.aio.AIProjectClient",
-                return_value=mock_proj,
-            ),
-        ):
-            verdict = await gate_checker.gate_2(
-                rendered_frame=_TINY_PNG,
-                prev_frame=_TINY_PNG,
-            )
+        verdict = await checker.gate_2(
+            rendered_frame=_TINY_PNG,
+            prev_frame=_TINY_PNG,
+        )
 
         assert verdict.gate_name == "gate_2"
 
-        call_kwargs = mock_openai.chat.completions.create.call_args
-        messages = call_kwargs.kwargs["messages"]
+        messages = mock._call_history[0]["messages"]
         content = messages[0]["content"]
         image_parts = [p for p in content if p["type"] == "image_url"]
         assert len(image_parts) == 2
@@ -477,33 +408,22 @@ class TestLLMGateChecker:
     @pytest.mark.asyncio
     async def test_gate_3a_sends_row_strip_and_reference(
         self,
-        gate_checker: LLMGateChecker,
         sample_animation: AnimationDef,
         valid_verdict_json: str,
     ) -> None:
         """Both strip images in request."""
-        mock_cred, mock_proj, mock_openai = _setup_mock_azure(valid_verdict_json)
+        mock = MockChatProvider(responses=[valid_verdict_json])
+        checker = LLMGateChecker(chat_provider=mock)
 
-        with (
-            patch(
-                "azure.identity.aio.DefaultAzureCredential",
-                return_value=mock_cred,
-            ),
-            patch(
-                "azure.ai.projects.aio.AIProjectClient",
-                return_value=mock_proj,
-            ),
-        ):
-            verdict = await gate_checker.gate_3a(
-                rendered_row_strip=_TINY_PNG,
-                reference_strip=_TINY_PNG,
-                animation=sample_animation,
-            )
+        verdict = await checker.gate_3a(
+            rendered_row_strip=_TINY_PNG,
+            reference_strip=_TINY_PNG,
+            animation=sample_animation,
+        )
 
         assert verdict.gate_name == "gate_3a"
 
-        call_kwargs = mock_openai.chat.completions.create.call_args
-        messages = call_kwargs.kwargs["messages"]
+        messages = mock._call_history[0]["messages"]
         content = messages[0]["content"]
         image_parts = [p for p in content if p["type"] == "image_url"]
         assert len(image_parts) == 2
@@ -511,26 +431,32 @@ class TestLLMGateChecker:
     @pytest.mark.asyncio
     async def test_gate_uses_temperature_zero(
         self,
-        gate_checker: LLMGateChecker,
         valid_verdict_json: str,
     ) -> None:
-        """API called with temperature=0.0."""
-        mock_cred, mock_proj, mock_openai = _setup_mock_azure(valid_verdict_json)
+        """Chat provider called with temperature=0.0."""
+        mock = MockChatProvider(responses=[valid_verdict_json])
+        checker = LLMGateChecker(chat_provider=mock)
 
-        with (
-            patch(
-                "azure.identity.aio.DefaultAzureCredential",
-                return_value=mock_cred,
-            ),
-            patch(
-                "azure.ai.projects.aio.AIProjectClient",
-                return_value=mock_proj,
-            ),
-        ):
-            await gate_checker.gate_0(
-                rendered_frame=_TINY_PNG,
-                reference_frame=_TINY_PNG,
-            )
+        await checker.gate_0(
+            rendered_frame=_TINY_PNG,
+            reference_frame=_TINY_PNG,
+        )
 
-        call_kwargs = mock_openai.chat.completions.create.call_args
-        assert call_kwargs.kwargs["temperature"] == 0.0
+        assert mock._call_history[0]["temperature"] == 0.0
+
+    @pytest.mark.asyncio
+    async def test_gate_checker_uses_chat_provider(
+        self,
+        valid_verdict_json: str,
+    ) -> None:
+        """Verify calls go through ChatProvider."""
+        mock = MockChatProvider(responses=[valid_verdict_json])
+        checker = LLMGateChecker(chat_provider=mock)
+
+        await checker.gate_0(
+            rendered_frame=_TINY_PNG,
+            reference_frame=_TINY_PNG,
+        )
+
+        assert len(mock._call_history) == 1
+        assert mock._call_history[0]["messages"][0]["role"] == "user"
