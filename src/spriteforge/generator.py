@@ -6,22 +6,14 @@ palette symbols using Claude Opus 4.6 with vision input via Azure AI Foundry.
 
 from __future__ import annotations
 
-import base64
 import json
 import os
 import re
 from typing import Any
 
+from spriteforge.errors import GenerationError
 from spriteforge.models import AnimationDef, GenerationConfig, PaletteConfig
-
-# ---------------------------------------------------------------------------
-# Custom exception
-# ---------------------------------------------------------------------------
-
-
-class GenerationError(Exception):
-    """Raised when grid generation fails."""
-
+from spriteforge.utils import image_to_data_url
 
 # ---------------------------------------------------------------------------
 # Prompt templates
@@ -176,12 +168,6 @@ def _build_palette_map_text(palette: PaletteConfig) -> str:
     return "\n".join(lines)
 
 
-def _image_to_data_url(image_bytes: bytes, media_type: str = "image/png") -> str:
-    """Encode image bytes as a base64 data URL."""
-    b64 = base64.b64encode(image_bytes).decode("ascii")
-    return f"data:{media_type};base64,{b64}"
-
-
 def _build_system_prompt(
     palette: PaletteConfig,
     generation: GenerationConfig,
@@ -298,11 +284,11 @@ class GridGenerator:
             {"type": "text", "text": user_text},
             {
                 "type": "image_url",
-                "image_url": {"url": _image_to_data_url(base_reference)},
+                "image_url": {"url": image_to_data_url(base_reference)},
             },
             {
                 "type": "image_url",
-                "image_url": {"url": _image_to_data_url(reference_frame)},
+                "image_url": {"url": image_to_data_url(reference_frame)},
             },
         ]
 
@@ -310,7 +296,7 @@ class GridGenerator:
             content.append(
                 {
                     "type": "image_url",
-                    "image_url": {"url": _image_to_data_url(quantized_reference)},
+                    "image_url": {"url": image_to_data_url(quantized_reference)},
                 }
             )
 
@@ -386,11 +372,11 @@ class GridGenerator:
             {"type": "text", "text": user_text},
             {
                 "type": "image_url",
-                "image_url": {"url": _image_to_data_url(reference_frame)},
+                "image_url": {"url": image_to_data_url(reference_frame)},
             },
             {
                 "type": "image_url",
-                "image_url": {"url": _image_to_data_url(anchor_rendered)},
+                "image_url": {"url": image_to_data_url(anchor_rendered)},
             },
         ]
 
@@ -398,7 +384,7 @@ class GridGenerator:
             content.append(
                 {
                     "type": "image_url",
-                    "image_url": {"url": _image_to_data_url(prev_frame_rendered)},
+                    "image_url": {"url": image_to_data_url(prev_frame_rendered)},
                 }
             )
 

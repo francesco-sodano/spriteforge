@@ -13,9 +13,9 @@ from spriteforge.generator import (
     GridGenerator,
     _build_palette_map_text,
     _build_system_prompt,
-    _image_to_data_url,
     parse_grid_response,
 )
+from spriteforge.utils import image_to_data_url
 from spriteforge.models import (
     AnimationDef,
     GenerationConfig,
@@ -206,7 +206,7 @@ class TestHelperFunctions:
 
     def test_image_to_data_url(self) -> None:
         """Image bytes are base64-encoded in a data URL."""
-        url = _image_to_data_url(b"\x89PNG")
+        url = image_to_data_url(b"\x89PNG")
         assert url.startswith("data:image/png;base64,")
         assert "iVBO" in url  # base64 of \x89PNG starts with iVBO
 

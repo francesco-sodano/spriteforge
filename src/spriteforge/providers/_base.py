@@ -6,9 +6,7 @@ from abc import ABC, abstractmethod
 
 from PIL import Image
 
-
-class ProviderError(Exception):
-    """Raised when a reference image provider fails."""
+from spriteforge.errors import ProviderError
 
 
 class ReferenceProvider(ABC):
