@@ -1,9 +1,7 @@
-"""GPT-Image-1.5 reference image provider via Azure AI Foundry.
+"""GPT-Image-1.5 reference image provider via Azure OpenAI.
 
-Uses ``AIProjectClient`` from the ``azure-ai-projects`` package to call
-GPT-Image-1.5 through the same Azure AI Foundry project that hosts
-Claude Opus 4.6 for Stage 2.  Authentication uses
-``DefaultAzureCredential`` — no separate API keys are needed.
+Uses ``AsyncAzureOpenAI`` from the ``openai`` package to call
+GPT-Image-1.5 with API key authentication.
 """
 
 from __future__ import annotations
@@ -25,10 +23,8 @@ logger = get_logger("providers")
 class GPTImageProvider(ReferenceProvider):
     """Reference generation using Azure-hosted GPT-Image-1.5 model.
 
-    Uses ``AIProjectClient`` from the ``azure-ai-projects`` package
-    to call GPT-Image-1.5 via the same Azure AI Foundry project used
-    for Stage 2 (Claude Opus 4.6).  Authentication uses
-    ``DefaultAzureCredential``.
+    Uses ``AsyncAzureOpenAI`` from the ``openai`` package to call
+    GPT-Image-1.5 with API key authentication.
 
     Implements the :class:`~spriteforge.providers.ReferenceProvider`
     interface.
@@ -36,63 +32,66 @@ class GPTImageProvider(ReferenceProvider):
 
     def __init__(
         self,
-        project_endpoint: str | None = None,
+        api_key: str | None = None,
+        azure_endpoint: str | None = None,
         model_deployment: str = "gpt-image-1.5",
-        credential: Any | None = None,
+        api_version: str = "2025-04-01-preview",
     ) -> None:
         """Initialize GPT-Image provider.
 
         Args:
-            project_endpoint: Azure AI Foundry project endpoint.
-                If ``None``, reads from ``AZURE_AI_PROJECT_ENDPOINT``
+            api_key: Azure OpenAI API key. If ``None``, reads from
+                ``AZURE_OPENAI_GPT_IMAGE_API_KEY`` environment variable.
+            azure_endpoint: Azure OpenAI endpoint URL.
+                If ``None``, reads from ``AZURE_OPENAI_GPT_IMAGE_ENDPOINT``
                 environment variable.
-            model_deployment: Model deployment name in Foundry.
-            credential: Azure credential (defaults to ``DefaultAzureCredential``).
-                        If provided, the caller is responsible for closing it.
+            model_deployment: Model deployment name in Azure OpenAI.
+            api_version: Azure OpenAI API version.
 
         Raises:
-            ProviderError: If no endpoint is available.
+            ProviderError: If API key or endpoint is missing.
         """
-        self._endpoint = project_endpoint or os.environ.get(
-            "AZURE_AI_PROJECT_ENDPOINT", ""
+        self._api_key = api_key or os.environ.get(
+            "AZURE_OPENAI_GPT_IMAGE_API_KEY", ""
+        )
+        if not self._api_key:
+            raise ProviderError(
+                "Azure OpenAI API key is required. "
+                "Pass api_key or set AZURE_OPENAI_GPT_IMAGE_API_KEY."
+            )
+        
+        self._endpoint = azure_endpoint or os.environ.get(
+            "AZURE_OPENAI_GPT_IMAGE_ENDPOINT", ""
         )
         if not self._endpoint:
             raise ProviderError(
-                "Azure AI project endpoint is required. "
-                "Pass project_endpoint or set AZURE_AI_PROJECT_ENDPOINT."
+                "Azure OpenAI endpoint is required. "
+                "Pass azure_endpoint or set AZURE_OPENAI_GPT_IMAGE_ENDPOINT."
             )
+        
         self._model = model_deployment
-        self._user_credential = credential
-        self._owns_credential = credential is None
-        self._credential: Any | None = None
+        self._api_version = api_version
         self._client: Any | None = None
 
     def _get_client(self) -> Any:
-        """Lazily create and return the Azure AI project client.
+        """Lazily create and return the Azure OpenAI client.
 
         Returns:
-            An ``AIProjectClient`` instance.
+            An ``AsyncAzureOpenAI`` instance.
         """
         if self._client is None:
             try:
-                from azure.ai.projects.aio import AIProjectClient  # type: ignore[import-not-found]
-                from azure.identity.aio import DefaultAzureCredential  # type: ignore[import-not-found]
+                from openai import AsyncAzureOpenAI  # type: ignore[import-not-found]
             except ImportError as exc:
                 raise ImportError(
-                    "Azure SDK packages are required for GPTImageProvider. "
-                    "Install with: pip install spriteforge[azure] or "
-                    "pip install azure-ai-projects azure-identity"
+                    "OpenAI SDK package is required for GPTImageProvider. "
+                    "Install with: pip install openai"
                 ) from exc
 
-            # Create credential if not provided by user
-            if self._user_credential is not None:
-                self._credential = self._user_credential
-            else:
-                self._credential = DefaultAzureCredential()
-
-            self._client = AIProjectClient(
-                credential=self._credential,
-                endpoint=self._endpoint,
+            self._client = AsyncAzureOpenAI(
+                api_key=self._api_key,
+                azure_endpoint=self._endpoint,
+                api_version=self._api_version,
             )
         return self._client
 
@@ -118,7 +117,6 @@ class GPTImageProvider(ReferenceProvider):
         Raises:
             ProviderError: If the image generation fails.
         """
-        client = self._get_client()
         strip_width = frame_size[0] * num_frames
         strip_height = frame_size[1]
 
@@ -137,11 +135,11 @@ class GPTImageProvider(ReferenceProvider):
         api_size: str = "1536x1024"
 
         try:
-            openai_client = client.get_openai_client()
+            client = self._get_client()
 
             # images.edit accepts `image` as raw file bytes (FileTypes),
             # NOT a dict/JSON structure.  The SDK sends it as multipart/form-data.
-            response = await openai_client.images.edit(
+            response = await client.images.edit(
                 model=self._model,
                 prompt=prompt,
                 image=base_reference,
@@ -180,8 +178,7 @@ class GPTImageProvider(ReferenceProvider):
     async def close(self) -> None:
         """Clean up provider resources.
 
-        Closes the Azure AI Project client and any owned credentials.
-        User-supplied credentials are NOT closed.
+        Closes the Azure OpenAI client.
         """
         if self._client is not None:
             try:
@@ -189,10 +186,3 @@ class GPTImageProvider(ReferenceProvider):
             except Exception:
                 pass
             self._client = None
-
-        if self._owns_credential and self._credential is not None:
-            try:
-                await self._credential.close()
-            except Exception:
-                pass
-            self._credential = None
