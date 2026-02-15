@@ -357,8 +357,8 @@ class TestGenerationConfig:
         assert gen.max_palette_colors == 2
 
     def test_generation_config_max_palette_colors_max_boundary(self) -> None:
-        gen = GenerationConfig(max_palette_colors=64)
-        assert gen.max_palette_colors == 64
+        gen = GenerationConfig(max_palette_colors=24)
+        assert gen.max_palette_colors == 24
 
     def test_generation_config_max_palette_colors_below_min(self) -> None:
         with pytest.raises(ValidationError):
@@ -366,7 +366,7 @@ class TestGenerationConfig:
 
     def test_generation_config_max_palette_colors_above_max(self) -> None:
         with pytest.raises(ValidationError):
-            GenerationConfig(max_palette_colors=65)
+            GenerationConfig(max_palette_colors=25)
 
     def test_generation_config_max_palette_colors_zero(self) -> None:
         with pytest.raises(ValidationError):
