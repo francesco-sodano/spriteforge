@@ -10,7 +10,7 @@ import pytest
 from PIL import Image
 from pydantic import ValidationError
 
-from spriteforge.models import PaletteConfig
+from spriteforge.models import GenerationConfig, PaletteConfig
 from spriteforge.preprocessor import (
     SYMBOL_POOL,
     PreprocessResult,
@@ -228,7 +228,8 @@ class TestExtractPaletteFromImage:
         """
         img = _make_multicolor_image(num_colors=50)
         palette = extract_palette_from_image(img, max_colors=23)
-        # Should have exactly 1 outline + 22 regular colors = 23 total opaque
+        # Should have at most 1 outline + 22 regular colors = 23 total opaque
+        # (may be less if image has fewer unique colors after quantization)
         total_opaque = 1 + len(palette.colors)
         assert total_opaque <= 23
         # Verify no duplicate symbols
@@ -243,8 +244,6 @@ class TestExtractPaletteFromImage:
         """Test that requesting max_colors > 23 is rejected by the model."""
         # This test verifies that GenerationConfig enforces the upper bound
         # The preprocessor itself doesn't validate, but the config does
-        from spriteforge.models import GenerationConfig
-
         with pytest.raises(ValidationError):
             GenerationConfig(max_palette_colors=24)
 
