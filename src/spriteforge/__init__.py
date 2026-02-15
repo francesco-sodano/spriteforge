@@ -35,6 +35,7 @@ from spriteforge.palette import (
 from spriteforge.preprocessor import (
     PreprocessResult,
     extract_palette_from_image,
+    label_palette_colors_with_llm,
     preprocess_reference,
     resize_reference,
     validate_reference_image,

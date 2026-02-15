@@ -2,19 +2,191 @@
 
 from __future__ import annotations
 
+import colorsys
 import io
+import json
 from collections import Counter
 from pathlib import Path
 
 from PIL import Image
 from pydantic import BaseModel, ConfigDict
 
+from spriteforge.errors import GenerationError
+from spriteforge.logging import get_logger
 from spriteforge.models import PaletteColor, PaletteConfig
+from spriteforge.providers.chat import ChatProvider
+from spriteforge.utils import image_to_data_url
+
+logger = get_logger(__name__)
 
 # Symbol priority list for auto-assignment (after O for outline).
 # Skips '.' (transparent) and 'O' (outline). Starts with common pixel-art
 # mnemonics: s=skin, h=hair, e=eyes, a=armor, v=vest, etc.
 SYMBOL_POOL: list[str] = list("sheavbcdgiklmnprtuwxyz")
+
+
+def _describe_color(rgb: tuple[int, int, int]) -> str:
+    """Generate a descriptive name for an RGB color.
+
+    Uses HSL-based hue bucketing + lightness qualifiers:
+    - "Dark Red", "Light Blue", "Golden Yellow", etc.
+
+    This is NOT a semantic label (doesn't know "skin" vs "hair") —
+    it's a best-effort fallback when the LLM is unavailable.
+
+    Args:
+        rgb: (R, G, B) tuple with values 0-255.
+
+    Returns:
+        Descriptive color name string.
+    """
+    r, g, b = rgb[0] / 255.0, rgb[1] / 255.0, rgb[2] / 255.0
+
+    # Convert RGB to HLS (Python uses HLS, not HSL)
+    h, l, s = colorsys.rgb_to_hls(r, g, b)
+
+    # Special cases: near-black, near-white, low saturation
+    if l < 0.1:
+        return "Near Black"
+    if l > 0.9:
+        return "Near White"
+    if s < 0.15:
+        # Low saturation → grayscale
+        if l < 0.3:
+            return "Dark Gray"
+        elif l < 0.6:
+            return "Gray"
+        else:
+            return "Light Gray"
+
+    # Hue-based color naming (h is in [0, 1])
+    hue_deg = h * 360
+
+    # Hue buckets
+    if hue_deg < 15 or hue_deg >= 345:
+        hue_name = "Red"
+    elif hue_deg < 45:
+        hue_name = "Orange"
+    elif hue_deg < 70:
+        hue_name = "Yellow"
+    elif hue_deg < 150:
+        hue_name = "Green"
+    elif hue_deg < 190:
+        hue_name = "Cyan"
+    elif hue_deg < 260:
+        hue_name = "Blue"
+    elif hue_deg < 320:
+        hue_name = "Purple"
+    else:
+        hue_name = "Pink"
+
+    # Special case for brown (low luminance yellow/orange with moderate saturation)
+    if hue_name in ("Yellow", "Orange") and l < 0.5 and s > 0.3:
+        return "Brown" if l < 0.35 else "Dark Brown"
+
+    # Lightness qualifiers
+    if l < 0.3:
+        qualifier = "Dark"
+    elif l < 0.6:
+        qualifier = ""  # No qualifier for medium
+    else:
+        qualifier = "Light"
+
+    # Special case: golden yellow
+    if hue_name == "Yellow" and s > 0.5 and 0.45 < l < 0.75:
+        return "Golden Yellow"
+
+    # Build final name
+    if qualifier:
+        return f"{qualifier} {hue_name}"
+    else:
+        return hue_name
+
+
+async def label_palette_colors_with_llm(
+    quantized_png_bytes: bytes,
+    colors: list[tuple[int, int, int]],
+    character_description: str,
+    chat_provider: ChatProvider,
+) -> list[str]:
+    """Label extracted palette colors using an LLM vision call.
+
+    Sends the quantized reference image + RGB list + character description
+    to a cheap LLM (e.g., gpt-5-nano) and returns semantic labels.
+
+    Args:
+        quantized_png_bytes: PNG bytes of the quantized reference image.
+        colors: List of RGB tuples (in extraction order, excluding outline).
+        character_description: Character visual description from config.
+        chat_provider: Chat provider configured with the labeling model.
+
+    Returns:
+        List of semantic label strings, same length as colors.
+        Falls back to descriptive color names if LLM fails.
+    """
+    # Build the color list string
+    color_list_lines = []
+    for idx, (r, g, b) in enumerate(colors, start=1):
+        color_list_lines.append(f"{idx}. RGB({r}, {g}, {b})")
+    color_list = "\n".join(color_list_lines)
+
+    # Import the prompt here to avoid circular imports
+    from spriteforge.prompts.preprocessor import PALETTE_LABELING_PROMPT
+
+    # Build the prompt
+    prompt_text = PALETTE_LABELING_PROMPT.format(
+        character_description=character_description,
+        color_list=color_list,
+        color_count=len(colors),
+    )
+
+    # Prepare the vision message
+    image_data_url = image_to_data_url(quantized_png_bytes)
+    messages = [
+        {
+            "role": "user",
+            "content": [
+                {"type": "text", "text": prompt_text},
+                {"type": "image_url", "image_url": {"url": image_data_url}},
+            ],
+        }
+    ]
+
+    try:
+        # Call the LLM
+        response = await chat_provider.chat(
+            messages=messages, temperature=0.5, response_format="json_object"
+        )
+
+        # Parse the response
+        data = json.loads(response)
+        if "labels" in data:
+            labels = data["labels"]
+        elif isinstance(data, dict) and len(data) == 1:
+            # Try to extract the first value if it's an array
+            first_value = next(iter(data.values()))
+            if isinstance(first_value, list):
+                labels = first_value
+            else:
+                raise ValueError("Response format not recognized")
+        else:
+            raise ValueError("Response format not recognized")
+
+        # Validate label count
+        if not isinstance(labels, list) or len(labels) != len(colors):
+            logger.warning(
+                f"LLM returned wrong number of labels: {len(labels) if isinstance(labels, list) else 'non-list'} vs {len(colors)} colors. Falling back to descriptive names."
+            )
+            return [_describe_color(c) for c in colors]
+
+        # Convert all labels to strings
+        return [str(label) for label in labels]
+
+    except Exception as exc:
+        logger.warning(
+            f"LLM palette labeling failed: {exc}. Falling back to descriptive names."
+        )
+        return [_describe_color(c) for c in colors]
 
 
 class PreprocessResult(BaseModel):
@@ -132,6 +304,7 @@ def _assign_symbols(
     colors: list[tuple[int, int, int]],
     coverage: list[int],
     outline_index: int,
+    semantic_labels: list[str] | None = None,
 ) -> list[tuple[str, str, tuple[int, int, int]]]:
     """Assign palette symbols to extracted colors.
 
@@ -143,6 +316,10 @@ def _assign_symbols(
         colors: List of RGB tuples.
         coverage: Pixel count for each color.
         outline_index: Index of the color to use as outline.
+        semantic_labels: Optional list of semantic labels for colors
+            (excluding outline). If provided and length matches, these
+            are used instead of "Color N". Falls back to "Color N" if
+            labels are invalid or wrong length.
 
     Returns:
         List of (name, symbol, rgb) tuples.
@@ -162,13 +339,23 @@ def _assign_symbols(
     # Outline gets symbol 'O'
     result.append(("Outline", "O", outline_entry[0]))
 
+    # Validate semantic labels
+    use_labels = (
+        semantic_labels is not None
+        and isinstance(semantic_labels, list)
+        and len(semantic_labels) == len(remaining)
+    )
+
     # Assign pool symbols to remaining colors in coverage order
     pool_idx = 0
     for color, _count, _orig_idx in remaining:
         if pool_idx >= len(SYMBOL_POOL):
             break
         symbol = SYMBOL_POOL[pool_idx]
-        name = f"Color {pool_idx + 1}"
+        if use_labels and semantic_labels is not None:
+            name = semantic_labels[pool_idx]
+        else:
+            name = f"Color {pool_idx + 1}"
         result.append((name, symbol, color))
         pool_idx += 1
 
@@ -241,6 +428,7 @@ def extract_palette_from_image(
     image: Image.Image,
     max_colors: int = 16,
     outline_color: tuple[int, int, int] | None = None,
+    semantic_labels: list[str] | None = None,
 ) -> PaletteConfig:
     """Extract a PaletteConfig from a PIL Image.
 
@@ -250,6 +438,8 @@ def extract_palette_from_image(
         image: PIL Image to extract palette from (must be RGBA).
         max_colors: Maximum opaque colors to extract.
         outline_color: Optional forced outline color. If None, uses darkest.
+        semantic_labels: Optional semantic labels for colors (excluding outline).
+            If provided and length matches, these are used instead of "Color N".
 
     Returns:
         A PaletteConfig with auto-assigned symbols.
@@ -304,7 +494,7 @@ def extract_palette_from_image(
         outline_index = min(range(len(colors)), key=lambda i: _luminance(colors[i]))
 
     # Assign symbols
-    assignments = _assign_symbols(colors, coverage, outline_index)
+    assignments = _assign_symbols(colors, coverage, outline_index, semantic_labels)
 
     # Build PaletteConfig
     outline_entry = assignments[0]  # Always first (outline)

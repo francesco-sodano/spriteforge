@@ -240,3 +240,49 @@ class TestProviderPrompts:
         character = CharacterConfig(name="Test NPC")
         prompt = build_reference_prompt(animation, character)
         assert "6 frames" in prompt
+
+
+# ---------------------------------------------------------------------------
+# Preprocessor prompts
+# ---------------------------------------------------------------------------
+
+
+class TestPreprocessorPrompts:
+    """Tests for prompt constants in prompts.preprocessor."""
+
+    def test_palette_labeling_prompt_contains_colors(self) -> None:
+        """Prompt includes RGB values."""
+        from spriteforge.prompts.preprocessor import PALETTE_LABELING_PROMPT
+
+        color_list = "1. RGB(235, 210, 185)\n2. RGB(220, 185, 90)"
+        prompt = PALETTE_LABELING_PROMPT.format(
+            character_description="A warrior",
+            color_list=color_list,
+            color_count=2,
+        )
+        assert "235, 210, 185" in prompt
+        assert "220, 185, 90" in prompt
+
+    def test_palette_labeling_prompt_contains_description(self) -> None:
+        """Prompt includes character description."""
+        from spriteforge.prompts.preprocessor import PALETTE_LABELING_PROMPT
+
+        color_list = "1. RGB(255, 0, 0)"
+        prompt = PALETTE_LABELING_PROMPT.format(
+            character_description="A goblin with green skin",
+            color_list=color_list,
+            color_count=1,
+        )
+        assert "goblin with green skin" in prompt
+
+    def test_palette_labeling_prompt_contains_count(self) -> None:
+        """Prompt includes expected label count."""
+        from spriteforge.prompts.preprocessor import PALETTE_LABELING_PROMPT
+
+        color_list = "1. RGB(255, 0, 0)\n2. RGB(0, 255, 0)\n3. RGB(0, 0, 255)"
+        prompt = PALETTE_LABELING_PROMPT.format(
+            character_description="A warrior",
+            color_list=color_list,
+            color_count=3,
+        )
+        assert "3 labels" in prompt

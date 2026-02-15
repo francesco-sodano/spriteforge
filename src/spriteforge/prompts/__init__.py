@@ -26,6 +26,7 @@ from spriteforge.prompts.generator import (
     build_anchor_frame_prompt,
     build_frame_prompt,
 )
+from spriteforge.prompts.preprocessor import PALETTE_LABELING_PROMPT
 from spriteforge.prompts.providers import build_reference_prompt
 from spriteforge.prompts.retry import (
     build_constrained_guidance,
@@ -43,6 +44,7 @@ __all__ = [
     "GATE_MINUS_1_PROMPT",
     "GATE_VERDICT_SCHEMA",
     "GRID_SYSTEM_PROMPT",
+    "PALETTE_LABELING_PROMPT",
     "QUANTIZED_REFERENCE_SECTION",
     "build_anchor_frame_prompt",
     "build_constrained_guidance",
