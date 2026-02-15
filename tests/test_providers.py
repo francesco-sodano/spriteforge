@@ -1050,24 +1050,22 @@ class TestAzureSDKErrorMessages:
     def test_gpt_image_provider_missing_sdk_error(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """GPTImageProvider shows clear error when Azure SDK is missing."""
+        """GPTImageProvider shows clear error when OpenAI SDK is missing."""
         import sys
         import builtins
 
-        # Remove azure SDK modules from sys.modules to simulate missing SDK
-        azure_sdk_modules = [
-            key
-            for key in sys.modules.keys()
-            if key.startswith("azure.ai.") or key.startswith("azure.identity")
+        # Remove OpenAI SDK modules from sys.modules to simulate missing SDK
+        openai_modules = [
+            key for key in sys.modules.keys() if key.startswith("openai")
         ]
-        for key in azure_sdk_modules:
+        for key in openai_modules:
             monkeypatch.delitem(sys.modules, key, raising=False)
 
-        # Mock the import to fail for Azure SDK packages only
+        # Mock the import to fail for OpenAI SDK only
         original_import = builtins.__import__
 
         def mock_import(name, *args, **kwargs):
-            if name.startswith("azure.ai.") or name.startswith("azure.identity"):
+            if name == "openai" or name.startswith("openai."):
                 raise ImportError(f"No module named '{name}'")
             return original_import(name, *args, **kwargs)
 
@@ -1076,14 +1074,15 @@ class TestAzureSDKErrorMessages:
         # Import and create provider (doesn't fail yet)
         from spriteforge.providers.gpt_image import GPTImageProvider
 
-        provider = GPTImageProvider(project_endpoint="https://test.azure.com")
+        provider = GPTImageProvider(
+            api_key="test-key",
+            azure_endpoint="https://test.openai.azure.com",
+        )
 
         # Using the provider should fail with clear error message
         with pytest.raises(ImportError) as exc_info:
             provider._get_client()
 
         error_msg = str(exc_info.value)
-        assert "Azure SDK packages are required" in error_msg
-        assert "pip install spriteforge[azure]" in error_msg
-        assert "azure-ai-projects" in error_msg
-        assert "azure-identity" in error_msg
+        assert "OpenAI SDK package is required" in error_msg
+        assert "pip install openai" in error_msg
