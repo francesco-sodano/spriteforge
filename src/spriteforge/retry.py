@@ -209,11 +209,16 @@ class RetryManager:
         new_feedback = [v.feedback for v in verdicts if v.feedback]
         next_attempt = context.current_attempt + 1
         if next_attempt < context.max_attempts:
-            tier = self.get_tier(next_attempt + 1)
-            temperature = self.get_temperature(next_attempt + 1)
+            # next_attempt is 0-based; get_tier expects 1-based attempt.
+            # Clamp to the constrained range upper bound to avoid
+            # out-of-range errors when tier ranges don't cover every
+            # possible attempt number.
+            clamped_attempt = min(next_attempt + 1, self._config.constrained_range[1])
+            tier = self.get_tier(clamped_attempt)
+            temperature = self.get_temperature(clamped_attempt)
             logger.info(
                 "Retry %d/%d for %s — %s (temp=%.1f)",
-                next_attempt,
+                next_attempt + 1,
                 context.max_attempts,
                 context.frame_id,
                 tier.value,
