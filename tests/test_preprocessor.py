@@ -273,6 +273,42 @@ class TestPreprocessReference:
         total_opaque = 1 + len(result.palette.colors)
         assert total_opaque == 6
 
+    def test_preprocess_reference_palette_matches_image(self, tmp_path: Path) -> None:
+        """Every opaque pixel in the quantized image must map to a palette color.
+
+        This guards against double-quantization: if quantize() ran twice
+        independently, the palette and image could have different color sets.
+        """
+        img = _make_multicolor_image(width=256, height=256, num_colors=50)
+        path = tmp_path / "ref.png"
+        _save_rgba(img, path)
+
+        result = preprocess_reference(str(path), max_colors=12)
+
+        # Collect all palette RGB values
+        palette_rgbs: set[tuple[int, int, int]] = set()
+        palette_rgbs.add(
+            (
+                result.palette.outline.r,
+                result.palette.outline.g,
+                result.palette.outline.b,
+            )
+        )
+        for c in result.palette.colors:
+            palette_rgbs.add((c.r, c.g, c.b))
+
+        # Collect all opaque pixel RGB values from the quantized image
+        raw = result.quantized_image.tobytes()
+        pixels = list(zip(raw[0::4], raw[1::4], raw[2::4], raw[3::4]))
+        image_rgbs = set((r, g, b) for r, g, b, a in pixels if a > 0)
+
+        # Every color in the image must appear in the palette
+        unmatched = image_rgbs - palette_rgbs
+        assert unmatched == set(), (
+            f"Quantized image has {len(unmatched)} color(s) not in palette: "
+            f"{list(unmatched)[:5]}..."
+        )
+
 
 # ---------------------------------------------------------------------------
 # _assign_symbols

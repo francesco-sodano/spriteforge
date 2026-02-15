@@ -308,11 +308,7 @@ def preprocess_reference(
     # Step 2: Resize
     resized = resize_reference(img, frame_width, frame_height)
 
-    # Step 3 & 4: Extract palette (quantizes internally if needed)
-    palette = extract_palette_from_image(resized, max_colors, outline_color)
-
-    # Build the quantized RGBA image from the palette
-    # Re-quantize the resized image to get the actual quantized image
+    # Step 3: Quantize once (if needed)
     if resized.mode != "RGBA":
         resized = resized.convert("RGBA")
 
@@ -338,6 +334,11 @@ def preprocess_reference(
         quantized_image = Image.merge("RGBA", (*quantized_rgb.split(), alpha))
     else:
         quantized_image = resized.copy()
+
+    # Step 4: Extract palette from the already-quantized image
+    # This guarantees the palette symbols match the quantized image pixels exactly,
+    # avoiding the double-quantization inconsistency.
+    palette = extract_palette_from_image(quantized_image, max_colors, outline_color)
 
     # Count final unique opaque colors
     raw_q = quantized_image.tobytes()
