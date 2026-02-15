@@ -3,9 +3,16 @@
 from __future__ import annotations
 
 import os
+from pathlib import Path
 from typing import Any
 
 import pytest
+from dotenv import load_dotenv
+
+# Auto-load .env from project root (gitignored — never pushed to GitHub).
+# This provides AZURE_AI_PROJECT_ENDPOINT and other env vars for integration tests.
+_PROJECT_ROOT = Path(__file__).resolve().parent.parent
+load_dotenv(_PROJECT_ROOT / ".env", override=False)
 
 from spriteforge.models import (
     PaletteColor,
