@@ -35,3 +35,11 @@ class ChatProvider(ABC):
         Raises:
             GenerationError: If the API call fails.
         """
+
+    async def close(self) -> None:
+        """Clean up provider resources.
+
+        Default implementation does nothing. Providers that need cleanup
+        should override this method.
+        """
+        pass

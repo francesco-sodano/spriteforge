@@ -62,7 +62,7 @@ from spriteforge.utils import (
     parse_json_from_llm,
     strip_code_fences,
 )
-from spriteforge.workflow import SpriteForgeWorkflow
+from spriteforge.workflow import SpriteForgeWorkflow, create_workflow
 
 __all__ = [
     "AnimationDef",
@@ -94,6 +94,7 @@ __all__ = [
     "SpriteForgeError",
     "SpriteForgeWorkflow",
     "build_palette_map",
+    "create_workflow",
     "extract_palette_from_image",
     "frame_to_png_bytes",
     "get_logger",

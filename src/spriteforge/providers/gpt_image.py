@@ -38,6 +38,7 @@ class GPTImageProvider(ReferenceProvider):
         self,
         project_endpoint: str | None = None,
         model_deployment: str = "gpt-image-1.5",
+        credential: Any | None = None,
     ) -> None:
         """Initialize GPT-Image provider.
 
@@ -46,6 +47,8 @@ class GPTImageProvider(ReferenceProvider):
                 If ``None``, reads from ``AZURE_AI_PROJECT_ENDPOINT``
                 environment variable.
             model_deployment: Model deployment name in Foundry.
+            credential: Azure credential (defaults to ``DefaultAzureCredential``).
+                        If provided, the caller is responsible for closing it.
 
         Raises:
             ProviderError: If no endpoint is available.
@@ -59,6 +62,9 @@ class GPTImageProvider(ReferenceProvider):
                 "Pass project_endpoint or set AZURE_AI_PROJECT_ENDPOINT."
             )
         self._model = model_deployment
+        self._user_credential = credential
+        self._owns_credential = credential is None
+        self._credential: Any | None = None
         self._client: Any | None = None
 
     def _get_client(self) -> Any:
@@ -71,9 +77,14 @@ class GPTImageProvider(ReferenceProvider):
             from azure.ai.projects.aio import AIProjectClient  # type: ignore[import-not-found]
             from azure.identity.aio import DefaultAzureCredential  # type: ignore[import-not-found]
 
-            credential = DefaultAzureCredential()
+            # Create credential if not provided by user
+            if self._user_credential is not None:
+                self._credential = self._user_credential
+            else:
+                self._credential = DefaultAzureCredential()
+
             self._client = AIProjectClient(
-                credential=credential,
+                credential=self._credential,
                 endpoint=self._endpoint,
             )
         return self._client
@@ -160,10 +171,21 @@ class GPTImageProvider(ReferenceProvider):
             raise ProviderError(f"Failed to decode generated image: {exc}") from exc
 
     async def close(self) -> None:
-        """Clean up provider resources."""
+        """Clean up provider resources.
+
+        Closes the Azure AI Project client and any owned credentials.
+        User-supplied credentials are NOT closed.
+        """
         if self._client is not None:
             try:
                 await self._client.close()
             except Exception:
                 pass
             self._client = None
+
+        if self._owns_credential and self._credential is not None:
+            try:
+                await self._credential.close()
+            except Exception:
+                pass
+            self._credential = None

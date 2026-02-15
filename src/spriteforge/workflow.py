@@ -95,6 +95,37 @@ class SpriteForgeWorkflow:
         self.preprocessor = preprocessor
         self.max_concurrent_rows = max_concurrent_rows
 
+    async def close(self) -> None:
+        """Clean up all provider resources.
+
+        Closes the grid generator's chat provider, gate checker's chat provider,
+        and reference provider. If a credential was created by the factory,
+        it will also be closed. Safe to call multiple times.
+        """
+        # Close grid generator's chat provider
+        if hasattr(self.grid_generator, "_chat") and hasattr(
+            self.grid_generator._chat, "close"
+        ):
+            await self.grid_generator._chat.close()
+
+        # Close gate checker's chat provider
+        if hasattr(self.gate_checker, "_chat") and hasattr(
+            self.gate_checker._chat, "close"
+        ):
+            await self.gate_checker._chat.close()
+
+        # Close reference provider
+        if hasattr(self.reference_provider, "close"):
+            await self.reference_provider.close()
+
+        # Close owned credential (only if created by factory)
+        if hasattr(self, "_owned_credential") and self._owned_credential is not None:  # type: ignore[has-type]
+            try:
+                await self._owned_credential.close()  # type: ignore[has-type]
+            except Exception:
+                pass
+            self._owned_credential = None  # type: ignore[has-type]
+
     # ------------------------------------------------------------------
     # Public entry point
     # ------------------------------------------------------------------
@@ -772,3 +803,133 @@ class SpriteForgeWorkflow:
             "No palette configured. Provide a palette in the YAML config "
             "or enable auto_palette with a preprocessor."
         )
+
+
+# --------------------------------------------------------------------------
+# Factory function for tiered model architecture
+# --------------------------------------------------------------------------
+
+
+async def create_workflow(
+    config: SpritesheetSpec,
+    project_endpoint: str | None = None,
+    credential: Any | None = None,
+    preprocessor: Callable[..., PreprocessResult] | None = None,
+    max_concurrent_rows: int = 0,
+) -> SpriteForgeWorkflow:
+    """Create a fully wired SpriteForgeWorkflow with tiered model architecture.
+
+    Creates separate AzureChatProvider instances for each pipeline stage
+    based on the model deployment names in config.generation:
+    - grid_model → GridGenerator
+    - gate_model → LLMGateChecker
+    - reference_model → GPTImageProvider
+
+    All providers share the same Azure credential instance to avoid
+    multiple token fetches.
+
+    Args:
+        config: Spritesheet specification with model deployment names.
+        project_endpoint: Azure AI Foundry endpoint. Falls back to
+            AZURE_AI_PROJECT_ENDPOINT env var if not provided.
+        credential: Optional shared Azure credential. If not provided,
+            a DefaultAzureCredential will be created and managed by
+            the workflow (closed when workflow.close() is called).
+        preprocessor: Optional preprocessing callable (e.g.
+            ``preprocess_reference``). When provided, the base
+            reference image is resized, quantized, and optionally
+            auto-palette-extracted before generation begins.
+        max_concurrent_rows: Maximum number of rows to process in
+            parallel after the anchor row. ``0`` (default) means
+            unlimited — all remaining rows run concurrently.
+
+    Returns:
+        A fully initialized SpriteForgeWorkflow ready to run.
+
+    Raises:
+        ProviderError: If no endpoint is available.
+
+    Example::
+
+        config = load_config("configs/theron.yaml")
+        workflow = await create_workflow(config)
+        try:
+            await workflow.run(
+                base_reference_path="docs_assets/theron_base_reference.png",
+                output_path="output/theron_spritesheet.png",
+            )
+        finally:
+            await workflow.close()
+    """
+    import os
+
+    from spriteforge.providers.azure_chat import AzureChatProvider
+    from spriteforge.providers.gpt_image import GPTImageProvider
+
+    # Resolve endpoint
+    endpoint = project_endpoint or os.environ.get("AZURE_AI_PROJECT_ENDPOINT", "")
+    if not endpoint:
+        raise ProviderError(
+            "No Azure AI Foundry endpoint configured. "
+            "Set AZURE_AI_PROJECT_ENDPOINT or pass project_endpoint."
+        )
+
+    # Create or reuse credential
+    # If user provided a credential, we don't own it and won't close it
+    # If we create one, we'll store it and close it in workflow.close()
+    from azure.identity.aio import DefaultAzureCredential  # type: ignore[import-untyped,import-not-found]
+
+    shared_credential = credential or DefaultAzureCredential()
+    owns_credential = credential is None
+
+    # Create tiered chat providers
+    grid_provider = AzureChatProvider(
+        project_endpoint=endpoint,
+        model_deployment_name=config.generation.grid_model,
+        credential=shared_credential,
+    )
+    gate_provider = AzureChatProvider(
+        project_endpoint=endpoint,
+        model_deployment_name=config.generation.gate_model,
+        credential=shared_credential,
+    )
+
+    # Create reference provider
+    reference_provider = GPTImageProvider(
+        project_endpoint=endpoint,
+        model_deployment=config.generation.reference_model,
+        credential=shared_credential,
+    )
+
+    # Create components
+    grid_generator = GridGenerator(chat_provider=grid_provider)
+    gate_checker = LLMGateChecker(chat_provider=gate_provider)
+    programmatic_checker = ProgrammaticChecker()
+    retry_manager = RetryManager()
+
+    # Build palette map (use first palette, or will be replaced by preprocessor if auto_palette)
+    palette_map: dict[str, tuple[int, int, int, int]]
+    if config.palettes:
+        first_palette = next(iter(config.palettes.values()))
+        palette_map = build_palette_map(first_palette)
+    else:
+        # Empty palette map — will be filled by preprocessor if auto_palette enabled
+        palette_map = {}
+
+    # Create workflow
+    workflow = SpriteForgeWorkflow(
+        config=config,
+        reference_provider=reference_provider,
+        grid_generator=grid_generator,
+        gate_checker=gate_checker,
+        programmatic_checker=programmatic_checker,
+        retry_manager=retry_manager,
+        palette_map=palette_map,
+        preprocessor=preprocessor,
+        max_concurrent_rows=max_concurrent_rows,
+    )
+
+    # Store credential ownership info for cleanup
+    workflow._owned_credential = shared_credential if owns_credential else None  # type: ignore[attr-defined]
+
+    return workflow
