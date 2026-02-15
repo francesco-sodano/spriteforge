@@ -48,7 +48,7 @@ class TestGeneratorPrompts:
         )
         assert "palette info here" in prompt
 
-    def test_build_anchor_frame_prompt_contains_dimensions(self) -> None:
+    def test_build_anchor_frame_prompt_contains_animation_name(self) -> None:
         """Animation name appears in output."""
         prompt = build_anchor_frame_prompt(
             animation_name="IDLE",
@@ -154,7 +154,7 @@ class TestGatePrompts:
 class TestRetryPrompts:
     """Tests for prompt builders in prompts.retry."""
 
-    def test_build_soft_guidance_includes_feedback(self) -> None:
+    def test_build_soft_guidance_includes_dimensions(self) -> None:
         """Soft guidance mentions grid dimensions."""
         guidance = build_soft_guidance()
         assert "64" in guidance
