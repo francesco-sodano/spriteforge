@@ -163,9 +163,7 @@ class TestGPTImageProviderInit:
         assert provider._api_key == "env-key"
         assert provider._endpoint == "https://env.openai.azure.com"
 
-    def test_init_missing_api_key_raises(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_init_missing_api_key_raises(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """Provider raises ProviderError when API key is missing."""
         monkeypatch.delenv("AZURE_OPENAI_GPT_IMAGE_API_KEY", raising=False)
         with pytest.raises(ProviderError, match="API key is required"):
@@ -1055,9 +1053,7 @@ class TestAzureSDKErrorMessages:
         import builtins
 
         # Remove OpenAI SDK modules from sys.modules to simulate missing SDK
-        openai_modules = [
-            key for key in sys.modules.keys() if key.startswith("openai")
-        ]
+        openai_modules = [key for key in sys.modules.keys() if key.startswith("openai")]
         for key in openai_modules:
             monkeypatch.delitem(sys.modules, key, raising=False)
 

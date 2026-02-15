@@ -51,15 +51,13 @@ class GPTImageProvider(ReferenceProvider):
         Raises:
             ProviderError: If API key or endpoint is missing.
         """
-        self._api_key = api_key or os.environ.get(
-            "AZURE_OPENAI_GPT_IMAGE_API_KEY", ""
-        )
+        self._api_key = api_key or os.environ.get("AZURE_OPENAI_GPT_IMAGE_API_KEY", "")
         if not self._api_key:
             raise ProviderError(
                 "Azure OpenAI API key is required. "
                 "Pass api_key or set AZURE_OPENAI_GPT_IMAGE_API_KEY."
             )
-        
+
         self._endpoint = azure_endpoint or os.environ.get(
             "AZURE_OPENAI_GPT_IMAGE_ENDPOINT", ""
         )
@@ -68,7 +66,7 @@ class GPTImageProvider(ReferenceProvider):
                 "Azure OpenAI endpoint is required. "
                 "Pass azure_endpoint or set AZURE_OPENAI_GPT_IMAGE_ENDPOINT."
             )
-        
+
         self._model = model_deployment
         self._api_version = api_version
         self._client: Any | None = None
