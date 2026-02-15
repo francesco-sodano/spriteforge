@@ -126,6 +126,7 @@ class SpriteForgeWorkflow:
 
         total_rows = len(self.config.animations)
         palette = self._get_palette()
+        palette_map = dict(self.palette_map)
 
         logger.info(
             "Starting spritesheet generation for '%s' (%d rows)",
@@ -146,11 +147,10 @@ class SpriteForgeWorkflow:
             )
             quantized_reference = preprocess_result.quantized_png_bytes
 
-            # If auto_palette mode, replace palette with extracted one
+            # If auto_palette mode, use extracted palette locally
             if self.config.generation.auto_palette:
-                self.config.palettes["P1"] = preprocess_result.palette
-                self.palette_map = build_palette_map(preprocess_result.palette)
                 palette = preprocess_result.palette
+                palette_map = build_palette_map(preprocess_result.palette)
             if progress_callback:
                 progress_callback("preprocessing", 1, 1)
 
@@ -169,6 +169,7 @@ class SpriteForgeWorkflow:
             base_reference,
             anchor_animation,
             palette,
+            palette_map,
             quantized_reference=quantized_reference,
         )
 
@@ -176,7 +177,7 @@ class SpriteForgeWorkflow:
         anchor_rendered = frame_to_png_bytes(
             render_frame(
                 anchor_grid,
-                self.palette_map,
+                palette_map,
                 frame_width=self.config.character.frame_width,
                 frame_height=self.config.character.frame_height,
             )
@@ -184,7 +185,7 @@ class SpriteForgeWorkflow:
         row_images: dict[int, bytes] = {}
         row0_strip = render_row_strip(
             row0_grids,
-            self.palette_map,
+            palette_map,
             spritesheet_columns=self.config.character.spritesheet_columns,
             frame_width=self.config.character.frame_width,
             frame_height=self.config.character.frame_height,
@@ -231,11 +232,12 @@ class SpriteForgeWorkflow:
                         anchor_grid,
                         anchor_rendered,
                         palette,
+                        palette_map,
                     )
 
                     row_strip = render_row_strip(
                         row_grids,
-                        self.palette_map,
+                        palette_map,
                         spritesheet_columns=self.config.character.spritesheet_columns,
                         frame_width=self.config.character.frame_width,
                         frame_height=self.config.character.frame_height,
@@ -286,9 +288,17 @@ class SpriteForgeWorkflow:
         base_reference: bytes,
         animation: AnimationDef,
         palette: PaletteConfig,
+        palette_map: dict[str, tuple[int, int, int, int]],
         quantized_reference: bytes | None = None,
     ) -> tuple[list[str], list[list[str]]]:
         """Process Row 0 — generates the anchor frame first.
+
+        Args:
+            base_reference: Raw bytes of the base character reference image.
+            animation: Animation definition for this row.
+            palette: The palette to use for this run.
+            palette_map: Symbol → RGBA mapping for rendering.
+            quantized_reference: Optional quantized reference image bytes.
 
         Returns:
             Tuple of (anchor_grid, list_of_all_frame_grids_for_this_row).
@@ -316,12 +326,13 @@ class SpriteForgeWorkflow:
             is_anchor=True,
             base_reference=base_reference,
             quantized_reference=quantized_reference,
+            palette_map=palette_map,
         )
 
         anchor_rendered = frame_to_png_bytes(
             render_frame(
                 anchor_grid,
-                self.palette_map,
+                palette_map,
                 frame_width=self.config.character.frame_width,
                 frame_height=self.config.character.frame_height,
             )
@@ -349,13 +360,14 @@ class SpriteForgeWorkflow:
                 prev_frame_grid=prev_grid,
                 prev_frame_rendered=prev_rendered,
                 base_reference=base_reference,
+                palette_map=palette_map,
             )
             frame_grids.append(grid)
             prev_grid = grid
             prev_rendered = frame_to_png_bytes(
                 render_frame(
                     grid,
-                    self.palette_map,
+                    palette_map,
                     frame_width=self.config.character.frame_width,
                     frame_height=self.config.character.frame_height,
                 )
@@ -364,7 +376,7 @@ class SpriteForgeWorkflow:
         # Gate 3A: Validate assembled row
         row_strip = render_row_strip(
             frame_grids,
-            self.palette_map,
+            palette_map,
             spritesheet_columns=self.config.character.spritesheet_columns,
             frame_width=self.config.character.frame_width,
             frame_height=self.config.character.frame_height,
@@ -393,8 +405,17 @@ class SpriteForgeWorkflow:
         anchor_grid: list[str],
         anchor_rendered: bytes,
         palette: PaletteConfig,
+        palette_map: dict[str, tuple[int, int, int, int]],
     ) -> list[list[str]]:
         """Process a single animation row (rows after Row 0).
+
+        Args:
+            base_reference: Raw bytes of the base character reference image.
+            animation: Animation definition for this row.
+            anchor_grid: The anchor frame grid (Row 0, Frame 0).
+            anchor_rendered: Rendered PNG bytes of the anchor frame.
+            palette: The palette to use for this run.
+            palette_map: Symbol → RGBA mapping for rendering.
 
         Returns:
             List of frame grids for this row.
@@ -425,13 +446,14 @@ class SpriteForgeWorkflow:
                 prev_frame_grid=prev_grid,
                 prev_frame_rendered=prev_rendered,
                 base_reference=base_reference,
+                palette_map=palette_map,
             )
             frame_grids.append(grid)
             prev_grid = grid
             prev_rendered = frame_to_png_bytes(
                 render_frame(
                     grid,
-                    self.palette_map,
+                    palette_map,
                     frame_width=self.config.character.frame_width,
                     frame_height=self.config.character.frame_height,
                 )
@@ -440,7 +462,7 @@ class SpriteForgeWorkflow:
         # Gate 3A: Validate assembled row
         row_strip = render_row_strip(
             frame_grids,
-            self.palette_map,
+            palette_map,
             spritesheet_columns=self.config.character.spritesheet_columns,
             frame_width=self.config.character.frame_width,
             frame_height=self.config.character.frame_height,
@@ -474,6 +496,7 @@ class SpriteForgeWorkflow:
         palette: PaletteConfig,
         animation: AnimationDef,
         frame_index: int,
+        palette_map: dict[str, tuple[int, int, int, int]],
         prev_frame_grid: list[str] | None = None,
         prev_frame_rendered: bytes | None = None,
         is_anchor: bool = False,
@@ -488,6 +511,9 @@ class SpriteForgeWorkflow:
         4. Run LLM gates (Gate 0, Gate 1, optionally Gate 2) in parallel
         5. If any gate fails: record failure, escalate, retry
         6. After max failures: raise GenerationError
+
+        Args:
+            palette_map: Symbol → RGBA mapping for rendering.
 
         Returns:
             Verified frame grid (list of 64 strings).
@@ -550,7 +576,7 @@ class SpriteForgeWorkflow:
             # Render grid to PNG
             frame_img = render_frame(
                 grid,
-                self.palette_map,
+                palette_map,
                 frame_width=self.config.character.frame_width,
                 frame_height=self.config.character.frame_height,
             )
