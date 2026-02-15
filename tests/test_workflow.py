@@ -1440,3 +1440,189 @@ class TestMultipleRunsIndependent:
         # Config and palette_map should still be identical to originals
         assert wf.config.palettes == original_palettes
         assert wf.palette_map == original_palette_map
+
+
+# ---------------------------------------------------------------------------
+# Integration tests — real Azure AI calls
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_workflow_single_row_integration(
+    azure_project_endpoint: str,
+    azure_credential: Any,
+    tmp_path: Path,
+) -> None:
+    """Integration test: generate a single-row spritesheet with real Azure AI.
+
+    Uses real Azure AI Foundry providers to verify end-to-end pipeline works.
+    This test is expensive (API calls) and slow (~2-5 minutes), so it only
+    generates a minimal spritesheet (1 animation row, 2 frames).
+
+    Auto-skips when AZURE_AI_PROJECT_ENDPOINT is not set or credentials unavailable.
+    """
+    from spriteforge.config import load_config
+    from spriteforge.providers import AzureChatProvider, GPTImageProvider
+
+    # Create a minimal test palette
+    test_palette = PaletteConfig(
+        name="TestPalette",
+        outline=PaletteColor(element="Outline", symbol="O", r=15, g=30, b=10),
+        colors=[
+            PaletteColor(element="Skin", symbol="s", r=80, g=160, b=50),
+            PaletteColor(element="Eyes", symbol="e", r=200, g=30, b=30),
+            PaletteColor(element="Vest", symbol="v", r=110, g=75, b=40),
+        ],
+    )
+
+    # Create a minimal test config with just 1 row, 2 frames
+    config = SpritesheetSpec(
+        character=CharacterConfig(
+            name="TestEnemy",
+            character_class="Enemy",
+            description=(
+                "Small green goblin with red eyes. Wiry build, 40 pixels tall. "
+                "Wears brown vest, carries rusty sword."
+            ),
+            frame_width=64,
+            frame_height=64,
+            spritesheet_columns=14,
+        ),
+        animations=[
+            AnimationDef(
+                name="idle",
+                row=0,
+                frames=2,  # Minimal frame count for faster test
+                loop=True,
+                timing_ms=160,
+                prompt_context=(
+                    "Standing pose with knees bent, sword held low. "
+                    "Slight weight shift side to side."
+                ),
+            ),
+        ],
+        palettes={"P1": test_palette},
+        generation=GenerationConfig(
+            style="Modern HD pixel art",
+            facing="right",
+            feet_row=56,
+            rules=(
+                "64x64 pixel frames. Transparent background. "
+                "1px dark outline. Character centered. Feet at y=56."
+            ),
+        ),
+        base_image_path="docs_assets/theron_base_reference.png",
+        output_path="output/test_spritesheet.png",
+    )
+
+    # Create real Azure providers
+    chat_provider = AzureChatProvider(
+        project_endpoint=azure_project_endpoint,
+        model_deployment_name="claude-opus-4.6",
+        credential=azure_credential,
+    )
+    ref_provider = GPTImageProvider(
+        project_endpoint=azure_project_endpoint,
+    )
+
+    # Build palette map
+    palette_map = build_palette_map(test_palette)
+
+    # Create workflow with real components
+    workflow = SpriteForgeWorkflow(
+        config=config,
+        reference_provider=ref_provider,
+        grid_generator=GridGenerator(chat_provider),
+        gate_checker=LLMGateChecker(chat_provider),
+        programmatic_checker=ProgrammaticChecker(),
+        retry_manager=RetryManager(),
+        palette_map=palette_map,
+    )
+
+    # Run workflow
+    output = tmp_path / "test_spritesheet.png"
+    try:
+        result = await workflow.run(
+            base_reference_path="docs_assets/theron_base_reference.png",
+            output_path=output,
+        )
+
+        # Verify output exists
+        assert output.exists(), "Spritesheet PNG should be created"
+        assert result == output, "Result path should match output path"
+
+        # Verify it's a valid PNG with expected dimensions
+        img = Image.open(output)
+        assert img.format == "PNG", "Output should be PNG format"
+        assert img.mode == "RGBA", "Output should have alpha channel"
+
+        # Expected dimensions: 1 row × 2 frames = 128×64 (with padding to 14 columns = 896×64)
+        expected_width = 64 * 14  # spritesheet_columns
+        expected_height = 64 * 1  # 1 row
+        assert img.size == (expected_width, expected_height), (
+            f"Expected dimensions {expected_width}×{expected_height}, "
+            f"got {img.size[0]}×{img.size[1]}"
+        )
+
+    finally:
+        # Clean up provider resources
+        await chat_provider.close()
+        await ref_provider.close()
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_workflow_integration_invalid_config(
+    azure_project_endpoint: str,
+    azure_credential: Any,
+    tmp_path: Path,
+) -> None:
+    """Integration test: verify proper error handling with invalid config.
+
+    Tests that the workflow raises appropriate errors when given a config
+    with invalid palette symbols or missing required fields.
+    """
+    from spriteforge.providers import AzureChatProvider, GPTImageProvider
+
+    # Create a config with an invalid palette (symbol conflict)
+    with pytest.raises(ValueError, match="Duplicate palette symbol"):
+        bad_palette = PaletteConfig(
+            name="BadPalette",
+            outline=PaletteColor(element="Outline", symbol="O", r=15, g=30, b=10),
+            colors=[
+                PaletteColor(element="Color1", symbol="s", r=80, g=160, b=50),
+                PaletteColor(
+                    element="Color2", symbol="s", r=200, g=30, b=30
+                ),  # Duplicate!
+            ],
+        )
+        SpritesheetSpec(
+            character=CharacterConfig(
+                name="BadConfig",
+                character_class="Enemy",
+                description="Test",
+                frame_width=64,
+                frame_height=64,
+                spritesheet_columns=14,
+            ),
+            animations=[
+                AnimationDef(
+                    name="idle",
+                    row=0,
+                    frames=2,
+                    loop=True,
+                    timing_ms=160,
+                    prompt_context="Standing pose",
+                ),
+            ],
+            palettes={"P1": bad_palette},
+            generation=GenerationConfig(
+                style="Pixel art",
+                facing="right",
+                feet_row=56,
+                rules="64x64 frames",
+            ),
+            base_image_path="docs_assets/theron_base_reference.png",
+            output_path="output/bad.png",
+        )
