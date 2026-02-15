@@ -523,3 +523,122 @@ class TestLLMGateChecker:
 
         assert len(mock._call_history) == 1
         assert mock._call_history[0]["messages"][0]["role"] == "user"
+
+
+# ---------------------------------------------------------------------------
+# Tests: LLMGateChecker response_format parameter
+# ---------------------------------------------------------------------------
+
+
+class TestLLMGateCheckerResponseFormat:
+    """Tests for response_format parameter usage in gate checks."""
+
+    @pytest.fixture()
+    def valid_verdict_json(self) -> str:
+        """Valid gate verdict JSON for testing."""
+        return json.dumps(
+            {
+                "passed": True,
+                "confidence": 0.95,
+                "feedback": "Test passed",
+            }
+        )
+
+    @pytest.fixture()
+    def sample_animation(self) -> AnimationDef:
+        """A minimal animation definition for testing."""
+        return AnimationDef(
+            name="idle",
+            row=0,
+            frames=6,
+            timing_ms=150,
+        )
+
+    @pytest.mark.asyncio
+    async def test_gate_minus_1_passes_response_format(
+        self,
+        valid_verdict_json: str,
+        sample_animation: AnimationDef,
+    ) -> None:
+        """Gate -1 passes response_format='json_object' to chat()."""
+        mock = MockChatProvider(responses=[valid_verdict_json])
+        checker = LLMGateChecker(chat_provider=mock)
+
+        await checker.gate_minus_1(
+            reference_strip=_TINY_PNG,
+            base_reference=_TINY_PNG,
+            animation=sample_animation,
+        )
+
+        assert len(mock._call_history) == 1
+        assert mock._call_history[0]["response_format"] == "json_object"
+
+    @pytest.mark.asyncio
+    async def test_gate_0_passes_response_format(
+        self,
+        valid_verdict_json: str,
+    ) -> None:
+        """Gate 0 passes response_format='json_object' to chat()."""
+        mock = MockChatProvider(responses=[valid_verdict_json])
+        checker = LLMGateChecker(chat_provider=mock)
+
+        await checker.gate_0(
+            rendered_frame=_TINY_PNG,
+            reference_frame=_TINY_PNG,
+        )
+
+        assert len(mock._call_history) == 1
+        assert mock._call_history[0]["response_format"] == "json_object"
+
+    @pytest.mark.asyncio
+    async def test_gate_1_passes_response_format(
+        self,
+        valid_verdict_json: str,
+    ) -> None:
+        """Gate 1 passes response_format='json_object' to chat()."""
+        mock = MockChatProvider(responses=[valid_verdict_json])
+        checker = LLMGateChecker(chat_provider=mock)
+
+        await checker.gate_1(
+            rendered_frame=_TINY_PNG,
+            anchor_frame=_TINY_PNG,
+        )
+
+        assert len(mock._call_history) == 1
+        assert mock._call_history[0]["response_format"] == "json_object"
+
+    @pytest.mark.asyncio
+    async def test_gate_2_passes_response_format(
+        self,
+        valid_verdict_json: str,
+    ) -> None:
+        """Gate 2 passes response_format='json_object' to chat()."""
+        mock = MockChatProvider(responses=[valid_verdict_json])
+        checker = LLMGateChecker(chat_provider=mock)
+
+        await checker.gate_2(
+            rendered_frame=_TINY_PNG,
+            prev_frame=_TINY_PNG,
+        )
+
+        assert len(mock._call_history) == 1
+        assert mock._call_history[0]["response_format"] == "json_object"
+
+    @pytest.mark.asyncio
+    async def test_gate_3a_passes_response_format(
+        self,
+        valid_verdict_json: str,
+        sample_animation: AnimationDef,
+    ) -> None:
+        """Gate 3A passes response_format='json_object' to chat()."""
+        mock = MockChatProvider(responses=[valid_verdict_json])
+        checker = LLMGateChecker(chat_provider=mock)
+
+        await checker.gate_3a(
+            rendered_row_strip=_TINY_PNG,
+            reference_strip=_TINY_PNG,
+            animation=sample_animation,
+        )
+
+        assert len(mock._call_history) == 1
+        assert mock._call_history[0]["response_format"] == "json_object"

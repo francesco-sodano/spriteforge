@@ -830,3 +830,77 @@ class TestAnchorFrameRetryParams:
         assert frame_params["temperature"].default == 1.0
         assert anchor_params["additional_guidance"].default == ""
         assert frame_params["additional_guidance"].default == ""
+
+
+# ---------------------------------------------------------------------------
+# response_format parameter tests
+# ---------------------------------------------------------------------------
+
+
+class TestResponseFormatParameter:
+    """Tests for response_format parameter usage in grid generation."""
+
+    @pytest.mark.asyncio
+    async def test_generate_anchor_frame_passes_response_format(
+        self,
+        sample_palette: PaletteConfig,
+        sample_animation: AnimationDef,
+    ) -> None:
+        """generate_anchor_frame passes response_format='json_object' to chat()."""
+        mock = MockChatProvider(responses=[_make_valid_json_response(".")])
+        gen = GridGenerator(chat_provider=mock)
+
+        await gen.generate_anchor_frame(
+            base_reference=_TINY_PNG,
+            reference_frame=_TINY_PNG,
+            palette=sample_palette,
+            animation=sample_animation,
+        )
+
+        assert len(mock._call_history) == 1
+        assert mock._call_history[0]["response_format"] == "json_object"
+
+    @pytest.mark.asyncio
+    async def test_generate_frame_passes_response_format(
+        self,
+        sample_palette: PaletteConfig,
+        sample_animation: AnimationDef,
+    ) -> None:
+        """generate_frame passes response_format='json_object' to chat()."""
+        mock = MockChatProvider(responses=[_make_valid_json_response(".")])
+        gen = GridGenerator(chat_provider=mock)
+
+        anchor_grid = _make_valid_grid(".")
+
+        await gen.generate_frame(
+            reference_frame=_TINY_PNG,
+            anchor_grid=anchor_grid,
+            anchor_rendered=_TINY_PNG,
+            palette=sample_palette,
+            animation=sample_animation,
+            frame_index=1,
+        )
+
+        assert len(mock._call_history) == 1
+        assert mock._call_history[0]["response_format"] == "json_object"
+
+    @pytest.mark.asyncio
+    async def test_response_format_with_custom_temperature(
+        self,
+        sample_palette: PaletteConfig,
+        sample_animation: AnimationDef,
+    ) -> None:
+        """response_format works correctly with custom temperature."""
+        mock = MockChatProvider(responses=[_make_valid_json_response(".")])
+        gen = GridGenerator(chat_provider=mock)
+
+        await gen.generate_anchor_frame(
+            base_reference=_TINY_PNG,
+            reference_frame=_TINY_PNG,
+            palette=sample_palette,
+            animation=sample_animation,
+            temperature=0.5,
+        )
+
+        assert mock._call_history[0]["temperature"] == 0.5
+        assert mock._call_history[0]["response_format"] == "json_object"

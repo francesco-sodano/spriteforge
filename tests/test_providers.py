@@ -796,3 +796,107 @@ class TestAzureChatProviderClientReuse:
 
         # Verify user credential was NOT closed
         user_credential.close.assert_not_awaited()
+
+
+# ---------------------------------------------------------------------------
+# Tests: AzureChatProvider.response_format
+# ---------------------------------------------------------------------------
+
+
+class TestAzureChatProviderResponseFormat:
+    """Tests for response_format parameter forwarding in AzureChatProvider."""
+
+    @pytest.mark.asyncio
+    async def test_azure_chat_forwards_response_format(self) -> None:
+        """AzureChatProvider forwards response_format to API call."""
+        from unittest.mock import AsyncMock, MagicMock, patch
+
+        # Create mocks
+        mock_credential = AsyncMock()
+        mock_project_client = AsyncMock()
+        mock_openai_client = AsyncMock()
+
+        # Mock the response
+        mock_message = MagicMock()
+        mock_message.content = '{"result": "test"}'
+        mock_choice = MagicMock()
+        mock_choice.message = mock_message
+        mock_response = MagicMock()
+        mock_response.choices = [mock_choice]
+
+        mock_openai_client.chat.completions.create = AsyncMock(
+            return_value=mock_response
+        )
+        mock_project_client.get_openai_client.return_value = mock_openai_client
+
+        # Create provider with user credential
+        provider = AzureChatProvider(
+            project_endpoint="https://example.azure.com",
+            model_deployment_name="test-model",
+            credential=mock_credential,
+        )
+
+        # Manually inject mocked clients
+        provider._credential = mock_credential
+        provider._project_client = mock_project_client
+        provider._openai_client = mock_openai_client
+
+        # Call chat with response_format
+        messages = [{"role": "user", "content": "test"}]
+        await provider.chat(messages, temperature=0.5, response_format="json_object")
+
+        # Verify the API was called with response_format
+        mock_openai_client.chat.completions.create.assert_awaited_once()
+        call_kwargs = mock_openai_client.chat.completions.create.call_args[1]
+
+        assert call_kwargs["model"] == "test-model"
+        assert call_kwargs["messages"] == messages
+        assert call_kwargs["temperature"] == 0.5
+        assert call_kwargs["response_format"] == {"type": "json_object"}
+
+    @pytest.mark.asyncio
+    async def test_azure_chat_without_response_format(self) -> None:
+        """AzureChatProvider works without response_format parameter."""
+        from unittest.mock import AsyncMock, MagicMock
+
+        # Create mocks
+        mock_credential = AsyncMock()
+        mock_project_client = AsyncMock()
+        mock_openai_client = AsyncMock()
+
+        # Mock the response
+        mock_message = MagicMock()
+        mock_message.content = "test response"
+        mock_choice = MagicMock()
+        mock_choice.message = mock_message
+        mock_response = MagicMock()
+        mock_response.choices = [mock_choice]
+
+        mock_openai_client.chat.completions.create = AsyncMock(
+            return_value=mock_response
+        )
+        mock_project_client.get_openai_client.return_value = mock_openai_client
+
+        # Create provider
+        provider = AzureChatProvider(
+            project_endpoint="https://example.azure.com",
+            model_deployment_name="test-model",
+            credential=mock_credential,
+        )
+
+        # Manually inject mocked clients
+        provider._credential = mock_credential
+        provider._project_client = mock_project_client
+        provider._openai_client = mock_openai_client
+
+        # Call chat without response_format
+        messages = [{"role": "user", "content": "test"}]
+        await provider.chat(messages, temperature=1.0)
+
+        # Verify the API was called without response_format
+        mock_openai_client.chat.completions.create.assert_awaited_once()
+        call_kwargs = mock_openai_client.chat.completions.create.call_args[1]
+
+        assert "response_format" not in call_kwargs
+        assert call_kwargs["model"] == "test-model"
+        assert call_kwargs["temperature"] == 1.0
