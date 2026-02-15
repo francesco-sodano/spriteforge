@@ -113,6 +113,77 @@ class TestRenderFrame:
 
 
 # ---------------------------------------------------------------------------
+# render_frame — variable frame sizes
+# ---------------------------------------------------------------------------
+
+
+class TestRenderFrameVariableSize:
+    """Tests for render_frame with non-default frame dimensions."""
+
+    def test_render_frame_default_64x64(self, simple_palette: PaletteConfig) -> None:
+        """Default params still produce 64×64 image (backward compat)."""
+        palette_map = build_palette_map(simple_palette)
+        grid = _make_grid(".", width=64, height=64)
+        img = render_frame(grid, palette_map)
+        assert img.size == (64, 64)
+
+    def test_render_frame_32x32(self, simple_palette: PaletteConfig) -> None:
+        """32×32 grid renders to 32×32 image."""
+        palette_map = build_palette_map(simple_palette)
+        grid = _make_grid(".", width=32, height=32)
+        img = render_frame(grid, palette_map, frame_width=32, frame_height=32)
+        assert img.mode == "RGBA"
+        assert img.size == (32, 32)
+
+    def test_render_frame_48x48(self, simple_palette: PaletteConfig) -> None:
+        """48×48 grid renders to 48×48 image."""
+        palette_map = build_palette_map(simple_palette)
+        grid = _make_grid("O", width=48, height=48)
+        img = render_frame(grid, palette_map, frame_width=48, frame_height=48)
+        assert img.size == (48, 48)
+        assert img.getpixel((0, 0)) == palette_map["O"]
+
+    def test_render_frame_128x128(self, simple_palette: PaletteConfig) -> None:
+        """128×128 grid renders to 128×128 image."""
+        palette_map = build_palette_map(simple_palette)
+        grid = _make_grid(".", width=128, height=128)
+        img = render_frame(grid, palette_map, frame_width=128, frame_height=128)
+        assert img.size == (128, 128)
+
+    def test_render_frame_non_square(self, simple_palette: PaletteConfig) -> None:
+        """64×32 grid renders correctly."""
+        palette_map = build_palette_map(simple_palette)
+        grid = _make_grid(".", width=64, height=32)
+        img = render_frame(grid, palette_map, frame_width=64, frame_height=32)
+        assert img.size == (64, 32)
+
+    def test_render_frame_wrong_height(self, simple_palette: PaletteConfig) -> None:
+        """Grid with wrong row count raises ValueError with expected height."""
+        palette_map = build_palette_map(simple_palette)
+        grid = _make_grid(".", width=32, height=30)
+        with pytest.raises(ValueError, match="32 rows"):
+            render_frame(grid, palette_map, frame_width=32, frame_height=32)
+
+    def test_render_frame_wrong_width(self, simple_palette: PaletteConfig) -> None:
+        """Grid with wrong column count raises ValueError with expected width."""
+        palette_map = build_palette_map(simple_palette)
+        grid = _make_grid(".", width=30, height=32)
+        with pytest.raises(ValueError, match="32 characters"):
+            render_frame(grid, palette_map, frame_width=32, frame_height=32)
+
+    def test_render_frame_error_message_shows_expected_size(
+        self, simple_palette: PaletteConfig
+    ) -> None:
+        """Error message contains the expected frame dimensions, not hardcoded 64."""
+        palette_map = build_palette_map(simple_palette)
+        grid = _make_grid(".", width=48, height=40)
+        with pytest.raises(ValueError, match="48 rows") as exc_info:
+            render_frame(grid, palette_map, frame_width=48, frame_height=48)
+        assert "48" in str(exc_info.value)
+        assert "40" in str(exc_info.value)
+
+
+# ---------------------------------------------------------------------------
 # render_row_strip
 # ---------------------------------------------------------------------------
 

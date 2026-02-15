@@ -154,7 +154,12 @@ class SpriteForgeWorkflow:
 
         # Render and save anchor row strip
         anchor_rendered = frame_to_png_bytes(
-            render_frame(anchor_grid, self.palette_map)
+            render_frame(
+                anchor_grid,
+                self.palette_map,
+                frame_width=self.config.character.frame_width,
+                frame_height=self.config.character.frame_height,
+            )
         )
         row_images: dict[int, bytes] = {}
         row0_strip = render_row_strip(
@@ -246,7 +251,12 @@ class SpriteForgeWorkflow:
         )
 
         anchor_rendered = frame_to_png_bytes(
-            render_frame(anchor_grid, self.palette_map)
+            render_frame(
+                anchor_grid,
+                self.palette_map,
+                frame_width=self.config.character.frame_width,
+                frame_height=self.config.character.frame_height,
+            )
         )
 
         frame_grids: list[list[str]] = [anchor_grid]
@@ -274,7 +284,14 @@ class SpriteForgeWorkflow:
             )
             frame_grids.append(grid)
             prev_grid = grid
-            prev_rendered = frame_to_png_bytes(render_frame(grid, self.palette_map))
+            prev_rendered = frame_to_png_bytes(
+                render_frame(
+                    grid,
+                    self.palette_map,
+                    frame_width=self.config.character.frame_width,
+                    frame_height=self.config.character.frame_height,
+                )
+            )
 
         # Gate 3A: Validate assembled row
         row_strip = render_row_strip(
@@ -333,7 +350,14 @@ class SpriteForgeWorkflow:
             )
             frame_grids.append(grid)
             prev_grid = grid
-            prev_rendered = frame_to_png_bytes(render_frame(grid, self.palette_map))
+            prev_rendered = frame_to_png_bytes(
+                render_frame(
+                    grid,
+                    self.palette_map,
+                    frame_width=self.config.character.frame_width,
+                    frame_height=self.config.character.frame_height,
+                )
+            )
 
         # Gate 3A: Validate assembled row
         row_strip = render_row_strip(
@@ -416,7 +440,12 @@ class SpriteForgeWorkflow:
                 )
 
             # Programmatic checks (fast-fail)
-            prog_verdicts = self.programmatic_checker.run_all(grid, palette)
+            prog_verdicts = self.programmatic_checker.run_all(
+                grid,
+                palette,
+                frame_width=self.config.character.frame_width,
+                frame_height=self.config.character.frame_height,
+            )
             prog_failures = [v for v in prog_verdicts if not v.passed]
             if prog_failures:
                 retry_ctx = self.retry_manager.record_failure(
@@ -425,7 +454,12 @@ class SpriteForgeWorkflow:
                 continue
 
             # Render grid to PNG
-            frame_img = render_frame(grid, self.palette_map)
+            frame_img = render_frame(
+                grid,
+                self.palette_map,
+                frame_width=self.config.character.frame_width,
+                frame_height=self.config.character.frame_height,
+            )
             frame_bytes = frame_to_png_bytes(frame_img)
 
             # Run LLM gates in parallel
