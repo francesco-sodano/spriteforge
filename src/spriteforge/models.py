@@ -166,6 +166,7 @@ class GenerationConfig(BaseModel):
     rules: str = ""
     auto_palette: bool = False
     max_palette_colors: int = Field(default=16, ge=2, le=23)
+    semantic_labels: bool = True
     grid_model: str = "gpt-5.2"
     gate_model: str = "gpt-5-mini"
     labeling_model: str = "gpt-5-nano"
