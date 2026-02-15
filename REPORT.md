@@ -1,13 +1,14 @@
-# Code Review and Optimization Report
+# Code Review and Optimization Report (Assessment V2)
 
 **Project:** SpriteForge
 **Reviewer:** Jules (Code Agent)
 **Date:** October 26, 2025
 **Scope:** `src/spriteforge/`, `tests/`
+**Status:** **ISSUES PERSIST** (No changes detected from previous assessment)
 
 ---
 
-## 1. Critical Issues
+## 1. Critical Issues (Unresolved)
 
 ### 1.1 Azure AI / GPT-Image-1.5 API Usage (CONFIRMED BUG)
 **Severity:** Critical
@@ -64,7 +65,7 @@ The `preprocess_reference` function performs quantization twice, leading to pote
 
 ---
 
-## 2. Code Quality & Maintainability
+## 2. Code Quality & Maintainability (Unresolved)
 
 ### 2.1 Configuration Parsing
 **Location:** `src/spriteforge/config.py`
@@ -113,7 +114,8 @@ The `preprocess_reference` function performs quantization twice, leading to pote
 
 ## 5. Summary of Next Steps
 
-1.  **Refactor Provider:** Update `gpt_image.py` to use the `responses.create` API for proper image input handling.
-2.  **Refactor Preprocessor:** Fix the double-quantization logic.
-3.  **Harden Tests:** Add stricter assertions for API mocks to catch signature mismatches.
-4.  **Simplify Config:** Switch to Pydantic-native parsing.
+**IMMEDIATE ACTION REQUIRED:**
+1.  **Fix API Implementation:** Rewrite `src/spriteforge/providers/gpt_image.py` to use `client.responses.create` instead of `client.images.generate` for multimodal inputs.
+2.  **Fix Preprocessor Logic:** Correct the double-quantization in `src/spriteforge/preprocessor.py`.
+3.  **Update Tests:** Modify `tests/test_providers.py` to assert correct API usage, preventing regression.
+4.  **Refactor Config:** Simplify `src/spriteforge/config.py` using Pydantic.
