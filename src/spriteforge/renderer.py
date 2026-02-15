@@ -12,30 +12,36 @@ from spriteforge.models import SpritesheetSpec
 def render_frame(
     grid: list[str],
     palette_map: dict[str, tuple[int, int, int, int]],
+    frame_width: int = 64,
+    frame_height: int = 64,
 ) -> Image.Image:
-    """Render a palette-indexed grid to a 64×64 RGBA image.
+    """Render a palette-indexed grid to an RGBA image.
 
     Each character in the grid is looked up in *palette_map* and written
     as a single pixel.  The grid coordinate ``grid[y][x]`` maps to pixel
     ``(x, y)`` in the resulting image.
 
     Args:
-        grid: List of 64 strings, each exactly 64 characters long.
-            Each character is a palette symbol.
+        grid: List of *frame_height* strings, each exactly *frame_width*
+            characters long.  Each character is a palette symbol.
         palette_map: Mapping of single-character symbols to RGBA tuples.
+        frame_width: Expected width of the grid (columns per row).
+        frame_height: Expected height of the grid (number of rows).
 
     Returns:
-        A 64×64 PIL Image in RGBA mode.
+        A PIL Image of size ``(frame_width, frame_height)`` in RGBA mode.
 
     Raises:
-        ValueError: If grid dimensions are not 64×64.
+        ValueError: If grid dimensions do not match expected size.
         KeyError: If a symbol in the grid is not found in palette_map.
     """
-    if len(grid) != 64:
-        raise ValueError(f"Grid must have exactly 64 rows, got {len(grid)}")
+    if len(grid) != frame_height:
+        raise ValueError(f"Grid must have exactly {frame_height} rows, got {len(grid)}")
     for i, row in enumerate(grid):
-        if len(row) != 64:
-            raise ValueError(f"Row {i} must be exactly 64 characters, got {len(row)}")
+        if len(row) != frame_width:
+            raise ValueError(
+                f"Row {i} must be exactly {frame_width} characters, got {len(row)}"
+            )
 
     pixels: list[tuple[int, int, int, int]] = []
     for y, row in enumerate(grid):
@@ -44,7 +50,7 @@ def render_frame(
                 raise KeyError(f"Unknown palette symbol {symbol!r} at ({x}, {y})")
             pixels.append(palette_map[symbol])
 
-    img = Image.new("RGBA", (64, 64))
+    img = Image.new("RGBA", (frame_width, frame_height))
     img.putdata(pixels)  # type: ignore[arg-type]
     return img
 
@@ -75,7 +81,9 @@ def render_row_strip(
     strip = Image.new("RGBA", (strip_width, frame_height), (0, 0, 0, 0))
 
     for idx, frame_grid in enumerate(frames):
-        frame_img = render_frame(frame_grid, palette_map)
+        frame_img = render_frame(
+            frame_grid, palette_map, frame_width=frame_width, frame_height=frame_height
+        )
         x_offset = idx * frame_width
         strip.paste(frame_img, (x_offset, 0))
 

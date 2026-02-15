@@ -277,22 +277,31 @@ class ProgrammaticChecker:
         self,
         grid: list[str],
         palette: PaletteConfig,
+        frame_width: int = 64,
+        frame_height: int = 64,
     ) -> list[GateVerdict]:
         """Run all programmatic checks and return all verdicts.
 
         Args:
             grid: The palette-indexed grid to check.
             palette: Palette config defining valid symbols.
+            frame_width: Expected width of the grid (columns per row).
+            frame_height: Expected height of the grid (number of rows).
 
         Returns:
             A list of ``GateVerdict`` objects, one per check.
         """
+        feet_row = int(frame_height * 0.875)
         return [
-            self.check_dimensions(grid),
+            self.check_dimensions(
+                grid, expected_rows=frame_height, expected_cols=frame_width
+            ),
             self.check_valid_symbols(grid, palette),
             self.check_outline_presence(grid, palette.outline.symbol),
             self.check_not_empty(grid, palette.transparent_symbol),
-            self.check_feet_position(grid, palette.transparent_symbol),
+            self.check_feet_position(
+                grid, palette.transparent_symbol, expected_foot_row=feet_row
+            ),
         ]
 
 

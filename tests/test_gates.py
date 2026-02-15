@@ -261,6 +261,69 @@ class TestRunAll:
 
 
 # ---------------------------------------------------------------------------
+# ProgrammaticChecker — variable frame sizes
+# ---------------------------------------------------------------------------
+
+
+class TestProgrammaticCheckerVariableSize:
+    """Tests for ProgrammaticChecker with non-default frame dimensions."""
+
+    def test_programmatic_checker_default_64x64(
+        self, checker: ProgrammaticChecker
+    ) -> None:
+        """Default params check against 64 (backward compat)."""
+        grid = _make_valid_grid(".", 64, 64)
+        verdict = checker.check_dimensions(grid)
+        assert verdict.passed is True
+
+    def test_programmatic_checker_32x32(self, checker: ProgrammaticChecker) -> None:
+        """32×32 grid passes dimension check."""
+        grid = _make_valid_grid(".", 32, 32)
+        verdict = checker.check_dimensions(grid, expected_rows=32, expected_cols=32)
+        assert verdict.passed is True
+
+    def test_programmatic_checker_feet_row_scales(
+        self, checker: ProgrammaticChecker, sample_palette: PaletteConfig
+    ) -> None:
+        """feet_row for 32-row grid is 28 (int(32 * 0.875)), not 56."""
+        grid = _make_valid_grid(".", 32, 32)
+        # Place non-transparent pixels near row 28 (expected feet for 32px)
+        grid[27] = "." * 15 + "s" + "." * 16
+        verdicts = checker.run_all(
+            grid, sample_palette, frame_width=32, frame_height=32
+        )
+        feet_verdict = [
+            v for v in verdicts if v.gate_name == "programmatic_feet_position"
+        ][0]
+        assert feet_verdict.passed is True
+
+    def test_programmatic_checker_feet_row_scales_128(
+        self, checker: ProgrammaticChecker, sample_palette: PaletteConfig
+    ) -> None:
+        """feet_row for 128-row grid is 112 (int(128 * 0.875))."""
+        grid = _make_valid_grid(".", 128, 128)
+        # Place non-transparent pixels near row 112
+        grid[112] = "." * 60 + "s" + "." * 67
+        verdicts = checker.run_all(
+            grid, sample_palette, frame_width=128, frame_height=128
+        )
+        feet_verdict = [
+            v for v in verdicts if v.gate_name == "programmatic_feet_position"
+        ][0]
+        assert feet_verdict.passed is True
+
+    def test_programmatic_checker_wrong_dimensions_with_custom_size(
+        self, checker: ProgrammaticChecker
+    ) -> None:
+        """Wrong grid size fails with correct message for custom dimensions."""
+        grid = _make_valid_grid(".", 30, 30)
+        verdict = checker.check_dimensions(grid, expected_rows=32, expected_cols=32)
+        assert verdict.passed is False
+        assert "30" in verdict.feedback
+        assert "32" in verdict.feedback
+
+
+# ---------------------------------------------------------------------------
 # parse_verdict_response
 # ---------------------------------------------------------------------------
 
