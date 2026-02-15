@@ -104,8 +104,9 @@ def resize_reference(
 ) -> Image.Image:
     """Resize a reference image to target frame dimensions.
 
-    Uses nearest-neighbor interpolation to preserve hard edges
-    (better for pixel art than bilinear/bicubic).
+    Uses NEAREST interpolation when upscaling (preserves hard pixel-art
+    edges) and LANCZOS when downscaling (properly anti-aliases to avoid
+    severe aliasing and detail loss from skipping pixels).
 
     Args:
         image: Source PIL Image.
@@ -117,9 +118,15 @@ def resize_reference(
     """
     if image.size == (target_width, target_height):
         return image.copy()
-    return image.resize(
-        (target_width, target_height), resample=Image.Resampling.NEAREST
-    )
+
+    # Upscaling: NEAREST preserves hard edges in pixel art.
+    # Downscaling: LANCZOS properly anti-aliases, avoiding the severe
+    # aliasing that NEAREST causes (e.g. 1024×1024 → 64×64 drops 99.6%
+    # of pixels with NEAREST).
+    is_downscaling = target_width < image.width or target_height < image.height
+    resample = Image.Resampling.LANCZOS if is_downscaling else Image.Resampling.NEAREST
+
+    return image.resize((target_width, target_height), resample=resample)
 
 
 def _assign_symbols(
@@ -169,6 +176,68 @@ def _assign_symbols(
     return result
 
 
+def _quantize_opaque_only(
+    image: Image.Image,
+    alpha: Image.Image,
+    max_colors: int,
+) -> Image.Image:
+    """Quantize an RGBA image considering only opaque pixels.
+
+    Avoids the color-bleeding problem that occurs when transparent pixels
+    are converted to RGB (becoming black), which then participate in
+    median-cut clustering, wasting palette slots and pulling edge colors
+    toward black.
+
+    Strategy: build a 1-row RGB image containing only the opaque pixels,
+    quantize that, then map the reduced palette back onto the full image
+    while preserving the original alpha channel.
+
+    Args:
+        image: Source RGBA image.
+        alpha: Alpha channel of the source image.
+        max_colors: Maximum number of colors for quantization.
+
+    Returns:
+        New RGBA image with quantized opaque pixels and original alpha.
+    """
+    width, height = image.size
+    raw = image.tobytes()
+    alpha_data = alpha.tobytes()
+
+    # Collect indices + RGB values of opaque pixels
+    opaque_indices: list[int] = []
+    opaque_rgb: list[int] = []
+    for i in range(width * height):
+        if alpha_data[i] > 0:
+            opaque_indices.append(i)
+            base = i * 4
+            opaque_rgb.extend(raw[base : base + 3])
+
+    if not opaque_indices:
+        return image.copy()
+
+    n_opaque = len(opaque_indices)
+
+    # Build a 1×N RGB image of only opaque pixels for quantization
+    opaque_img = Image.frombytes("RGB", (n_opaque, 1), bytes(opaque_rgb))
+    quantized_p = opaque_img.quantize(
+        colors=max_colors, method=Image.Quantize.MEDIANCUT
+    )
+    quantized_rgb_data = quantized_p.convert("RGB").tobytes()
+
+    # Reconstruct RGBA output: start with fully transparent
+    out = bytearray(width * height * 4)
+    for j, pixel_idx in enumerate(opaque_indices):
+        base_out = pixel_idx * 4
+        base_q = j * 3
+        out[base_out] = quantized_rgb_data[base_q]
+        out[base_out + 1] = quantized_rgb_data[base_q + 1]
+        out[base_out + 2] = quantized_rgb_data[base_q + 2]
+        out[base_out + 3] = alpha_data[pixel_idx]
+
+    return Image.frombytes("RGBA", (width, height), bytes(out))
+
+
 def extract_palette_from_image(
     image: Image.Image,
     max_colors: int = 16,
@@ -201,11 +270,11 @@ def extract_palette_from_image(
     needs_quantize = len(unique_opaque) > max_colors
 
     if needs_quantize:
-        # Quantize the RGB channels, then recombine with alpha
-        rgb = image.convert("RGB")
-        quantized_p = rgb.quantize(colors=max_colors, method=Image.Quantize.MEDIANCUT)
-        quantized_rgb = quantized_p.convert("RGB")
-        quantized_rgba = Image.merge("RGBA", (*quantized_rgb.split(), alpha))
+        # Quantize only opaque pixels to avoid color bleeding from the
+        # transparent background.  Transparent pixels converted to RGB
+        # become black/white, which would pollute the median-cut
+        # clustering and waste palette slots.
+        quantized_rgba = _quantize_opaque_only(image, alpha, max_colors)
 
         # Re-extract opaque colors from quantized image
         raw_q = quantized_rgba.tobytes()
@@ -328,10 +397,9 @@ def preprocess_reference(
     needs_quantize = len(unique_resized) > max_colors
 
     if needs_quantize:
-        rgb = resized.convert("RGB")
-        quantized_p = rgb.quantize(colors=max_colors, method=Image.Quantize.MEDIANCUT)
-        quantized_rgb = quantized_p.convert("RGB")
-        quantized_image = Image.merge("RGBA", (*quantized_rgb.split(), alpha))
+        # Quantize only opaque pixels to prevent transparent-background
+        # colors from polluting the palette (see _quantize_opaque_only).
+        quantized_image = _quantize_opaque_only(resized, alpha, max_colors)
     else:
         quantized_image = resized.copy()
 

@@ -126,7 +126,23 @@ class TestResizeReference:
         assert resized.size == (64, 64)
 
     def test_resize_reference_uses_nearest_neighbor(self) -> None:
-        """Verify nearest-neighbor produces hard edges (no anti-aliasing)."""
+        """Verify nearest-neighbor is used for upscaling (hard edges)."""
+        img = Image.new("RGBA", (32, 32), (0, 0, 0, 0))
+        # Draw a sharp boundary: left half red, right half blue
+        for x in range(16):
+            for y in range(32):
+                img.putpixel((x, y), (255, 0, 0, 255))
+        for x in range(16, 32):
+            for y in range(32):
+                img.putpixel((x, y), (0, 0, 255, 255))
+
+        # Upscaling 32→64: should use NEAREST (hard edges, no blending)
+        resized = resize_reference(img, 64, 64)
+        mid_pixel = resized.getpixel((31, 32))
+        assert mid_pixel in ((255, 0, 0, 255), (0, 0, 255, 255))
+
+    def test_resize_reference_uses_lanczos_for_downscaling(self) -> None:
+        """Verify LANCZOS is used for downscaling (anti-aliased)."""
         img = Image.new("RGBA", (128, 128), (0, 0, 0, 0))
         # Draw a sharp boundary: left half red, right half blue
         for x in range(64):
@@ -136,11 +152,17 @@ class TestResizeReference:
             for y in range(128):
                 img.putpixel((x, y), (0, 0, 255, 255))
 
+        # Downscaling 128→64: LANCZOS may anti-alias at the boundary
         resized = resize_reference(img, 64, 64)
-        # With nearest-neighbor, mid-boundary pixel should be exactly
-        # one of the two colors, NOT a blend
         mid_pixel = resized.getpixel((31, 32))
-        assert mid_pixel in ((255, 0, 0, 255), (0, 0, 255, 255))
+        # With LANCZOS the boundary pixel may be blended, which is correct
+        # for downscaling; the key assertion is that the image was produced
+        # at the target size (covered by other tests) and that clearly
+        # non-boundary pixels retain their original color.
+        left_pixel = resized.getpixel((0, 0))
+        right_pixel = resized.getpixel((63, 0))
+        assert left_pixel == (255, 0, 0, 255)
+        assert right_pixel == (0, 0, 255, 255)
 
 
 # ---------------------------------------------------------------------------

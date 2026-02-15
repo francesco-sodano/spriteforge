@@ -150,6 +150,45 @@ class TestParseGridResponse:
         with pytest.raises(GenerationError, match="list of strings"):
             parse_grid_response(response)
 
+    def test_parse_grid_response_custom_dimensions(self) -> None:
+        """32×32 grid → parses correctly with matching expected dimensions."""
+        grid = _make_valid_grid(".", rows=32, cols=32)
+        response = json.dumps({"grid": grid})
+        result = parse_grid_response(response, expected_rows=32, expected_cols=32)
+        assert len(result) == 32
+        assert all(len(row) == 32 for row in result)
+
+    def test_parse_grid_response_128x128(self) -> None:
+        """128×128 grid → parses correctly."""
+        grid = _make_valid_grid(".", rows=128, cols=128)
+        response = json.dumps({"grid": grid})
+        result = parse_grid_response(response, expected_rows=128, expected_cols=128)
+        assert len(result) == 128
+        assert all(len(row) == 128 for row in result)
+
+    def test_parse_grid_response_non_square(self) -> None:
+        """Non-square grid (48×32) → parses correctly."""
+        grid = _make_valid_grid(".", rows=32, cols=48)
+        response = json.dumps({"grid": grid})
+        result = parse_grid_response(response, expected_rows=32, expected_cols=48)
+        assert len(result) == 32
+        assert all(len(row) == 48 for row in result)
+
+    def test_parse_grid_response_wrong_custom_row_count(self) -> None:
+        """Grid with 31 rows when expecting 32 → GenerationError."""
+        grid = _make_valid_grid(".", rows=31, cols=32)
+        response = json.dumps({"grid": grid})
+        with pytest.raises(GenerationError, match="32 rows"):
+            parse_grid_response(response, expected_rows=32, expected_cols=32)
+
+    def test_parse_grid_response_wrong_custom_col_count(self) -> None:
+        """Grid row with 31 chars when expecting 32 → GenerationError."""
+        grid = _make_valid_grid(".", rows=32, cols=32)
+        grid[0] = "." * 31
+        response = json.dumps({"grid": grid})
+        with pytest.raises(GenerationError, match="32 characters"):
+            parse_grid_response(response, expected_rows=32, expected_cols=32)
+
 
 # ---------------------------------------------------------------------------
 # GridGenerator init
@@ -225,6 +264,16 @@ class TestHelperFunctions:
         assert "left" in prompt
         assert "60" in prompt
         assert "Keep arms at sides" in prompt
+
+    def test_build_system_prompt_custom_dimensions(
+        self, sample_palette: PaletteConfig
+    ) -> None:
+        """System prompt uses custom width/height when provided."""
+        gen = GenerationConfig()
+        prompt = _build_system_prompt(sample_palette, gen, width=32, height=48)
+        assert "32×48" in prompt
+        assert "32 characters" in prompt or "32" in prompt
+        assert "48" in prompt
 
 
 # ---------------------------------------------------------------------------
@@ -375,6 +424,63 @@ class TestGenerateAnchorFrame:
         full_text = " ".join(text_parts)
         assert "trac" in full_text.lower()  # "tracing" or "trace"
         assert "refine" in full_text.lower()
+
+    @pytest.mark.asyncio
+    async def test_generate_anchor_frame_custom_dimensions(
+        self,
+        sample_palette: PaletteConfig,
+        sample_animation: AnimationDef,
+    ) -> None:
+        """Anchor frame with 32×32 dimensions → correct grid size and prompt."""
+        grid_32 = _make_valid_grid(".", rows=32, cols=32)
+        response = json.dumps({"grid": grid_32})
+        mock = MockChatProvider(responses=[response])
+        gen = GridGenerator(chat_provider=mock)
+
+        grid = await gen.generate_anchor_frame(
+            base_reference=_TINY_PNG,
+            reference_frame=_TINY_PNG,
+            palette=sample_palette,
+            animation=sample_animation,
+            frame_width=32,
+            frame_height=32,
+        )
+
+        assert len(grid) == 32
+        assert all(len(row) == 32 for row in grid)
+
+        # System prompt should reference 32×32 dimensions
+        messages = mock._call_history[0]["messages"]
+        system_content = messages[0]["content"]
+        assert "32×32" in system_content
+
+    @pytest.mark.asyncio
+    async def test_generate_anchor_frame_quantized_section_uses_custom_dims(
+        self,
+        sample_palette: PaletteConfig,
+        sample_animation: AnimationDef,
+    ) -> None:
+        """Quantized section references actual frame dimensions, not hardcoded 64."""
+        grid_48 = _make_valid_grid(".", rows=48, cols=48)
+        response = json.dumps({"grid": grid_48})
+        mock = MockChatProvider(responses=[response])
+        gen = GridGenerator(chat_provider=mock)
+
+        await gen.generate_anchor_frame(
+            base_reference=_TINY_PNG,
+            reference_frame=_TINY_PNG,
+            palette=sample_palette,
+            animation=sample_animation,
+            quantized_reference=_TINY_PNG,
+            frame_width=48,
+            frame_height=48,
+        )
+
+        messages = mock._call_history[0]["messages"]
+        user_content = messages[1]["content"]
+        text_parts = [p["text"] for p in user_content if p["type"] == "text"]
+        full_text = " ".join(text_parts)
+        assert "48×48" in full_text
 
 
 # ---------------------------------------------------------------------------
@@ -570,3 +676,62 @@ class TestGenerateFrame:
         full_text = " ".join(text_parts)
         # No "trace" or quantized reference language
         assert "quantized" not in full_text.lower()
+
+    @pytest.mark.asyncio
+    async def test_generate_frame_custom_dimensions(
+        self,
+        sample_palette: PaletteConfig,
+        sample_animation: AnimationDef,
+    ) -> None:
+        """Frame generation with 32×32 dimensions → correct grid size and prompt."""
+        grid_32 = _make_valid_grid(".", rows=32, cols=32)
+        response = json.dumps({"grid": grid_32})
+        mock = MockChatProvider(responses=[response])
+        gen = GridGenerator(chat_provider=mock)
+        anchor_grid_32 = _make_valid_grid(".", rows=32, cols=32)
+
+        grid = await gen.generate_frame(
+            reference_frame=_TINY_PNG,
+            anchor_grid=anchor_grid_32,
+            anchor_rendered=_TINY_PNG,
+            palette=sample_palette,
+            animation=sample_animation,
+            frame_index=1,
+            frame_width=32,
+            frame_height=32,
+        )
+
+        assert len(grid) == 32
+        assert all(len(row) == 32 for row in grid)
+
+        # System prompt should reference 32×32
+        messages = mock._call_history[0]["messages"]
+        system_content = messages[0]["content"]
+        assert "32×32" in system_content
+
+    @pytest.mark.asyncio
+    async def test_generate_frame_non_square_dimensions(
+        self,
+        sample_palette: PaletteConfig,
+        sample_animation: AnimationDef,
+    ) -> None:
+        """Frame generation with non-square 48×32 dimensions → correct grid."""
+        grid_ns = _make_valid_grid(".", rows=32, cols=48)
+        response = json.dumps({"grid": grid_ns})
+        mock = MockChatProvider(responses=[response])
+        gen = GridGenerator(chat_provider=mock)
+        anchor_grid_ns = _make_valid_grid(".", rows=32, cols=48)
+
+        grid = await gen.generate_frame(
+            reference_frame=_TINY_PNG,
+            anchor_grid=anchor_grid_ns,
+            anchor_rendered=_TINY_PNG,
+            palette=sample_palette,
+            animation=sample_animation,
+            frame_index=1,
+            frame_width=48,
+            frame_height=32,
+        )
+
+        assert len(grid) == 32
+        assert all(len(row) == 48 for row in grid)

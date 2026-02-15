@@ -1,7 +1,9 @@
 """Grid generator — Stage 2 pixel-precise generation with Claude Opus 4.6.
 
-Translates rough reference frames into structured 64×64 JSON grids of
+Translates rough reference frames into structured JSON grids of
 palette symbols using Claude Opus 4.6 with vision input via Azure AI Foundry.
+Grid dimensions are configurable (default 64×64) via ``frame_width`` and
+``frame_height`` parameters passed from the character configuration.
 """
 
 from __future__ import annotations
@@ -135,10 +137,11 @@ def _build_system_prompt(
 
 
 class GridGenerator:
-    """Generates pixel-precise 64×64 palette-indexed grids using Claude Opus 4.6.
+    """Generates pixel-precise palette-indexed grids using Claude Opus 4.6.
 
     Uses a ``ChatProvider`` to call the LLM with vision input,
     translating rough reference frames into structured JSON grids.
+    Grid dimensions are configurable via ``frame_width`` and ``frame_height``.
     """
 
     def __init__(
@@ -164,6 +167,8 @@ class GridGenerator:
         animation: AnimationDef,
         generation: GenerationConfig | None = None,
         quantized_reference: bytes | None = None,
+        frame_width: int = 64,
+        frame_height: int = 64,
     ) -> list[str]:
         """Generate the IDLE Frame 0 anchor — the identity reference for all other frames.
 
@@ -182,19 +187,25 @@ class GridGenerator:
             animation: The IDLE animation definition.
             generation: Generation config (style, facing, feet_row, rules).
                 If ``None``, defaults are used.
-            quantized_reference: Optional 64×64 quantized PNG from preprocessor.
+            quantized_reference: Optional quantized PNG from preprocessor.
+            frame_width: Width of each frame in pixels (grid columns).
+            frame_height: Height of each frame in pixels (grid rows).
 
         Returns:
-            A list of 64 strings, each 64 characters long (palette symbols).
+            A list of *frame_height* strings, each *frame_width* characters.
         """
         gen = generation or GenerationConfig()
 
-        system_prompt = _build_system_prompt(palette, gen)
+        system_prompt = _build_system_prompt(
+            palette, gen, width=frame_width, height=frame_height
+        )
 
         # Build quantized reference section
         quantized_section = ""
         if quantized_reference is not None:
-            quantized_section = QUANTIZED_REFERENCE_SECTION.format(width=64, height=64)
+            quantized_section = QUANTIZED_REFERENCE_SECTION.format(
+                width=frame_width, height=frame_height
+            )
 
         frame_desc = ""
         if animation.frame_descriptions:
@@ -238,7 +249,9 @@ class GridGenerator:
         ]
 
         response_text = await self._chat.chat(messages, temperature=1.0)
-        grid = parse_grid_response(response_text)
+        grid = parse_grid_response(
+            response_text, expected_rows=frame_height, expected_cols=frame_width
+        )
         logger.debug("Grid response: %d rows, all valid symbols", len(grid))
         return grid
 
@@ -255,6 +268,8 @@ class GridGenerator:
         prev_frame_rendered: bytes | None = None,
         temperature: float = 1.0,
         additional_guidance: str = "",
+        frame_width: int = 64,
+        frame_height: int = 64,
     ) -> list[str]:
         """Generate a single pixel-precise frame grid.
 
@@ -270,16 +285,20 @@ class GridGenerator:
             prev_frame_rendered: PNG bytes of the rendered previous frame.
             temperature: LLM temperature (1.0=creative, 0.3=constrained).
             additional_guidance: Extra prompt text for retry escalation.
+            frame_width: Width of each frame in pixels (grid columns).
+            frame_height: Height of each frame in pixels (grid rows).
 
         Returns:
-            A list of 64 strings, each 64 characters long.
+            A list of *frame_height* strings, each *frame_width* characters.
 
         Raises:
             GenerationError: If the LLM fails to produce a valid grid.
         """
         gen = generation or GenerationConfig()
 
-        system_prompt = _build_system_prompt(palette, gen)
+        system_prompt = _build_system_prompt(
+            palette, gen, width=frame_width, height=frame_height
+        )
 
         frame_desc = ""
         if animation.frame_descriptions and frame_index < len(
@@ -349,6 +368,8 @@ class GridGenerator:
         )
 
         response_text = await self._chat.chat(messages, temperature=temperature)
-        grid = parse_grid_response(response_text)
+        grid = parse_grid_response(
+            response_text, expected_rows=frame_height, expected_cols=frame_width
+        )
         logger.debug("Grid response: %d rows, all valid symbols", len(grid))
         return grid
