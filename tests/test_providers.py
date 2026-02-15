@@ -900,3 +900,160 @@ class TestAzureChatProviderResponseFormat:
         assert "response_format" not in call_kwargs
         assert call_kwargs["model"] == "test-model"
         assert call_kwargs["temperature"] == 1.0
+
+
+# ---------------------------------------------------------------------------
+# Tests: Lazy import mechanism
+# ---------------------------------------------------------------------------
+
+
+class TestLazyImports:
+    """Tests for lazy loading of Azure-dependent providers."""
+
+    def test_lazy_import_azure_chat_provider(self) -> None:
+        """AzureChatProvider can be imported lazily from providers module."""
+        # Import using __getattr__
+        from spriteforge import providers
+
+        AzureChatProvider = providers.__getattr__("AzureChatProvider")
+        assert AzureChatProvider is not None
+        assert AzureChatProvider.__name__ == "AzureChatProvider"
+
+    def test_lazy_import_gpt_image_provider(self) -> None:
+        """GPTImageProvider can be imported lazily from providers module."""
+        from spriteforge import providers
+
+        GPTImageProvider = providers.__getattr__("GPTImageProvider")
+        assert GPTImageProvider is not None
+        assert GPTImageProvider.__name__ == "GPTImageProvider"
+
+    def test_lazy_import_from_providers_directly(self) -> None:
+        """Azure providers can be imported directly from providers module."""
+        from spriteforge.providers import AzureChatProvider, GPTImageProvider
+
+        assert AzureChatProvider is not None
+        assert GPTImageProvider is not None
+
+    def test_lazy_import_from_root_package(self) -> None:
+        """Azure providers can be imported from root spriteforge package."""
+        from spriteforge import AzureChatProvider, GPTImageProvider
+
+        assert AzureChatProvider is not None
+        assert GPTImageProvider is not None
+
+    def test_non_azure_providers_importable(self) -> None:
+        """Non-Azure providers (ChatProvider, ReferenceProvider) are eagerly loaded."""
+        from spriteforge.providers import ChatProvider, ReferenceProvider
+
+        assert ChatProvider is not None
+        assert ReferenceProvider is not None
+
+    def test_invalid_attribute_raises(self) -> None:
+        """Requesting non-existent attribute raises AttributeError."""
+        from spriteforge import providers
+
+        with pytest.raises(AttributeError, match="has no attribute 'NonExistentClass'"):
+            providers.__getattr__("NonExistentClass")
+
+    def test_all_exports_available(self) -> None:
+        """All items in __all__ are accessible."""
+        from spriteforge import providers
+
+        for name in providers.__all__:
+            attr = getattr(providers, name)
+            assert attr is not None
+
+
+# ---------------------------------------------------------------------------
+# Tests: Azure SDK import error messages
+# ---------------------------------------------------------------------------
+
+
+class TestAzureSDKErrorMessages:
+    """Tests for clear error messages when Azure SDK is missing."""
+
+    @pytest.mark.asyncio
+    async def test_azure_chat_provider_missing_sdk_error(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """AzureChatProvider shows clear error when Azure SDK is missing."""
+        import sys
+        import builtins
+
+        # Remove azure SDK modules from sys.modules to simulate missing SDK
+        azure_sdk_modules = [
+            key
+            for key in sys.modules.keys()
+            if key.startswith("azure.ai.") or key.startswith("azure.identity")
+        ]
+        for key in azure_sdk_modules:
+            monkeypatch.delitem(sys.modules, key, raising=False)
+
+        # Mock the import to fail for Azure SDK packages only
+        original_import = builtins.__import__
+
+        def mock_import(name, *args, **kwargs):
+            if name.startswith("azure.ai.") or name.startswith("azure.identity"):
+                raise ImportError(f"No module named '{name}'")
+            return original_import(name, *args, **kwargs)
+
+        monkeypatch.setattr(builtins, "__import__", mock_import)
+
+        # Import and create provider (doesn't fail yet)
+        from spriteforge.providers.azure_chat import AzureChatProvider
+
+        provider = AzureChatProvider(
+            project_endpoint="https://test.azure.com",
+            model_deployment_name="test-model",
+        )
+
+        # Using the provider should fail with clear error message
+        with pytest.raises(ImportError) as exc_info:
+            await provider.chat([{"role": "user", "content": "test"}])
+
+        error_msg = str(exc_info.value)
+        assert "Azure SDK packages are required" in error_msg
+        assert "pip install spriteforge[azure]" in error_msg
+        assert "azure-ai-projects" in error_msg
+        assert "azure-identity" in error_msg
+
+    def test_gpt_image_provider_missing_sdk_error(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """GPTImageProvider shows clear error when Azure SDK is missing."""
+        import sys
+        import builtins
+
+        # Remove azure SDK modules from sys.modules to simulate missing SDK
+        azure_sdk_modules = [
+            key
+            for key in sys.modules.keys()
+            if key.startswith("azure.ai.") or key.startswith("azure.identity")
+        ]
+        for key in azure_sdk_modules:
+            monkeypatch.delitem(sys.modules, key, raising=False)
+
+        # Mock the import to fail for Azure SDK packages only
+        original_import = builtins.__import__
+
+        def mock_import(name, *args, **kwargs):
+            if name.startswith("azure.ai.") or name.startswith("azure.identity"):
+                raise ImportError(f"No module named '{name}'")
+            return original_import(name, *args, **kwargs)
+
+        monkeypatch.setattr(builtins, "__import__", mock_import)
+
+        # Import and create provider (doesn't fail yet)
+        from spriteforge.providers.gpt_image import GPTImageProvider
+
+        provider = GPTImageProvider(project_endpoint="https://test.azure.com")
+
+        # Using the provider should fail with clear error message
+        with pytest.raises(ImportError) as exc_info:
+            provider._get_client()
+
+        error_msg = str(exc_info.value)
+        assert "Azure SDK packages are required" in error_msg
+        assert "pip install spriteforge[azure]" in error_msg
+        assert "azure-ai-projects" in error_msg
+        assert "azure-identity" in error_msg

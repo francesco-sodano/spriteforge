@@ -1,5 +1,7 @@
 """SpriteForge — AI-powered spritesheet generator for 2D pixel-art games."""
 
+from typing import Any
+
 from spriteforge.config import load_config, validate_config
 from spriteforge.errors import (
     ConfigError,
@@ -40,12 +42,7 @@ from spriteforge.preprocessor import (
     resize_reference,
     validate_reference_image,
 )
-from spriteforge.providers import (
-    AzureChatProvider,
-    ChatProvider,
-    GPTImageProvider,
-    ReferenceProvider,
-)
+from spriteforge.providers import ChatProvider, ReferenceProvider
 from spriteforge.renderer import (
     frame_to_png_bytes,
     render_frame,
@@ -64,6 +61,20 @@ from spriteforge.utils import (
     strip_code_fences,
 )
 from spriteforge.workflow import SpriteForgeWorkflow, create_workflow
+
+
+def __getattr__(name: str) -> Any:
+    """Lazy loading for Azure-dependent classes."""
+    if name == "AzureChatProvider":
+        from spriteforge.providers import AzureChatProvider
+
+        return AzureChatProvider
+    if name == "GPTImageProvider":
+        from spriteforge.providers import GPTImageProvider
+
+        return GPTImageProvider
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+
 
 __all__ = [
     "AnimationDef",
