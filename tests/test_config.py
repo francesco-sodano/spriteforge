@@ -8,7 +8,7 @@ from pathlib import Path
 import pytest
 from pydantic import ValidationError
 
-from spriteforge.config import load_config
+from spriteforge.config import load_config, validate_config
 
 
 @pytest.fixture()
@@ -635,3 +635,288 @@ class TestLoadConfig:
                 assert spec.generation.gate_model == "gpt-5-mini"
                 assert spec.generation.labeling_model == "gpt-5-nano"
                 assert spec.generation.reference_model == "gpt-image-1.5"
+
+
+class TestValidateConfig:
+    """Tests for the validate_config function."""
+
+    def test_valid_config_returns_empty_warnings(self, config_dir: Path) -> None:
+        """A valid config should return an empty list of warnings."""
+        cfg = config_dir / "valid.yaml"
+        cfg.write_text(textwrap.dedent("""\
+                character:
+                  name: "TestChar"
+                  class: "Warrior"
+                  frame_size: [64, 64]
+                  spritesheet_columns: 14
+                animations:
+                  - name: idle
+                    row: 0
+                    frames: 6
+                    loop: true
+                    timing_ms: 150
+                  - name: walk
+                    row: 1
+                    frames: 8
+                    loop: true
+                    timing_ms: 100
+                palette:
+                  outline:
+                    symbol: "O"
+                    name: "Outline"
+                    rgb: [20, 15, 10]
+                  colors:
+                    - symbol: "s"
+                      name: "Skin"
+                      rgb: [235, 210, 185]
+                generation:
+                  grid_model: "gpt-5.2"
+                  gate_model: "gpt-5-mini"
+                  labeling_model: "gpt-5-nano"
+                  reference_model: "gpt-image-1.5"
+            """))
+        warnings = validate_config(cfg, check_base_image=False)
+        assert warnings == []
+
+    def test_duplicate_palette_symbol_raises_error(self, config_dir: Path) -> None:
+        """Duplicate palette symbols should raise a ValidationError."""
+        cfg = config_dir / "dup_sym.yaml"
+        cfg.write_text(textwrap.dedent("""\
+                character:
+                  name: "TestChar"
+                animations:
+                  - name: idle
+                    row: 0
+                    frames: 6
+                    timing_ms: 150
+                palette:
+                  outline:
+                    symbol: "O"
+                    name: "Outline"
+                    rgb: [20, 15, 10]
+                  colors:
+                    - symbol: "s"
+                      name: "Skin"
+                      rgb: [235, 210, 185]
+                    - symbol: "s"
+                      name: "Hair"
+                      rgb: [100, 100, 100]
+            """))
+        # Duplicate symbols are caught by PaletteConfig validator during load_config
+        with pytest.raises(ValidationError, match="[Dd]uplicate"):
+            validate_config(cfg)
+
+    def test_zero_frame_count_raises_error(self, config_dir: Path) -> None:
+        """Animation with zero frames should raise a ValidationError."""
+        cfg = config_dir / "zero_frames.yaml"
+        cfg.write_text(textwrap.dedent("""\
+                character:
+                  name: "TestChar"
+                animations:
+                  - name: idle
+                    row: 0
+                    frames: 0
+                    timing_ms: 150
+            """))
+        # Zero frames is caught by AnimationDef field validator during load_config
+        with pytest.raises(ValidationError):
+            validate_config(cfg)
+
+    def test_row_index_gap_produces_warning(self, config_dir: Path) -> None:
+        """Non-contiguous row indices should produce a warning."""
+        cfg = config_dir / "gap_rows.yaml"
+        cfg.write_text(textwrap.dedent("""\
+                character:
+                  name: "TestChar"
+                animations:
+                  - name: idle
+                    row: 0
+                    frames: 6
+                    timing_ms: 150
+                  - name: walk
+                    row: 1
+                    frames: 8
+                    timing_ms: 100
+                  - name: attack
+                    row: 3
+                    frames: 5
+                    timing_ms: 80
+            """))
+        warnings = validate_config(cfg, check_base_image=False)
+        assert len(warnings) == 1
+        assert "gap" in warnings[0].lower()
+        assert "[2]" in warnings[0]
+
+    def test_missing_base_image_raises_error(self, config_dir: Path) -> None:
+        """Config with non-existent base image should raise ValueError."""
+        cfg = config_dir / "missing_img.yaml"
+        cfg.write_text(textwrap.dedent("""\
+                character:
+                  name: "TestChar"
+                animations:
+                  - name: idle
+                    row: 0
+                    frames: 6
+                    timing_ms: 150
+                base_image_path: "/nonexistent/path.png"
+            """))
+        with pytest.raises(ValueError, match="[Bb]ase image.*does not exist"):
+            validate_config(cfg, check_base_image=True)
+
+    def test_check_base_image_false_skips_path_check(self, config_dir: Path) -> None:
+        """With check_base_image=False, missing base image should not raise error."""
+        cfg = config_dir / "missing_img.yaml"
+        cfg.write_text(textwrap.dedent("""\
+                character:
+                  name: "TestChar"
+                animations:
+                  - name: idle
+                    row: 0
+                    frames: 6
+                    timing_ms: 150
+                base_image_path: "/nonexistent/path.png"
+            """))
+        # Should not raise error
+        warnings = validate_config(cfg, check_base_image=False)
+        # Should succeed without error
+        assert isinstance(warnings, list)
+
+    def test_empty_model_deployment_name_produces_warning(
+        self, config_dir: Path
+    ) -> None:
+        """Empty model deployment name should produce a warning."""
+        cfg = config_dir / "empty_model.yaml"
+        cfg.write_text(textwrap.dedent("""\
+                character:
+                  name: "TestChar"
+                animations:
+                  - name: idle
+                    row: 0
+                    frames: 6
+                    timing_ms: 150
+                generation:
+                  grid_model: ""
+                  gate_model: "gpt-5-mini"
+            """))
+        warnings = validate_config(cfg, check_base_image=False)
+        assert len(warnings) >= 1
+        assert any("grid_model" in w for w in warnings)
+
+    def test_non_standard_outline_symbol_produces_warning(
+        self, config_dir: Path
+    ) -> None:
+        """Non-'O' outline symbol should produce a warning."""
+        cfg = config_dir / "custom_outline.yaml"
+        cfg.write_text(textwrap.dedent("""\
+                character:
+                  name: "TestChar"
+                animations:
+                  - name: idle
+                    row: 0
+                    frames: 6
+                    timing_ms: 150
+                palette:
+                  outline:
+                    symbol: "X"
+                    name: "Outline"
+                    rgb: [20, 15, 10]
+                  colors:
+                    - symbol: "s"
+                      name: "Skin"
+                      rgb: [235, 210, 185]
+            """))
+        warnings = validate_config(cfg, check_base_image=False)
+        assert len(warnings) >= 1
+        assert any("outline" in w.lower() and "'X'" in w for w in warnings)
+
+    def test_excessive_palette_size_produces_warning(self, config_dir: Path) -> None:
+        """Palette with >20 colors should produce a warning."""
+        cfg = config_dir / "large_palette.yaml"
+        # Create a config with 21 colors
+        colors_yaml = "\n".join(
+            [
+                f'    - symbol: "{chr(ord("a") + i)}"\n'
+                f'      name: "Color{i}"\n'
+                f"      rgb: [{i*10}, {i*10}, {i*10}]"
+                for i in range(21)
+            ]
+        )
+        cfg.write_text(textwrap.dedent("""\
+                character:
+                  name: "TestChar"
+                animations:
+                  - name: idle
+                    row: 0
+                    frames: 6
+                    timing_ms: 150
+                palette:
+                  outline:
+                    symbol: "O"
+                    name: "Outline"
+                    rgb: [20, 15, 10]
+                  colors:
+            """) + colors_yaml)
+        warnings = validate_config(cfg, check_base_image=False)
+        assert len(warnings) >= 1
+        assert any("21 colors" in w and ">20" in w for w in warnings)
+
+    def test_all_example_configs_validate_cleanly(self) -> None:
+        """All configs in configs/ directory should validate without errors."""
+        from pathlib import Path
+
+        configs_dir = Path(__file__).parent.parent / "configs"
+        if not configs_dir.exists():
+            pytest.skip("configs directory not found")
+
+        # Test main character configs
+        for config_file in ["theron.yaml", "sylara.yaml", "drunn.yaml"]:
+            config_path = configs_dir / config_file
+            if config_path.exists():
+                # Validate with base image check disabled since paths may be relative
+                warnings = validate_config(config_path, check_base_image=False)
+                # Warnings are acceptable, but errors should not be raised
+                assert isinstance(warnings, list)
+
+    def test_relative_base_image_path_resolution(self, config_dir: Path) -> None:
+        """Relative base image paths should be resolved relative to config file."""
+        # Create a base image file in the same directory as the config
+        img_path = config_dir / "ref.png"
+        img_path.write_bytes(b"\x89PNG\r\n\x1a\n")  # Minimal PNG header
+
+        cfg = config_dir / "rel_path.yaml"
+        cfg.write_text(textwrap.dedent("""\
+                character:
+                  name: "TestChar"
+                animations:
+                  - name: idle
+                    row: 0
+                    frames: 6
+                    timing_ms: 150
+                base_image_path: "ref.png"
+            """))
+
+        # Should not raise error since ref.png exists in the same directory
+        warnings = validate_config(cfg, check_base_image=True)
+        assert isinstance(warnings, list)
+
+    def test_config_file_not_found_raises_error(self) -> None:
+        """Non-existent config file should raise FileNotFoundError."""
+        with pytest.raises(FileNotFoundError, match="Config file not found"):
+            validate_config("/nonexistent/config.yaml")
+
+    def test_frames_exceeding_max_columns_raises_error(self, config_dir: Path) -> None:
+        """Animation with frames > spritesheet_columns should raise ValueError."""
+        cfg = config_dir / "too_many_frames.yaml"
+        cfg.write_text(textwrap.dedent("""\
+                character:
+                  name: "TestChar"
+                  spritesheet_columns: 10
+                animations:
+                  - name: idle
+                    row: 0
+                    frames: 15
+                    timing_ms: 150
+            """))
+        # This is caught by SpritesheetSpec validator during load_config
+        with pytest.raises(ValueError, match="exceeding spritesheet_columns"):
+            validate_config(cfg)
