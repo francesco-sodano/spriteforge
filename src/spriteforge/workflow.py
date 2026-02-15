@@ -22,7 +22,7 @@ from typing import Any
 from PIL import Image
 
 from spriteforge.assembler import assemble_spritesheet
-from spriteforge.errors import GateError
+from spriteforge.errors import GateError, RetryExhaustedError
 from spriteforge.gates import GateVerdict, LLMGateChecker, ProgrammaticChecker
 from spriteforge.generator import GenerationError, GridGenerator
 from spriteforge.logging import get_logger
@@ -635,9 +635,16 @@ class SpriteForgeWorkflow:
             return grid
 
         # Exhausted all retries
-        raise GenerationError(
+        # Get the tier for the last attempt to include in error message
+        last_attempt = retry_ctx.current_attempt
+        last_tier = self.retry_manager.get_tier(
+            min(last_attempt, self.retry_manager._config.constrained_range[1])
+        )
+        raise RetryExhaustedError(
             f"Frame {frame_id} failed verification after "
-            f"{retry_ctx.max_attempts} attempts."
+            f"{retry_ctx.max_attempts} attempts. "
+            f"Last tier: {last_tier.value}, "
+            f"failures: {len(retry_ctx.failure_history)}"
         )
 
     # ------------------------------------------------------------------
