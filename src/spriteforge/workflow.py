@@ -209,13 +209,13 @@ class SpriteForgeWorkflow:
                 semaphore = asyncio.Semaphore(self.max_concurrent_rows)
 
             completed_count = 0
-            completed_lock = asyncio.Lock()
 
             async def _process_one(row_idx_seq: int, animation: AnimationDef) -> None:
                 nonlocal completed_count
 
-                async def _inner() -> None:
-                    nonlocal completed_count
+                if semaphore is not None:
+                    await semaphore.acquire()
+                try:
                     logger.info(
                         "Processing row %d/%d: %s (%d frames)",
                         row_idx_seq,
@@ -250,15 +250,14 @@ class SpriteForgeWorkflow:
                     )
 
                     if progress_callback:
-                        async with completed_lock:
-                            completed_count += 1
-                            progress_callback("row", 1 + completed_count, total_rows)
-
-                if semaphore is not None:
-                    async with semaphore:
-                        await _inner()
-                else:
-                    await _inner()
+                        # No lock needed: asyncio is single-threaded and
+                        # the increment + sync callback have no await
+                        # between them, so they are already atomic.
+                        completed_count += 1
+                        progress_callback("row", 1 + completed_count, total_rows)
+                finally:
+                    if semaphore is not None:
+                        semaphore.release()
 
             await asyncio.gather(
                 *(_process_one(idx, anim) for idx, anim in remaining_animations)
@@ -491,6 +490,8 @@ class SpriteForgeWorkflow:
                     animation=animation,
                     generation=self.config.generation,
                     quantized_reference=quantized_reference,
+                    frame_width=self.config.character.frame_width,
+                    frame_height=self.config.character.frame_height,
                 )
             else:
                 grid = await self.grid_generator.generate_frame(
@@ -505,6 +506,8 @@ class SpriteForgeWorkflow:
                     prev_frame_rendered=prev_frame_rendered,
                     temperature=temperature,
                     additional_guidance=guidance,
+                    frame_width=self.config.character.frame_width,
+                    frame_height=self.config.character.frame_height,
                 )
 
             # Programmatic checks (fast-fail)

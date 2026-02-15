@@ -834,3 +834,105 @@ class TestPreprocessorResultReplacesPalette:
         assert wf.palette_map != original_map
         assert wf.palette_map["O"] == (0, 0, 0, 255)
         assert wf.palette_map["s"] == (255, 0, 0, 255)
+
+
+# ---------------------------------------------------------------------------
+# Variable frame dimension tests
+# ---------------------------------------------------------------------------
+
+
+class TestFrameDimensionsPassedToGenerator:
+    """Workflow passes frame_width/frame_height from config to generator."""
+
+    @pytest.mark.asyncio
+    async def test_custom_dimensions_passed_to_anchor(
+        self,
+        sample_palette: PaletteConfig,
+        tmp_path: Path,
+    ) -> None:
+        """Generate with 32×32 config → generator receives frame_width/height."""
+        config_32 = SpritesheetSpec(
+            character=CharacterConfig(
+                name="SmallChar",
+                frame_width=32,
+                frame_height=32,
+                spritesheet_columns=14,
+            ),
+            animations=[
+                AnimationDef(
+                    name="idle",
+                    row=0,
+                    frames=1,
+                    timing_ms=150,
+                    prompt_context="Standing",
+                ),
+            ],
+            palettes={"P1": sample_palette},
+            generation=GenerationConfig(),
+        )
+
+        small_grid = _make_valid_grid(".", rows=32, cols=32)
+
+        gen = AsyncMock(spec=GridGenerator)
+        gen.generate_anchor_frame = AsyncMock(return_value=small_grid)
+        gen.generate_frame = AsyncMock(return_value=small_grid)
+
+        wf = _build_workflow(config_32, sample_palette, grid_generator=gen)
+
+        ref_img = Image.new("RGBA", (32, 32), (100, 100, 100, 255))
+        ref_path = tmp_path / "ref.png"
+        ref_img.save(str(ref_path))
+        out_path = tmp_path / "out.png"
+
+        await wf.run(ref_path, out_path)
+
+        call_kwargs = gen.generate_anchor_frame.call_args.kwargs
+        assert call_kwargs["frame_width"] == 32
+        assert call_kwargs["frame_height"] == 32
+
+    @pytest.mark.asyncio
+    async def test_custom_dimensions_passed_to_frame(
+        self,
+        sample_palette: PaletteConfig,
+        tmp_path: Path,
+    ) -> None:
+        """Generate with 32×32 config → generate_frame receives dimensions."""
+        config_32 = SpritesheetSpec(
+            character=CharacterConfig(
+                name="SmallChar",
+                frame_width=32,
+                frame_height=32,
+                spritesheet_columns=14,
+            ),
+            animations=[
+                AnimationDef(
+                    name="idle",
+                    row=0,
+                    frames=3,
+                    timing_ms=150,
+                    prompt_context="Standing",
+                ),
+            ],
+            palettes={"P1": sample_palette},
+            generation=GenerationConfig(),
+        )
+
+        small_grid = _make_valid_grid(".", rows=32, cols=32)
+
+        gen = AsyncMock(spec=GridGenerator)
+        gen.generate_anchor_frame = AsyncMock(return_value=small_grid)
+        gen.generate_frame = AsyncMock(return_value=small_grid)
+
+        wf = _build_workflow(config_32, sample_palette, grid_generator=gen)
+
+        ref_img = Image.new("RGBA", (32, 32), (100, 100, 100, 255))
+        ref_path = tmp_path / "ref.png"
+        ref_img.save(str(ref_path))
+        out_path = tmp_path / "out.png"
+
+        await wf.run(ref_path, out_path)
+
+        # generate_frame called for frames 1 and 2
+        for call in gen.generate_frame.call_args_list:
+            assert call.kwargs["frame_width"] == 32
+            assert call.kwargs["frame_height"] == 32
