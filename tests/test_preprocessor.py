@@ -404,3 +404,233 @@ class TestAssignSymbols:
         assert len(symbols) == 16
         assert len(set(symbols)) == 16
         assert symbols[0] == "O"
+
+
+# ---------------------------------------------------------------------------
+# _describe_color
+# ---------------------------------------------------------------------------
+
+
+class TestDescribeColor:
+    """Tests for the _describe_color helper function."""
+
+    def test_describe_color_red(self) -> None:
+        from spriteforge.preprocessor import _describe_color
+
+        result = _describe_color((255, 0, 0))
+        assert "Red" in result
+
+    def test_describe_color_dark_blue(self) -> None:
+        from spriteforge.preprocessor import _describe_color
+
+        result = _describe_color((0, 0, 80))
+        assert "Dark" in result
+        assert "Blue" in result
+
+    def test_describe_color_light_green(self) -> None:
+        from spriteforge.preprocessor import _describe_color
+
+        result = _describe_color((150, 255, 150))
+        assert "Light" in result
+        assert "Green" in result
+
+    def test_describe_color_near_black(self) -> None:
+        from spriteforge.preprocessor import _describe_color
+
+        result = _describe_color((10, 10, 10))
+        assert result == "Near Black"
+
+    def test_describe_color_near_white(self) -> None:
+        from spriteforge.preprocessor import _describe_color
+
+        result = _describe_color((250, 250, 250))
+        assert result == "Near White"
+
+    def test_describe_color_gray(self) -> None:
+        from spriteforge.preprocessor import _describe_color
+
+        result = _describe_color((128, 128, 128))
+        assert "Gray" in result
+
+    def test_describe_color_brown(self) -> None:
+        from spriteforge.preprocessor import _describe_color
+
+        result = _describe_color((139, 90, 43))
+        assert "Brown" in result
+
+
+# ---------------------------------------------------------------------------
+# _assign_symbols with semantic_labels
+# ---------------------------------------------------------------------------
+
+
+class TestAssignSymbolsWithLabels:
+    """Tests for _assign_symbols with semantic labels."""
+
+    def test_assign_symbols_with_semantic_labels(self) -> None:
+        colors = [(255, 0, 0), (0, 255, 0), (0, 0, 100)]
+        coverage = [100, 500, 200]
+        labels = ["Skin", "Hair"]  # For the 2 non-outline colors (sorted by coverage)
+        result = _assign_symbols(
+            colors, coverage, outline_index=2, semantic_labels=labels
+        )
+        # Outline first
+        assert result[0][1] == "O"
+        assert result[0][2] == (0, 0, 100)
+        # Remaining sorted by coverage: green (500) > red (100)
+        assert result[1][0] == "Skin"
+        assert result[1][2] == (0, 255, 0)
+        assert result[2][0] == "Hair"
+        assert result[2][2] == (255, 0, 0)
+
+    def test_assign_symbols_without_labels(self) -> None:
+        """Fallback to 'Color N' when no labels provided."""
+        colors = [(255, 0, 0), (0, 255, 0)]
+        coverage = [100, 200]
+        result = _assign_symbols(
+            colors, coverage, outline_index=0, semantic_labels=None
+        )
+        # First remaining color (highest coverage) should be "Color 1"
+        assert result[1][0] == "Color 1"
+        assert result[1][2] == (0, 255, 0)
+
+    def test_assign_symbols_labels_length_mismatch(self) -> None:
+        """Wrong number of labels → ignored, falls back to 'Color N'."""
+        colors = [(255, 0, 0), (0, 255, 0), (0, 0, 100)]
+        coverage = [100, 500, 200]
+        labels = ["Skin"]  # Only 1 label, but 2 non-outline colors
+        result = _assign_symbols(
+            colors, coverage, outline_index=2, semantic_labels=labels
+        )
+        # Should fall back to "Color N"
+        assert "Color 1" in result[1][0]
+        assert "Color 2" in result[2][0]
+
+
+# ---------------------------------------------------------------------------
+# label_palette_colors_with_llm
+# ---------------------------------------------------------------------------
+
+
+class TestLabelPaletteColorsWithLLM:
+    """Tests for label_palette_colors_with_llm function."""
+
+    @pytest.mark.asyncio
+    async def test_label_palette_colors_with_llm_success(self) -> None:
+        """Mock provider returns valid labels → used."""
+        from spriteforge.preprocessor import label_palette_colors_with_llm
+
+        # Create a mock chat provider
+        class MockChatProvider:
+            async def chat(self, messages, temperature, response_format):
+                return '{"labels": ["Skin", "Hair", "Eyes"]}'
+
+        colors = [(235, 210, 185), (220, 185, 90), (50, 180, 140)]
+        quantized_png_bytes = b"fake-png-data"
+        character_description = "A warrior with brown hair"
+
+        result = await label_palette_colors_with_llm(
+            quantized_png_bytes, colors, character_description, MockChatProvider()
+        )
+
+        assert result == ["Skin", "Hair", "Eyes"]
+
+    @pytest.mark.asyncio
+    async def test_label_palette_colors_with_llm_failure(self) -> None:
+        """Mock provider raises → falls back to _describe_color()."""
+        from spriteforge.preprocessor import label_palette_colors_with_llm
+
+        class MockChatProvider:
+            async def chat(self, messages, temperature, response_format):
+                raise Exception("API error")
+
+        colors = [(255, 0, 0), (0, 255, 0)]
+        quantized_png_bytes = b"fake-png-data"
+        character_description = "A warrior"
+
+        result = await label_palette_colors_with_llm(
+            quantized_png_bytes, colors, character_description, MockChatProvider()
+        )
+
+        # Should fall back to descriptive names
+        assert len(result) == 2
+        assert all(isinstance(label, str) for label in result)
+
+    @pytest.mark.asyncio
+    async def test_label_palette_colors_with_llm_wrong_count(self) -> None:
+        """LLM returns wrong number → falls back to _describe_color()."""
+        from spriteforge.preprocessor import label_palette_colors_with_llm
+
+        class MockChatProvider:
+            async def chat(self, messages, temperature, response_format):
+                return '{"labels": ["Skin"]}'  # Only 1 label, but 2 colors
+
+        colors = [(255, 0, 0), (0, 255, 0)]
+        quantized_png_bytes = b"fake-png-data"
+        character_description = "A warrior"
+
+        result = await label_palette_colors_with_llm(
+            quantized_png_bytes, colors, character_description, MockChatProvider()
+        )
+
+        # Should fall back to descriptive names
+        assert len(result) == 2
+
+
+# ---------------------------------------------------------------------------
+# Integration tests (real Azure)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_label_palette_real_azure(
+    azure_project_endpoint: str, azure_credential, tmp_path: Path
+) -> None:
+    """Real GPT-5-nano call with a sample image → returns meaningful labels."""
+    from spriteforge.preprocessor import label_palette_colors_with_llm
+    from spriteforge.providers.azure_chat import AzureChatProvider
+
+    # Create a simple test image with 3 colors
+    img = Image.new("RGBA", (64, 64), (0, 0, 0, 0))
+    # Top third: skin-like beige
+    for x in range(64):
+        for y in range(20):
+            img.putpixel((x, y), (235, 210, 185, 255))
+    # Middle third: brown hair
+    for x in range(64):
+        for y in range(20, 40):
+            img.putpixel((x, y), (139, 90, 43, 255))
+    # Bottom third: blue eyes
+    for x in range(64):
+        for y in range(40, 60):
+            img.putpixel((x, y), (50, 120, 200, 255))
+
+    # Save as PNG bytes
+    buf = io.BytesIO()
+    img.save(buf, format="PNG")
+    quantized_png_bytes = buf.getvalue()
+
+    colors = [(235, 210, 185), (139, 90, 43), (50, 120, 200)]
+    character_description = "A human warrior with brown hair and blue eyes"
+
+    # Create real Azure chat provider with labeling model
+    provider = AzureChatProvider(
+        project_endpoint=azure_project_endpoint,
+        model_deployment_name="gpt-5-nano",
+        credential=azure_credential,
+    )
+
+    try:
+        result = await label_palette_colors_with_llm(
+            quantized_png_bytes, colors, character_description, provider
+        )
+
+        # The labels should be meaningful (not just "Color 1", etc.)
+        assert len(result) == 3
+        assert all(isinstance(label, str) for label in result)
+        # At least one label should be semantic (not generic "Color N")
+        has_semantic = any(not label.startswith("Color ") for label in result)
+        assert has_semantic, f"Expected semantic labels, got: {result}"
+    finally:
+        await provider.close()
