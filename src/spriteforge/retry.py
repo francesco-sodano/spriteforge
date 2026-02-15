@@ -108,14 +108,23 @@ class RetryManager:
     generation attempt.  It never calls external services.
     """
 
-    def __init__(self, config: RetryConfig | None = None) -> None:
+    def __init__(
+        self,
+        config: RetryConfig | None = None,
+        frame_width: int = 64,
+        frame_height: int = 64,
+    ) -> None:
         """Initialize with optional custom configuration.
 
         Args:
             config: Override default tier boundaries and temperatures.
                 When *None*, the defaults from :class:`RetryConfig` are used.
+            frame_width: Pixel width of each frame (used in guidance text).
+            frame_height: Pixel height of each frame (used in guidance text).
         """
         self._config = config or RetryConfig()
+        self._frame_width = frame_width
+        self._frame_height = frame_height
 
     # -- tier & temperature -------------------------------------------------
 
@@ -246,19 +255,26 @@ class RetryManager:
 
     # -- private helpers ----------------------------------------------------
 
-    @staticmethod
-    def _build_soft_guidance() -> str:
+    def _build_soft_guidance(self) -> str:
         """Minimal guidance for the SOFT tier."""
-        return build_soft_guidance()
+        return build_soft_guidance(
+            frame_width=self._frame_width,
+            frame_height=self._frame_height,
+        )
 
-    @staticmethod
-    def _build_guided_guidance(context: RetryContext) -> str:
+    def _build_guided_guidance(self, context: RetryContext) -> str:
         """Guidance for the GUIDED tier — includes specific gate feedback."""
-        return build_guided_guidance(context.failure_history)
+        return build_guided_guidance(
+            context.failure_history,
+            frame_width=self._frame_width,
+            frame_height=self._frame_height,
+        )
 
-    @staticmethod
-    def _build_constrained_guidance(context: RetryContext) -> str:
+    def _build_constrained_guidance(self, context: RetryContext) -> str:
         """Prescriptive guidance for the CONSTRAINED tier."""
         return build_constrained_guidance(
-            context.current_attempt, context.accumulated_feedback
+            context.current_attempt,
+            context.accumulated_feedback,
+            frame_width=self._frame_width,
+            frame_height=self._frame_height,
         )
