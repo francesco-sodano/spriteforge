@@ -3,13 +3,19 @@ name = "spriteforge"
 version = "0.1.0"
 description = "An AI-powered spritesheet generator for 2D games."
 readme = "README.md"
-requires-python = ">=3.12.12,<3.13"
+requires-python = ">=3.12.3,<3.13"
 authors = [{ name = "Francesco Sodano" }]
 license = { text = "MIT" }
 dependencies = [
     "pillow>=12.1.1",
     "pydantic>=2.0",
     "pyyaml>=6.0",
+    "azure-ai-projects>=1.0.0b7",
+    "azure-identity>=1.21.0",
+]
+
+[project.optional-dependencies]
+azure = [
     "azure-ai-projects>=1.0.0b7",
     "azure-identity>=1.21.0",
 ]

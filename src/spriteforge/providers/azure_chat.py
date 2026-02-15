@@ -58,8 +58,15 @@ class AzureChatProvider(ChatProvider):
         if self._openai_client is not None:
             return self._openai_client
 
-        from azure.ai.projects.aio import AIProjectClient  # type: ignore[import-untyped,import-not-found]
-        from azure.identity.aio import DefaultAzureCredential  # type: ignore[import-untyped,import-not-found]
+        try:
+            from azure.ai.projects.aio import AIProjectClient  # type: ignore[import-untyped,import-not-found]
+            from azure.identity.aio import DefaultAzureCredential  # type: ignore[import-untyped,import-not-found]
+        except ImportError as exc:
+            raise ImportError(
+                "Azure SDK packages are required for AzureChatProvider. "
+                "Install with: pip install spriteforge[azure] or "
+                "pip install azure-ai-projects azure-identity"
+            ) from exc
 
         if not self._endpoint:
             raise GenerationError(

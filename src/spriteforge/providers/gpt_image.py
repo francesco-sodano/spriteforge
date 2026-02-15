@@ -74,8 +74,15 @@ class GPTImageProvider(ReferenceProvider):
             An ``AIProjectClient`` instance.
         """
         if self._client is None:
-            from azure.ai.projects.aio import AIProjectClient  # type: ignore[import-not-found]
-            from azure.identity.aio import DefaultAzureCredential  # type: ignore[import-not-found]
+            try:
+                from azure.ai.projects.aio import AIProjectClient  # type: ignore[import-not-found]
+                from azure.identity.aio import DefaultAzureCredential  # type: ignore[import-not-found]
+            except ImportError as exc:
+                raise ImportError(
+                    "Azure SDK packages are required for GPTImageProvider. "
+                    "Install with: pip install spriteforge[azure] or "
+                    "pip install azure-ai-projects azure-identity"
+                ) from exc
 
             # Create credential if not provided by user
             if self._user_credential is not None:
