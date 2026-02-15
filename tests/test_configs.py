@@ -404,6 +404,4 @@ class TestExampleConfigs:
         """Both examples must have a character description."""
         for name in ("simple_enemy.yaml", "hero.yaml"):
             spec = load_config(EXAMPLES_DIR / name)
-            assert spec.character.description.strip(), (
-                f"{name} has empty description"
-            )
+            assert spec.character.description.strip(), f"{name} has empty description"
