@@ -1626,3 +1626,405 @@ async def test_workflow_integration_invalid_config(
             base_image_path="docs_assets/theron_base_reference.png",
             output_path="output/bad.png",
         )
+
+
+# ---------------------------------------------------------------------------
+# Unit tests: create_workflow factory
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_create_workflow_uses_grid_model(
+    single_row_config: SpritesheetSpec,
+) -> None:
+    """Verify GridGenerator receives a provider with the grid_model deployment."""
+    from unittest.mock import AsyncMock, patch
+
+    from spriteforge.workflow import create_workflow
+
+    # Set custom model names in config
+    single_row_config.generation.grid_model = "custom-grid-model"
+    single_row_config.generation.gate_model = "custom-gate-model"
+    single_row_config.generation.reference_model = "custom-ref-model"
+
+    mock_credential = AsyncMock()
+    mock_credential.close = AsyncMock()
+
+    with (
+        patch("spriteforge.providers.azure_chat.AzureChatProvider") as MockChatProvider,
+        patch("spriteforge.providers.gpt_image.GPTImageProvider") as MockImageProvider,
+    ):
+        mock_grid_provider = AsyncMock()
+        mock_gate_provider = AsyncMock()
+        MockChatProvider.side_effect = [mock_grid_provider, mock_gate_provider]
+        MockImageProvider.return_value = AsyncMock()
+
+        workflow = await create_workflow(
+            single_row_config,
+            project_endpoint="https://test.azure.com",
+            credential=mock_credential,
+        )
+
+        # Verify AzureChatProvider was called with grid_model for the first provider
+        calls = MockChatProvider.call_args_list
+        assert len(calls) == 2, "Should create two chat providers (grid + gate)"
+
+        # First call should be for grid model
+        grid_call = calls[0]
+        assert grid_call.kwargs["model_deployment_name"] == "custom-grid-model"
+        assert grid_call.kwargs["project_endpoint"] == "https://test.azure.com"
+        assert grid_call.kwargs["credential"] == mock_credential
+
+        await workflow.close()
+
+
+@pytest.mark.asyncio
+async def test_create_workflow_uses_gate_model(
+    single_row_config: SpritesheetSpec,
+) -> None:
+    """Verify LLMGateChecker receives a provider with the gate_model deployment."""
+    from unittest.mock import AsyncMock, patch
+
+    from spriteforge.workflow import create_workflow
+
+    single_row_config.generation.grid_model = "custom-grid-model"
+    single_row_config.generation.gate_model = "custom-gate-model"
+    single_row_config.generation.reference_model = "custom-ref-model"
+
+    mock_credential = AsyncMock()
+    mock_credential.close = AsyncMock()
+
+    with (
+        patch("spriteforge.providers.azure_chat.AzureChatProvider") as MockChatProvider,
+        patch("spriteforge.providers.gpt_image.GPTImageProvider") as MockImageProvider,
+    ):
+        mock_grid_provider = AsyncMock()
+        mock_gate_provider = AsyncMock()
+        MockChatProvider.side_effect = [mock_grid_provider, mock_gate_provider]
+        MockImageProvider.return_value = AsyncMock()
+
+        workflow = await create_workflow(
+            single_row_config,
+            project_endpoint="https://test.azure.com",
+            credential=mock_credential,
+        )
+
+        # Verify AzureChatProvider was called with gate_model for the second provider
+        calls = MockChatProvider.call_args_list
+        assert len(calls) == 2, "Should create two chat providers (grid + gate)"
+
+        # Second call should be for gate model
+        gate_call = calls[1]
+        assert gate_call.kwargs["model_deployment_name"] == "custom-gate-model"
+        assert gate_call.kwargs["project_endpoint"] == "https://test.azure.com"
+        assert gate_call.kwargs["credential"] == mock_credential
+
+        await workflow.close()
+
+
+@pytest.mark.asyncio
+async def test_create_workflow_uses_reference_model(
+    single_row_config: SpritesheetSpec,
+) -> None:
+    """Verify GPTImageProvider uses the reference_model deployment."""
+    from unittest.mock import AsyncMock, patch
+
+    from spriteforge.workflow import create_workflow
+
+    single_row_config.generation.grid_model = "custom-grid-model"
+    single_row_config.generation.gate_model = "custom-gate-model"
+    single_row_config.generation.reference_model = "custom-ref-model"
+
+    mock_credential = AsyncMock()
+    mock_credential.close = AsyncMock()
+
+    with (
+        patch("spriteforge.providers.azure_chat.AzureChatProvider") as MockChatProvider,
+        patch("spriteforge.providers.gpt_image.GPTImageProvider") as MockImageProvider,
+    ):
+        mock_grid_provider = AsyncMock()
+        mock_gate_provider = AsyncMock()
+        MockChatProvider.side_effect = [mock_grid_provider, mock_gate_provider]
+        mock_ref_provider = AsyncMock()
+        MockImageProvider.return_value = mock_ref_provider
+
+        workflow = await create_workflow(
+            single_row_config,
+            project_endpoint="https://test.azure.com",
+            credential=mock_credential,
+        )
+
+        # Verify GPTImageProvider was called with reference_model
+        MockImageProvider.assert_called_once_with(
+            project_endpoint="https://test.azure.com",
+            model_deployment="custom-ref-model",
+            credential=mock_credential,
+        )
+
+        await workflow.close()
+
+
+@pytest.mark.asyncio
+async def test_create_workflow_shared_credential(
+    single_row_config: SpritesheetSpec,
+) -> None:
+    """Verify all providers share the same credential object."""
+    from unittest.mock import AsyncMock, patch
+
+    from spriteforge.workflow import create_workflow
+
+    mock_credential = AsyncMock()
+    mock_credential.close = AsyncMock()
+
+    with (
+        patch("spriteforge.providers.azure_chat.AzureChatProvider") as MockChatProvider,
+        patch("spriteforge.providers.gpt_image.GPTImageProvider") as MockImageProvider,
+    ):
+        mock_grid_provider = AsyncMock()
+        mock_gate_provider = AsyncMock()
+        MockChatProvider.side_effect = [mock_grid_provider, mock_gate_provider]
+        MockImageProvider.return_value = AsyncMock()
+
+        workflow = await create_workflow(
+            single_row_config,
+            project_endpoint="https://test.azure.com",
+            credential=mock_credential,
+        )
+
+        # All providers should receive the same credential
+        for call in MockChatProvider.call_args_list:
+            assert call.kwargs["credential"] == mock_credential
+
+        MockImageProvider.assert_called_once()
+        assert MockImageProvider.call_args.kwargs["credential"] == mock_credential
+
+        # When user-provided credential, it should not be closed
+        await workflow.close()
+        mock_credential.close.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_create_workflow_fallback_env(
+    single_row_config: SpritesheetSpec, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Verify factory reads AZURE_AI_PROJECT_ENDPOINT when endpoint not provided."""
+    from unittest.mock import AsyncMock, patch
+
+    from spriteforge.workflow import create_workflow
+
+    # Set environment variable
+    monkeypatch.setenv("AZURE_AI_PROJECT_ENDPOINT", "https://env-endpoint.azure.com")
+
+    mock_credential = AsyncMock()
+    mock_credential.close = AsyncMock()
+
+    with (
+        patch("spriteforge.providers.azure_chat.AzureChatProvider") as MockChatProvider,
+        patch("spriteforge.providers.gpt_image.GPTImageProvider") as MockImageProvider,
+    ):
+        mock_grid_provider = AsyncMock()
+        mock_gate_provider = AsyncMock()
+        MockChatProvider.side_effect = [mock_grid_provider, mock_gate_provider]
+        MockImageProvider.return_value = AsyncMock()
+
+        # Don't pass endpoint — should fall back to env var
+        workflow = await create_workflow(
+            single_row_config,
+            credential=mock_credential,
+        )
+
+        # All providers should use the env var endpoint
+        for call in MockChatProvider.call_args_list:
+            assert call.kwargs["project_endpoint"] == "https://env-endpoint.azure.com"
+
+        MockImageProvider.assert_called_once()
+        assert (
+            MockImageProvider.call_args.kwargs["project_endpoint"]
+            == "https://env-endpoint.azure.com"
+        )
+
+        await workflow.close()
+
+
+@pytest.mark.asyncio
+async def test_workflow_close_cleans_all(single_row_config: SpritesheetSpec) -> None:
+    """Verify close() calls close() on all providers."""
+    from unittest.mock import AsyncMock
+
+    # Create mock providers with close methods
+    mock_grid_provider = AsyncMock()
+    mock_grid_provider.close = AsyncMock()
+
+    mock_gate_provider = AsyncMock()
+    mock_gate_provider.close = AsyncMock()
+
+    mock_ref_provider = AsyncMock()
+    mock_ref_provider.close = AsyncMock()
+
+    mock_grid_gen = AsyncMock()
+    mock_grid_gen._chat = mock_grid_provider
+
+    mock_gate_checker = AsyncMock()
+    mock_gate_checker._chat = mock_gate_provider
+
+    workflow = SpriteForgeWorkflow(
+        config=single_row_config,
+        reference_provider=mock_ref_provider,
+        grid_generator=mock_grid_gen,
+        gate_checker=mock_gate_checker,
+        programmatic_checker=ProgrammaticChecker(),
+        retry_manager=RetryManager(),
+        palette_map=build_palette_map(single_row_config.palettes["P1"]),
+    )
+
+    # Close workflow
+    await workflow.close()
+
+    # Verify all providers were closed
+    mock_grid_provider.close.assert_called_once()
+    mock_gate_provider.close.assert_called_once()
+    mock_ref_provider.close.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_workflow_close_with_owned_credential(
+    single_row_config: SpritesheetSpec,
+) -> None:
+    """Verify close() closes owned credentials created by factory."""
+    import sys
+    from types import SimpleNamespace
+    from unittest.mock import AsyncMock, patch
+
+    from spriteforge.workflow import create_workflow
+
+    mock_credential = AsyncMock()
+    mock_credential.close = AsyncMock()
+
+    # Create mock azure modules
+    mock_azure = SimpleNamespace()
+    mock_identity = SimpleNamespace()
+    mock_aio = SimpleNamespace()
+    mock_aio.DefaultAzureCredential = lambda: mock_credential
+    mock_identity.aio = mock_aio
+    mock_azure.identity = mock_identity
+
+    with (
+        patch.dict(
+            sys.modules,
+            {
+                "azure": mock_azure,
+                "azure.identity": mock_identity,
+                "azure.identity.aio": mock_aio,
+            },
+        ),
+        patch("spriteforge.providers.azure_chat.AzureChatProvider") as MockChatProvider,
+        patch("spriteforge.providers.gpt_image.GPTImageProvider") as MockImageProvider,
+    ):
+        mock_grid_provider = AsyncMock()
+        mock_gate_provider = AsyncMock()
+        MockChatProvider.side_effect = [mock_grid_provider, mock_gate_provider]
+        MockImageProvider.return_value = AsyncMock()
+
+        # Don't pass credential — factory creates one
+        workflow = await create_workflow(
+            single_row_config,
+            project_endpoint="https://test.azure.com",
+        )
+
+        # Close workflow — should close owned credential
+        await workflow.close()
+        mock_credential.close.assert_called_once()
+
+
+# ---------------------------------------------------------------------------
+# Integration test: create_workflow with real Azure
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_create_workflow_real_azure(
+    azure_project_endpoint: str,
+    azure_credential: Any,
+    tmp_path: Path,
+) -> None:
+    """Integration test: create_workflow with real Azure providers.
+
+    Verifies the factory correctly wires real providers with different
+    model deployments for grid generation, gate verification, and
+    reference generation.
+
+    Auto-skips when AZURE_AI_PROJECT_ENDPOINT is not set or credentials unavailable.
+    """
+    from spriteforge.config import load_config
+    from spriteforge.workflow import create_workflow
+
+    # Create a minimal test config
+    test_palette = PaletteConfig(
+        name="TestPalette",
+        outline=PaletteColor(element="Outline", symbol="O", r=15, g=30, b=10),
+        colors=[
+            PaletteColor(element="Skin", symbol="s", r=80, g=160, b=50),
+            PaletteColor(element="Eyes", symbol="e", r=200, g=30, b=30),
+        ],
+    )
+
+    config = SpritesheetSpec(
+        character=CharacterConfig(
+            name="TestEnemy",
+            character_class="Enemy",
+            description="Small green goblin with red eyes.",
+            frame_width=64,
+            frame_height=64,
+            spritesheet_columns=14,
+        ),
+        animations=[
+            AnimationDef(
+                name="idle",
+                row=0,
+                frames=2,
+                loop=True,
+                timing_ms=160,
+                prompt_context="Standing pose with slight movement.",
+            ),
+        ],
+        palettes={"P1": test_palette},
+        generation=GenerationConfig(
+            style="Modern HD pixel art",
+            facing="right",
+            feet_row=56,
+            rules="64x64 frames. Transparent background. 1px dark outline.",
+            grid_model="gpt-5.2",
+            gate_model="gpt-5-mini",
+            reference_model="gpt-image-1.5",
+        ),
+        base_image_path="docs_assets/theron_base_reference.png",
+        output_path="output/test_factory_spritesheet.png",
+    )
+
+    # Create workflow using factory
+    workflow = await create_workflow(
+        config=config,
+        project_endpoint=azure_project_endpoint,
+        credential=azure_credential,
+    )
+
+    try:
+        # Verify workflow was created
+        assert workflow is not None
+        assert workflow.config == config
+        assert workflow.grid_generator is not None
+        assert workflow.gate_checker is not None
+        assert workflow.reference_provider is not None
+
+        # Verify providers are properly initialized
+        assert hasattr(workflow.grid_generator, "_chat")
+        assert hasattr(workflow.gate_checker, "_chat")
+        assert hasattr(workflow.reference_provider, "close")
+
+        # Could optionally run a minimal generation here, but that's expensive
+        # and already covered by test_workflow_single_row_integration
+
+    finally:
+        # Clean up
+        await workflow.close()

@@ -877,10 +877,14 @@ async def create_workflow(
     # Create or reuse credential
     # If user provided a credential, we don't own it and won't close it
     # If we create one, we'll store it and close it in workflow.close()
-    from azure.identity.aio import DefaultAzureCredential  # type: ignore[import-untyped,import-not-found]
+    if credential is None:
+        from azure.identity.aio import DefaultAzureCredential  # type: ignore[import-untyped,import-not-found]
 
-    shared_credential = credential or DefaultAzureCredential()
-    owns_credential = credential is None
+        shared_credential = DefaultAzureCredential()
+        owns_credential = True
+    else:
+        shared_credential = credential
+        owns_credential = False
 
     # Create tiered chat providers
     grid_provider = AzureChatProvider(
