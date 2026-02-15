@@ -147,8 +147,8 @@ class GenerationConfig(BaseModel):
         max_palette_colors: Maximum number of palette colors (excluding
             transparent) to extract via quantization when *auto_palette*
             is enabled.  Default 16 (1 outline + 15 character colors).
-            Limited to 24 (22 available symbols in SYMBOL_POOL + 2 reserved:
-            '.' for transparent and 'O' for outline).
+            Limited to 23 (1 outline symbol + 22 available symbols in
+            SYMBOL_POOL; '.' transparent symbol is implicit).
     """
 
     style: str = "Modern HD pixel art (Dead Cells / Owlboy style)"
@@ -157,7 +157,7 @@ class GenerationConfig(BaseModel):
     outline_width: int = Field(default=1, ge=0)
     rules: str = ""
     auto_palette: bool = False
-    max_palette_colors: int = Field(default=16, ge=2, le=24)
+    max_palette_colors: int = Field(default=16, ge=2, le=23)
 
     @field_validator("facing")
     @classmethod

@@ -219,12 +219,18 @@ class TestExtractPaletteFromImage:
         assert total_opaque <= 10
 
     def test_max_palette_colors_at_pool_limit(self) -> None:
-        """Test that max_colors=24 (22 symbols + outline + transparent) works correctly."""
+        """Test that max_colors=23 works correctly at SYMBOL_POOL limit.
+
+        With SYMBOL_POOL having 22 symbols, the max opaque colors is 23:
+        - 1 outline (symbol 'O')
+        - 22 regular colors (from SYMBOL_POOL)
+        Total: 23 opaque colors (transparent '.' is implicit, not counted)
+        """
         img = _make_multicolor_image(num_colors=50)
-        palette = extract_palette_from_image(img, max_colors=24)
-        # Should have 1 outline + 22 regular colors (max from SYMBOL_POOL)
+        palette = extract_palette_from_image(img, max_colors=23)
+        # Should have exactly 1 outline + 22 regular colors = 23 total opaque
         total_opaque = 1 + len(palette.colors)
-        assert total_opaque <= 24
+        assert total_opaque <= 23
         # Verify no duplicate symbols
         symbols = [palette.transparent_symbol, palette.outline.symbol]
         symbols.extend(c.symbol for c in palette.colors)
@@ -234,13 +240,13 @@ class TestExtractPaletteFromImage:
             assert color.symbol in SYMBOL_POOL
 
     def test_max_palette_colors_exceeds_pool(self) -> None:
-        """Test that requesting max_colors > 24 is rejected by the model."""
+        """Test that requesting max_colors > 23 is rejected by the model."""
         # This test verifies that GenerationConfig enforces the upper bound
         # The preprocessor itself doesn't validate, but the config does
         from spriteforge.models import GenerationConfig
 
         with pytest.raises(ValidationError):
-            GenerationConfig(max_palette_colors=25)
+            GenerationConfig(max_palette_colors=24)
 
 
 # ---------------------------------------------------------------------------
