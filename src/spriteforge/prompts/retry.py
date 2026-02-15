@@ -12,6 +12,12 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from spriteforge.gates import GateVerdict
 
+# Proportional constants for sprite anatomy positioning.
+# These ratios define where key body regions fall relative to frame height.
+_TOP_PADDING_RATIO = 0.075  # ~7.5% — transparent rows above the head
+_HAIR_END_RATIO = 0.234  # ~23.4% — approximate end of hair region
+_FEET_ROW_RATIO = 0.875  # ~87.5% — where feet should be placed
+
 
 def build_soft_guidance(
     frame_width: int = 64,
@@ -26,7 +32,7 @@ def build_soft_guidance(
     Returns:
         A short reminder of fundamental pixel-art grid rules.
     """
-    feet_row = int(frame_height * 0.875)
+    feet_row = int(frame_height * _FEET_ROW_RATIO)
     return (
         f"Ensure the grid is exactly {frame_height} rows of {frame_width} characters. "
         "Use only the provided palette symbols. "
@@ -79,9 +85,9 @@ def build_constrained_guidance(
     Returns:
         Highly prescriptive guidance with exact pixel-level constraints.
     """
-    top_rows = max(1, int(frame_height * 0.075))
-    hair_end = max(top_rows + 1, int(frame_height * 0.234))
-    feet_row = int(frame_height * 0.875)
+    top_rows = max(1, int(frame_height * _TOP_PADDING_RATIO))
+    hair_end = max(top_rows + 1, int(frame_height * _HAIR_END_RATIO))
+    feet_row = int(frame_height * _FEET_ROW_RATIO)
     lines: list[str] = [
         f"CRITICAL: You have failed {current_attempt} times. "
         "Follow these exact constraints:",
