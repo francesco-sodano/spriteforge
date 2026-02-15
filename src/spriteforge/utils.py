@@ -9,12 +9,12 @@ import base64
 import io
 import json
 import re
-from typing import Any, Union
+from typing import Any
 
 from PIL import Image
 
 
-def image_to_base64(image: Union[Image.Image, bytes]) -> str:
+def image_to_base64(image: Image.Image | bytes) -> str:
     """Convert a PIL Image or raw bytes to a base64-encoded string.
 
     Args:
@@ -32,9 +32,7 @@ def image_to_base64(image: Union[Image.Image, bytes]) -> str:
     return base64.b64encode(raw).decode("ascii")
 
 
-def image_to_data_url(
-    image: Union[Image.Image, bytes], media_type: str = "image/png"
-) -> str:
+def image_to_data_url(image: Image.Image | bytes, media_type: str = "image/png") -> str:
     """Convert a PIL Image or raw bytes to a base64 data URL.
 
     Args:
