@@ -111,34 +111,48 @@ class GPTImageProvider(ReferenceProvider):
             strip_height,
         )
 
+        # Pick the best standard size for the strip.  GPT Image models only
+        # support 1024x1024, 1536x1024, 1024x1536, or "auto".  Reference
+        # strips are wider than tall, so landscape (1536x1024) is the best
+        # fixed option.  We resize to the desired strip size afterward.
+        # See: https://developers.openai.com/api/docs/guides/image-generation
+        api_size: str = "1536x1024"
+
         try:
             openai_client = client.get_openai_client()
 
-            ref_b64 = base64.b64encode(base_reference).decode("ascii")
-            response = await openai_client.images.generate(
+            # images.edit accepts `image` as raw file bytes (FileTypes),
+            # NOT a dict/JSON structure.  The SDK sends it as multipart/form-data.
+            response = await openai_client.images.edit(
                 model=self._model,
                 prompt=prompt,
-                image=[
-                    {
-                        "type": "input_image",
-                        "input_image": {
-                            "url": f"data:image/png;base64,{ref_b64}",
-                        },
-                    },
-                ],
-                size=f"{strip_width}x{strip_height}",
+                image=base_reference,
+                size=api_size,
                 n=1,
-                response_format="b64_json",
+                background="transparent",
+                output_format="png",
+                quality="high",
+                input_fidelity="high",
             )
         except Exception as exc:
             logger.error("Reference generation failed: %s", exc)
             raise ProviderError(f"Image generation failed: {exc}") from exc
 
         try:
+            # GPT Image models always return base64-encoded images
+            # (response_format is a DALL-E-only parameter).
             image_b64: str = response.data[0].b64_json  # type: ignore[union-attr]
             image_bytes = base64.b64decode(image_b64)
             image = Image.open(io.BytesIO(image_bytes))
             image.load()
+
+            # Resize from the standard API size to the desired strip
+            # dimensions.  This is a rough reference — not pixel-precise.
+            if image.size != (strip_width, strip_height):
+                image = image.resize(
+                    (strip_width, strip_height), Image.Resampling.LANCZOS
+                )
+
             logger.info("Reference strip generated (%dx%d)", image.width, image.height)
             return image
         except Exception as exc:

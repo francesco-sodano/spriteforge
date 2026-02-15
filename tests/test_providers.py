@@ -108,13 +108,14 @@ class TestGPTImageProviderGenerate:
 
     @pytest.mark.asyncio
     async def test_generate_returns_image(self) -> None:
-        """Mocked API returns a valid PIL Image."""
+        """Mocked API returns a valid PIL Image resized to strip dims."""
         provider = GPTImageProvider(project_endpoint="https://example.azure.com")
 
-        # Create a dummy generated image (strip of 8 frames)
-        dummy_strip = Image.new("RGBA", (512, 64), (100, 100, 100, 255))
+        # API returns a standard-size image (1536x1024);
+        # the provider should resize it to strip_width x strip_height.
+        api_image = Image.new("RGBA", (1536, 1024), (100, 100, 100, 255))
         buf = io.BytesIO()
-        dummy_strip.save(buf, format="PNG")
+        api_image.save(buf, format="PNG")
         b64_image = base64.b64encode(buf.getvalue()).decode("ascii")
 
         # Mock the response object
@@ -124,9 +125,9 @@ class TestGPTImageProviderGenerate:
         mock_response = MagicMock()
         mock_response.data = [mock_image_data]
 
-        # Mock openai_client.images.generate (async)
+        # Mock openai_client.images.edit (async) — the correct endpoint
         mock_images = MagicMock()
-        mock_images.generate = AsyncMock(return_value=mock_response)
+        mock_images.edit = AsyncMock(return_value=mock_response)
 
         mock_openai_client = MagicMock()
         mock_openai_client.images = mock_images
@@ -144,6 +145,7 @@ class TestGPTImageProviderGenerate:
         )
 
         assert isinstance(result, Image.Image)
+        # 8 frames * 64px wide, 64px tall
         assert result.size == (512, 64)
 
     @pytest.mark.asyncio
@@ -151,9 +153,9 @@ class TestGPTImageProviderGenerate:
         """API failure raises ProviderError."""
         provider = GPTImageProvider(project_endpoint="https://example.azure.com")
 
-        # Mock openai_client.images.generate to raise
+        # Mock openai_client.images.edit to raise
         mock_images = MagicMock()
-        mock_images.generate = AsyncMock(side_effect=RuntimeError("API unavailable"))
+        mock_images.edit = AsyncMock(side_effect=RuntimeError("API unavailable"))
         mock_openai_client = MagicMock()
         mock_openai_client.images = mock_images
 
@@ -183,7 +185,7 @@ class TestGPTImageProviderGenerate:
         mock_response.data = [mock_image_data]
 
         mock_images = MagicMock()
-        mock_images.generate = AsyncMock(return_value=mock_response)
+        mock_images.edit = AsyncMock(return_value=mock_response)
 
         mock_openai_client = MagicMock()
         mock_openai_client.images = mock_images
