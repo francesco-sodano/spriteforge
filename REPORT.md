@@ -9,15 +9,15 @@
 
 ## 1. Critical Issues
 
-### 1.1 Azure AI / GPT-Image-1.5 API Usage
-**Severity:** Critical (Likely Bug)
+### 1.1 Azure AI / GPT-Image-1.5 API Usage (CONFIRMED BUG)
+**Severity:** Critical
 **Location:** `src/spriteforge/providers/gpt_image.py`
 
-The implementation of `GPTImageProvider.generate_row_strip` uses a non-standard call structure for `openai_client.images.generate`:
+The implementation of `GPTImageProvider.generate_row_strip` incorrectly attempts to use the `images.generate` endpoint with an `image` parameter structured as a list of dictionaries:
 
 ```python
 response = await openai_client.images.generate(
-    model=self._model,
+    model=self._model,  # "gpt-image-1.5"
     prompt=prompt,
     image=[
         {
@@ -32,16 +32,18 @@ response = await openai_client.images.generate(
 ```
 
 **Analysis:**
-- The standard OpenAI Python SDK `images.generate` method (typically for DALL-E 3) does **not** accept an `image` parameter as a list of dictionaries.
-- Image-to-image operations usually use `images.create_variation` or `images.edit`, which take a single image file stream, or use `chat.completions.create` with multimodal inputs for vision models (GPT-4o).
-- "GPT-Image-1.5" appears to be a fictional or unreleased model name. If this refers to a specific private preview feature on Azure AI Foundry, the documentation and implementation should be verified against the specific API contract.
-- **Risk:** This code will likely fail at runtime against the standard Azure OpenAI service. The existing tests pass because they mock `openai_client.images.generate` permissively without validating the arguments.
+- **Endpoint Mismatch:** The `images.generate` endpoint is for *text-to-image* generation and does **not** accept an `image` parameter for input references.
+- **Model Capabilities:** While `gpt-image-1.5` is a valid model, utilizing an input reference image requires using either:
+    1.  The **Responses API** (`client.responses.create`), where `input_image` is passed within the `messages` structure and the tool is set to `type: "image_generation"`.
+    2.  The **Image Edits API** (`client.images.edit`), which accepts image file streams (not JSON lists).
+- **Current Implementation:** The code mixes the method signature of `images.generate` with a payload structure that partially resembles the Responses API input format. This will fail at runtime.
 
 **Recommendation:**
-- Verify the exact Azure AI Foundry API specification for the target model.
-- If using DALL-E 3 (text-to-image), remove the `image` parameter and rely on the prompt.
-- If using a vision model (like GPT-4o) for generation, switch to `chat.completions.create`.
-- If using image-to-image (variations), switch to `images.create_variation`.
+- **Switch to the Responses API:** This is the recommended modern approach for `gpt-image-1.5` with multimodal inputs.
+    - Change the call to `client.responses.create`.
+    - Move the prompt and image data into the `input` (messages) list.
+    - Set `tools=[{"type": "image_generation"}]`.
+    - Parse the response from `response.output` instead of `response.data`.
 
 ### 1.2 Inconsistent Quantization Logic
 **Severity:** High (Logic Error)
@@ -96,7 +98,7 @@ The `preprocess_reference` function performs quantization twice, leading to pote
     - **Mocking Strategy:** `tests/test_providers.py` uses permissive mocks (`MagicMock`) that do not validate the arguments passed to the API. This masked the critical issue in `gpt_image.py`.
     - **Integration Tests:** No true integration tests verifying the `input_image` payload structure against a schema or real endpoint.
 - **Recommendation:**
-    - Update `test_providers.py` to use `mock_openai_client.images.generate.assert_awaited_with(...)` and verify the exact arguments.
+    - Update `test_providers.py` to use `mock_openai_client.images.generate.assert_awaited_with(...)` (or the new method call) and verify the exact arguments match the expected API signature.
     - Add a schema validation test for the API payloads if possible.
 
 ---
@@ -111,7 +113,7 @@ The `preprocess_reference` function performs quantization twice, leading to pote
 
 ## 5. Summary of Next Steps
 
-1.  **Verify API:** Confirm the validity of `GPT-Image-1.5` and its `input_image` parameter.
+1.  **Refactor Provider:** Update `gpt_image.py` to use the `responses.create` API for proper image input handling.
 2.  **Refactor Preprocessor:** Fix the double-quantization logic.
-3.  **Harden Tests:** stricter assertions for API mocks.
+3.  **Harden Tests:** Add stricter assertions for API mocks to catch signature mismatches.
 4.  **Simplify Config:** Switch to Pydantic-native parsing.
