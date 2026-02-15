@@ -241,6 +241,51 @@ class TestCheckFeetPosition:
         assert verdict.passed is False
         assert "foot" in verdict.feedback.lower() or "55" in verdict.feedback
 
+    def test_feet_position_default_64x64(self, checker: ProgrammaticChecker) -> None:
+        """Default 64×64 frame → same behavior as before (regression)."""
+        grid = _make_valid_grid(".", 64, 64)
+        # Place content at row 55 (expected default)
+        grid[55] = "." * 30 + "s" + "." * 33
+        verdict = checker.check_feet_position(grid)
+        assert verdict.passed is True
+        # Verify default foot row is 55 (int(64 * 0.86) = 55)
+        assert "55" in verdict.feedback
+
+    def test_feet_position_32x32_frame(self, checker: ProgrammaticChecker) -> None:
+        """32×32 frame → foot zone is proportionally smaller."""
+        grid = _make_valid_grid(".", 32, 32)
+        # For 32px: expected_foot_row = int(32 * 0.86) = 27
+        # window = max(3, int(32 * 0.08)) = max(3, 2) = 3
+        # foot_zone = 27 ± 3 = rows 24–30
+        grid[27] = "." * 15 + "s" + "." * 16
+        verdict = checker.check_feet_position(grid, frame_height=32)
+        assert verdict.passed is True
+        assert "27" in verdict.feedback
+
+    def test_feet_position_128x128_frame(self, checker: ProgrammaticChecker) -> None:
+        """128×128 frame → foot zone is proportionally larger."""
+        grid = _make_valid_grid(".", 128, 128)
+        # For 128px: expected_foot_row = int(128 * 0.86) = 110
+        # window = max(3, int(128 * 0.08)) = max(3, 10) = 10
+        # foot_zone = 110 ± 10 = rows 100–120
+        grid[110] = "." * 60 + "s" + "." * 67
+        verdict = checker.check_feet_position(grid, frame_height=128)
+        assert verdict.passed is True
+        assert "110" in verdict.feedback
+
+    def test_feet_position_custom_foot_row(self, checker: ProgrammaticChecker) -> None:
+        """Override foot row → window scales correctly."""
+        grid = _make_valid_grid(".", 64, 64)
+        # Custom foot row at 40, frame_height 64
+        # window = max(3, int(64 * 0.08)) = 5
+        # foot_zone = 40 ± 5 = rows 35–45
+        grid[40] = "." * 30 + "s" + "." * 33
+        verdict = checker.check_feet_position(
+            grid, expected_foot_row=40, frame_height=64
+        )
+        assert verdict.passed is True
+        assert "40" in verdict.feedback
+
 
 # ---------------------------------------------------------------------------
 # ProgrammaticChecker — run_all

@@ -5,7 +5,6 @@ from __future__ import annotations
 import io
 from collections import Counter
 from pathlib import Path
-from typing import Any
 
 from PIL import Image
 from pydantic import BaseModel, ConfigDict
@@ -29,7 +28,7 @@ class PreprocessResult(BaseModel):
         final_color_count: Number of unique colors after quantization.
     """
 
-    quantized_image: Any  # PIL Image (not serializable)
+    quantized_image: Image.Image
     palette: PaletteConfig
     quantized_png_bytes: bytes
     original_color_count: int
