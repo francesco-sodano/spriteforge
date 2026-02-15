@@ -18,6 +18,11 @@ from enum import Enum
 from pydantic import BaseModel
 
 from spriteforge.gates import GateVerdict
+from spriteforge.prompts.retry import (
+    build_constrained_guidance,
+    build_guided_guidance,
+    build_soft_guidance,
+)
 
 # ---------------------------------------------------------------------------
 # Retry tier
@@ -244,34 +249,16 @@ class RetryManager:
     @staticmethod
     def _build_soft_guidance() -> str:
         """Minimal guidance for the SOFT tier."""
-        return (
-            "Ensure the grid is exactly 64 rows of 64 characters. "
-            "Use only the provided palette symbols. "
-            "Place feet near row 56. Include a 1-pixel dark outline."
-        )
+        return build_soft_guidance()
 
     @staticmethod
     def _build_guided_guidance(context: RetryContext) -> str:
         """Guidance for the GUIDED tier — includes specific gate feedback."""
-        lines: list[str] = ["Previous attempts failed for these reasons:"]
-        for verdict in context.failure_history:
-            if not verdict.passed and verdict.feedback:
-                lines.append(f"- {verdict.gate_name}: '{verdict.feedback}'")
-        lines.append("Please specifically address these issues in your next attempt.")
-        return "\n".join(lines)
+        return build_guided_guidance(context.failure_history)
 
     @staticmethod
     def _build_constrained_guidance(context: RetryContext) -> str:
         """Prescriptive guidance for the CONSTRAINED tier."""
-        lines: list[str] = [
-            f"CRITICAL: You have failed {context.current_attempt} times. "
-            "Follow these exact constraints:",
-            "- Rows 0-4: must be all '.' (transparent above head)",
-            "- Rows 5-15: hair region, use 'h' symbol",
-            "- Row 56 area: feet must be present (non-transparent)",
-            "Previous specific failures:",
-        ]
-        for fb in context.accumulated_feedback:
-            lines.append(f"- {fb}")
-        lines.append("Output must exactly match the reference image.")
-        return "\n".join(lines)
+        return build_constrained_guidance(
+            context.current_attempt, context.accumulated_feedback
+        )
