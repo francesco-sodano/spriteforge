@@ -13,6 +13,13 @@ class AzureChatProvider(ChatProvider):
 
     Consolidates the duplicated ``_call_llm()`` logic from ``generator.py``
     and ``gates.py`` into a single implementation.
+
+    Implements async context manager protocol for automatic cleanup::
+
+        async with AzureChatProvider(...) as provider:
+            response = await provider.chat(messages)
+            # Clients are reused across calls
+        # Automatic cleanup on exit
     """
 
     def __init__(
@@ -27,10 +34,55 @@ class AzureChatProvider(ChatProvider):
             project_endpoint: Azure AI Foundry project endpoint URL.
             model_deployment_name: Deployment name of the chat model.
             credential: Azure credential (defaults to ``DefaultAzureCredential``).
+                        If provided, the caller is responsible for closing it.
         """
         self._endpoint = project_endpoint
         self._model_deployment_name = model_deployment_name
-        self._credential = credential
+        self._user_credential = credential
+        self._owns_credential = credential is None
+
+        # Lazily initialized on first use
+        self._credential: Any | None = None
+        self._project_client: Any | None = None
+        self._openai_client: Any | None = None
+
+    async def _ensure_client(self) -> Any:
+        """Ensure clients are initialized, creating them on first use.
+
+        Returns:
+            The OpenAI client for making chat completion requests.
+
+        Raises:
+            GenerationError: If endpoint is not configured.
+        """
+        if self._openai_client is not None:
+            return self._openai_client
+
+        from azure.ai.projects.aio import AIProjectClient  # type: ignore[import-untyped,import-not-found]
+        from azure.identity.aio import DefaultAzureCredential  # type: ignore[import-untyped,import-not-found]
+
+        if not self._endpoint:
+            raise GenerationError(
+                "No Azure AI Foundry endpoint configured. "
+                "Set AZURE_AI_PROJECT_ENDPOINT or pass project_endpoint."
+            )
+
+        # Create credential if not provided by user
+        if self._user_credential is not None:
+            self._credential = self._user_credential
+        else:
+            self._credential = DefaultAzureCredential()
+
+        # Create Azure AI Project client
+        self._project_client = AIProjectClient(
+            credential=self._credential,
+            endpoint=self._endpoint,
+        )
+
+        # Get OpenAI client (sync method that returns async client)
+        self._openai_client = self._project_client.get_openai_client()
+
+        return self._openai_client
 
     async def chat(
         self,
@@ -39,6 +91,8 @@ class AzureChatProvider(ChatProvider):
         response_format: str | None = None,
     ) -> str:
         """Send a chat completion request via Azure AI Foundry.
+
+        Clients are created on first use and reused across subsequent calls.
 
         Args:
             messages: OpenAI-style messages list.
@@ -51,40 +105,17 @@ class AzureChatProvider(ChatProvider):
         Raises:
             GenerationError: If the API call fails or returns no content.
         """
-        from azure.ai.projects.aio import AIProjectClient  # type: ignore[import-untyped,import-not-found]
-        from azure.identity.aio import DefaultAzureCredential  # type: ignore[import-untyped,import-not-found]
+        client = await self._ensure_client()
 
-        if not self._endpoint:
-            raise GenerationError(
-                "No Azure AI Foundry endpoint configured. "
-                "Set AZURE_AI_PROJECT_ENDPOINT or pass project_endpoint."
-            )
-
-        credential = self._credential or DefaultAzureCredential()
-        try:
-            project_client = AIProjectClient(
-                credential=credential,
-                endpoint=self._endpoint,
-            )
-            try:
-                openai_client = project_client.get_openai_client()
-                try:
-                    kwargs: dict[str, Any] = {
-                        "model": self._model_deployment_name,
-                        "messages": messages,
-                        "temperature": temperature,
-                        "max_tokens": 16384,
-                    }
-                    response = await openai_client.chat.completions.create(
-                        **kwargs,  # type: ignore[arg-type]
-                    )
-                finally:
-                    await openai_client.close()
-            finally:
-                await project_client.close()
-        finally:
-            if self._credential is None:
-                await credential.close()
+        kwargs: dict[str, Any] = {
+            "model": self._model_deployment_name,
+            "messages": messages,
+            "temperature": temperature,
+            "max_tokens": 16384,
+        }
+        response = await client.chat.completions.create(
+            **kwargs,  # type: ignore[arg-type]
+        )
 
         if (
             not response.choices
@@ -94,3 +125,29 @@ class AzureChatProvider(ChatProvider):
             raise GenerationError("LLM returned no content")
 
         return str(response.choices[0].message.content)
+
+    async def close(self) -> None:
+        """Clean up resources.
+
+        Closes all clients and credentials owned by this provider.
+        User-supplied credentials are NOT closed.
+        """
+        if self._openai_client is not None:
+            await self._openai_client.close()
+            self._openai_client = None
+
+        if self._project_client is not None:
+            await self._project_client.close()
+            self._project_client = None
+
+        if self._owns_credential and self._credential is not None:
+            await self._credential.close()
+            self._credential = None
+
+    async def __aenter__(self) -> "AzureChatProvider":
+        """Enter async context manager."""
+        return self
+
+    async def __aexit__(self, *args: Any) -> None:
+        """Exit async context manager, cleaning up resources."""
+        await self.close()
