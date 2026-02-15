@@ -735,3 +735,98 @@ class TestGenerateFrame:
 
         assert len(grid) == 32
         assert all(len(row) == 48 for row in grid)
+
+
+# ---------------------------------------------------------------------------
+# Anchor frame: temperature & additional_guidance (bug fix tests)
+# ---------------------------------------------------------------------------
+
+
+class TestAnchorFrameRetryParams:
+    """Tests for temperature and additional_guidance in generate_anchor_frame."""
+
+    @pytest.mark.asyncio
+    async def test_anchor_frame_uses_custom_temperature(
+        self,
+        sample_palette: PaletteConfig,
+        sample_animation: AnimationDef,
+    ) -> None:
+        """Pass temperature=0.5 → verify chat is called with temperature=0.5."""
+        mock = MockChatProvider(responses=[_make_valid_json_response(".")])
+        gen = GridGenerator(chat_provider=mock)
+
+        await gen.generate_anchor_frame(
+            base_reference=_TINY_PNG,
+            reference_frame=_TINY_PNG,
+            palette=sample_palette,
+            animation=sample_animation,
+            temperature=0.5,
+        )
+
+        assert mock._call_history[0]["temperature"] == 0.5
+
+    @pytest.mark.asyncio
+    async def test_anchor_frame_uses_additional_guidance(
+        self,
+        sample_palette: PaletteConfig,
+        sample_animation: AnimationDef,
+    ) -> None:
+        """Pass non-empty guidance → verify it appears in the prompt."""
+        mock = MockChatProvider(responses=[_make_valid_json_response(".")])
+        gen = GridGenerator(chat_provider=mock)
+
+        guidance = "Focus on arm position and ensure sword is visible"
+
+        await gen.generate_anchor_frame(
+            base_reference=_TINY_PNG,
+            reference_frame=_TINY_PNG,
+            palette=sample_palette,
+            animation=sample_animation,
+            additional_guidance=guidance,
+        )
+
+        messages = mock._call_history[0]["messages"]
+        content = messages[1]["content"]
+        text_parts = [p["text"] for p in content if p["type"] == "text"]
+        full_text = " ".join(text_parts)
+        assert guidance in full_text
+
+    @pytest.mark.asyncio
+    async def test_anchor_frame_defaults_to_temp_1(
+        self,
+        sample_palette: PaletteConfig,
+        sample_animation: AnimationDef,
+    ) -> None:
+        """No temperature param → verify default 1.0 behavior preserved."""
+        mock = MockChatProvider(responses=[_make_valid_json_response(".")])
+        gen = GridGenerator(chat_provider=mock)
+
+        await gen.generate_anchor_frame(
+            base_reference=_TINY_PNG,
+            reference_frame=_TINY_PNG,
+            palette=sample_palette,
+            animation=sample_animation,
+        )
+
+        assert mock._call_history[0]["temperature"] == 1.0
+
+    def test_anchor_and_frame_signatures_match(self) -> None:
+        """Both methods accept temperature and additional_guidance."""
+        import inspect
+
+        anchor_sig = inspect.signature(GridGenerator.generate_anchor_frame)
+        frame_sig = inspect.signature(GridGenerator.generate_frame)
+
+        anchor_params = anchor_sig.parameters
+        frame_params = frame_sig.parameters
+
+        assert "temperature" in anchor_params
+        assert "temperature" in frame_params
+        assert "additional_guidance" in anchor_params
+        assert "additional_guidance" in frame_params
+
+        # Both should default to the same values
+        assert anchor_params["temperature"].default == 1.0
+        assert frame_params["temperature"].default == 1.0
+        assert anchor_params["additional_guidance"].default == ""
+        assert frame_params["additional_guidance"].default == ""

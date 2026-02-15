@@ -511,6 +511,8 @@ class SpriteForgeWorkflow:
                     animation=animation,
                     generation=self.config.generation,
                     quantized_reference=quantized_reference,
+                    temperature=temperature,
+                    additional_guidance=guidance,
                     frame_width=self.config.character.frame_width,
                     frame_height=self.config.character.frame_height,
                 )
