@@ -575,3 +575,63 @@ class TestLoadConfig:
         spec = load_config(cfg)
         assert spec.generation.auto_palette is False
         assert spec.generation.max_palette_colors == 16
+
+    def test_load_config_with_model_fields(self, config_dir: Path) -> None:
+        """Model fields can be specified in the generation section."""
+        cfg = config_dir / "models.yaml"
+        cfg.write_text(textwrap.dedent("""\
+                character:
+                  name: "TestChar"
+                animations:
+                  - name: idle
+                    row: 0
+                    frames: 4
+                    timing_ms: 150
+                generation:
+                  grid_model: "custom-grid"
+                  gate_model: "custom-gate"
+                  labeling_model: "custom-label"
+                  reference_model: "custom-ref"
+            """))
+        spec = load_config(cfg)
+        assert spec.generation.grid_model == "custom-grid"
+        assert spec.generation.gate_model == "custom-gate"
+        assert spec.generation.labeling_model == "custom-label"
+        assert spec.generation.reference_model == "custom-ref"
+
+    def test_load_config_without_model_fields(self, config_dir: Path) -> None:
+        """Model fields use defaults when not specified."""
+        cfg = config_dir / "no_models.yaml"
+        cfg.write_text(textwrap.dedent("""\
+                character:
+                  name: "TestChar"
+                animations:
+                  - name: idle
+                    row: 0
+                    frames: 4
+                    timing_ms: 150
+            """))
+        spec = load_config(cfg)
+        assert spec.generation.grid_model == "gpt-5.2"
+        assert spec.generation.gate_model == "gpt-5-mini"
+        assert spec.generation.labeling_model == "gpt-5-nano"
+        assert spec.generation.reference_model == "gpt-image-1.5"
+
+    def test_load_config_existing_configs_still_valid(self, tmp_path: Path) -> None:
+        """All existing configs in configs/ directory load without error."""
+        from pathlib import Path
+
+        configs_dir = Path(__file__).parent.parent / "configs"
+        if not configs_dir.exists():
+            pytest.skip("configs directory not found")
+
+        # Test main character configs
+        for config_file in ["theron.yaml", "sylara.yaml", "drunn.yaml"]:
+            config_path = configs_dir / config_file
+            if config_path.exists():
+                spec = load_config(config_path)
+                # Verify default model fields are applied
+                assert spec.generation.grid_model == "gpt-5.2"
+                assert spec.generation.gate_model == "gpt-5-mini"
+                assert spec.generation.labeling_model == "gpt-5-nano"
+                assert spec.generation.reference_model == "gpt-image-1.5"
