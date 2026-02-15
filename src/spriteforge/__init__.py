@@ -49,7 +49,6 @@ from spriteforge.renderer import (
     frame_to_png_bytes,
     render_frame,
     render_row_strip,
-    render_spritesheet,
 )
 from spriteforge.retry import (
     RetryConfig,
@@ -107,7 +106,6 @@ __all__ = [
     "preprocess_reference",
     "render_frame",
     "render_row_strip",
-    "render_spritesheet",
     "resize_reference",
     "setup_logging",
     "strip_code_fences",

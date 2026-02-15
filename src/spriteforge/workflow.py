@@ -44,8 +44,10 @@ class SpriteForgeWorkflow:
     """Orchestrates the full spritesheet generation pipeline.
 
     Uses plain async Python (asyncio) for workflow coordination.
-    Processes all animation rows sequentially, generating and verifying
-    each frame, then assembling the final spritesheet.
+    Row 0 (anchor) is always processed first; subsequent rows are
+    generated in parallel via ``asyncio.gather`` with an optional
+    concurrency cap (``max_concurrent_rows``) to respect API rate
+    limits and memory constraints.
 
     Both AI models (GPT-Image-1.5 for reference generation, Claude Opus 4.6
     for grid generation and verification) are accessed through the same
@@ -62,6 +64,7 @@ class SpriteForgeWorkflow:
         retry_manager: RetryManager,
         palette_map: dict[str, tuple[int, int, int, int]],
         preprocessor: Callable[..., PreprocessResult] | None = None,
+        max_concurrent_rows: int = 0,
     ) -> None:
         """Initialize the workflow with all required components.
 
@@ -77,6 +80,9 @@ class SpriteForgeWorkflow:
                 ``preprocess_reference``).  When provided, the base
                 reference image is resized, quantized, and optionally
                 auto-palette-extracted before generation begins.
+            max_concurrent_rows: Maximum number of rows to process in
+                parallel after the anchor row.  ``0`` (default) means
+                unlimited — all remaining rows run concurrently.
         """
         self.config = config
         self.reference_provider = reference_provider
@@ -86,6 +92,7 @@ class SpriteForgeWorkflow:
         self.retry_manager = retry_manager
         self.palette_map = palette_map
         self.preprocessor = preprocessor
+        self.max_concurrent_rows = max_concurrent_rows
 
     # ------------------------------------------------------------------
     # Public entry point
@@ -193,45 +200,69 @@ class SpriteForgeWorkflow:
         if progress_callback:
             progress_callback("row", 1, total_rows)
 
-        # ---- Process remaining rows ----
-        for row_idx_seq in range(1, total_rows):
-            animation = self.config.animations[row_idx_seq]
+        # ---- Process remaining rows (in parallel) ----
+        remaining_animations = list(enumerate(self.config.animations[1:], start=1))
 
-            logger.info(
-                "Processing row %d/%d: %s (%d frames)",
-                row_idx_seq,
-                total_rows,
-                animation.name,
-                animation.frames,
+        if remaining_animations:
+            semaphore: asyncio.Semaphore | None = None
+            if self.max_concurrent_rows > 0:
+                semaphore = asyncio.Semaphore(self.max_concurrent_rows)
+
+            completed_count = 0
+            completed_lock = asyncio.Lock()
+
+            async def _process_one(row_idx_seq: int, animation: AnimationDef) -> None:
+                nonlocal completed_count
+
+                async def _inner() -> None:
+                    nonlocal completed_count
+                    logger.info(
+                        "Processing row %d/%d: %s (%d frames)",
+                        row_idx_seq,
+                        total_rows,
+                        animation.name,
+                        animation.frames,
+                    )
+
+                    row_grids = await self._process_row(
+                        base_reference,
+                        animation,
+                        anchor_grid,
+                        anchor_rendered,
+                        palette,
+                    )
+
+                    row_strip = render_row_strip(
+                        row_grids,
+                        self.palette_map,
+                        spritesheet_columns=self.config.character.spritesheet_columns,
+                        frame_width=self.config.character.frame_width,
+                        frame_height=self.config.character.frame_height,
+                    )
+                    row_images[animation.row] = frame_to_png_bytes(row_strip)
+
+                    logger.info(
+                        "Row %d (%s) complete: %d/%d frames generated",
+                        row_idx_seq,
+                        animation.name,
+                        animation.frames,
+                        animation.frames,
+                    )
+
+                    if progress_callback:
+                        async with completed_lock:
+                            completed_count += 1
+                            progress_callback("row", 1 + completed_count, total_rows)
+
+                if semaphore is not None:
+                    async with semaphore:
+                        await _inner()
+                else:
+                    await _inner()
+
+            await asyncio.gather(
+                *(_process_one(idx, anim) for idx, anim in remaining_animations)
             )
-
-            row_grids = await self._process_row(
-                base_reference,
-                animation,
-                anchor_grid,
-                anchor_rendered,
-                palette,
-            )
-
-            row_strip = render_row_strip(
-                row_grids,
-                self.palette_map,
-                spritesheet_columns=self.config.character.spritesheet_columns,
-                frame_width=self.config.character.frame_width,
-                frame_height=self.config.character.frame_height,
-            )
-            row_images[animation.row] = frame_to_png_bytes(row_strip)
-
-            logger.info(
-                "Row %d (%s) complete: %d/%d frames generated",
-                row_idx_seq,
-                animation.name,
-                animation.frames,
-                animation.frames,
-            )
-
-            if progress_callback:
-                progress_callback("row", row_idx_seq + 1, total_rows)
 
         # ---- Assemble final spritesheet ----
         if progress_callback:

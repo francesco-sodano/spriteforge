@@ -6,8 +6,6 @@ import io
 
 from PIL import Image
 
-from spriteforge.models import SpritesheetSpec
-
 
 def render_frame(
     grid: list[str],
@@ -43,15 +41,20 @@ def render_frame(
                 f"Row {i} must be exactly {frame_width} characters, got {len(row)}"
             )
 
-    pixels: list[tuple[int, int, int, int]] = []
+    buf = bytearray(frame_width * frame_height * 4)
+    offset = 0
     for y, row in enumerate(grid):
         for x, symbol in enumerate(row):
             if symbol not in palette_map:
                 raise KeyError(f"Unknown palette symbol {symbol!r} at ({x}, {y})")
-            pixels.append(palette_map[symbol])
+            r, g, b, a = palette_map[symbol]
+            buf[offset] = r
+            buf[offset + 1] = g
+            buf[offset + 2] = b
+            buf[offset + 3] = a
+            offset += 4
 
-    img = Image.new("RGBA", (frame_width, frame_height))
-    img.putdata(pixels)  # type: ignore[arg-type]
+    img = Image.frombytes("RGBA", (frame_width, frame_height), bytes(buf))
     return img
 
 
@@ -88,50 +91,6 @@ def render_row_strip(
         strip.paste(frame_img, (x_offset, 0))
 
     return strip
-
-
-def render_spritesheet(
-    all_rows: dict[int, list[list[str]]],
-    spec: SpritesheetSpec,
-    palette_map: dict[str, tuple[int, int, int, int]],
-) -> Image.Image:
-    """Render all animation rows into a complete spritesheet image.
-
-    Args:
-        all_rows: Mapping of row index → list of frame grids.
-        spec: The spritesheet specification.
-        palette_map: Symbol → RGBA mapping.
-
-    Returns:
-        A complete spritesheet PIL Image.
-
-    Raises:
-        ValueError: If a required row is missing from all_rows.
-    """
-    sheet_w = spec.sheet_width
-    sheet_h = spec.sheet_height
-    frame_w = spec.character.frame_width
-    frame_h = spec.character.frame_height
-    cols = spec.character.spritesheet_columns
-
-    sheet = Image.new("RGBA", (sheet_w, sheet_h), (0, 0, 0, 0))
-
-    for animation in spec.animations:
-        row_idx = animation.row
-        if row_idx not in all_rows:
-            raise ValueError(f"Missing row {row_idx} ({animation.name}) in all_rows")
-
-        row_strip = render_row_strip(
-            all_rows[row_idx],
-            palette_map,
-            spritesheet_columns=cols,
-            frame_width=frame_w,
-            frame_height=frame_h,
-        )
-        y_offset = row_idx * frame_h
-        sheet.paste(row_strip, (0, y_offset))
-
-    return sheet
 
 
 def frame_to_png_bytes(image: Image.Image) -> bytes:

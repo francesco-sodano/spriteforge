@@ -8,18 +8,14 @@ import pytest
 from PIL import Image
 
 from spriteforge.models import (
-    AnimationDef,
-    CharacterConfig,
     PaletteColor,
     PaletteConfig,
-    SpritesheetSpec,
 )
 from spriteforge.palette import build_palette_map
 from spriteforge.renderer import (
     frame_to_png_bytes,
     render_frame,
     render_row_strip,
-    render_spritesheet,
 )
 
 # ---------------------------------------------------------------------------
@@ -49,8 +45,7 @@ class TestRenderFrame:
         assert img.mode == "RGBA"
         assert img.size == (64, 64)
         # Every pixel should be fully transparent
-        for pixel in img.getdata():
-            assert pixel == (0, 0, 0, 0)
+        assert all(b == 0 for b in img.tobytes())
 
     def test_render_frame_single_color(self, simple_palette: PaletteConfig) -> None:
         """64×64 grid of all 'O' → 64×64 image with outline color everywhere."""
@@ -60,7 +55,9 @@ class TestRenderFrame:
 
         assert img.size == (64, 64)
         outline_rgba = simple_palette.outline.rgba
-        for pixel in img.getdata():
+        raw = img.tobytes()
+        pixels = list(zip(raw[0::4], raw[1::4], raw[2::4], raw[3::4]))
+        for pixel in pixels:
             assert pixel == outline_rgba
 
     def test_render_frame_mixed(self, simple_palette: PaletteConfig) -> None:
@@ -232,77 +229,6 @@ class TestRenderRowStrip:
 
 
 # ---------------------------------------------------------------------------
-# render_spritesheet
-# ---------------------------------------------------------------------------
-
-
-class TestRenderSpritesheet:
-    """Tests for the render_spritesheet function."""
-
-    @pytest.fixture()
-    def two_row_spec(self) -> SpritesheetSpec:
-        return SpritesheetSpec(
-            character=CharacterConfig(
-                name="Hero",
-                frame_width=64,
-                frame_height=64,
-                spritesheet_columns=14,
-            ),
-            animations=[
-                AnimationDef(name="idle", row=0, frames=6, timing_ms=150),
-                AnimationDef(name="walk", row=1, frames=8, timing_ms=100),
-            ],
-        )
-
-    def test_render_spritesheet_dimensions(
-        self,
-        simple_palette: PaletteConfig,
-        two_row_spec: SpritesheetSpec,
-    ) -> None:
-        """Full spec → correct total dimensions."""
-        palette_map = build_palette_map(simple_palette)
-        all_rows = {
-            0: [_make_grid(".") for _ in range(6)],
-            1: [_make_grid(".") for _ in range(8)],
-        }
-        sheet = render_spritesheet(all_rows, two_row_spec, palette_map)
-
-        assert sheet.mode == "RGBA"
-        assert sheet.size == (14 * 64, 2 * 64)
-
-    def test_render_spritesheet_missing_row(
-        self,
-        simple_palette: PaletteConfig,
-        two_row_spec: SpritesheetSpec,
-    ) -> None:
-        """Missing row 1 → ValueError."""
-        palette_map = build_palette_map(simple_palette)
-        all_rows = {
-            0: [_make_grid(".") for _ in range(6)],
-        }
-        with pytest.raises(ValueError, match="Missing row 1"):
-            render_spritesheet(all_rows, two_row_spec, palette_map)
-
-    def test_render_spritesheet_row_placement(
-        self,
-        simple_palette: PaletteConfig,
-        two_row_spec: SpritesheetSpec,
-    ) -> None:
-        """Rows are placed at correct vertical positions."""
-        palette_map = build_palette_map(simple_palette)
-        all_rows = {
-            0: [_make_grid("O") for _ in range(6)],  # Outline color
-            1: [_make_grid("s") for _ in range(8)],  # Skin color
-        }
-        sheet = render_spritesheet(all_rows, two_row_spec, palette_map)
-
-        # Row 0, frame 0 area → outline color
-        assert sheet.getpixel((0, 0)) == palette_map["O"]
-        # Row 1, frame 0 area → skin color
-        assert sheet.getpixel((0, 64)) == palette_map["s"]
-
-
-# ---------------------------------------------------------------------------
 # frame_to_png_bytes
 # ---------------------------------------------------------------------------
 
@@ -322,7 +248,7 @@ class TestFrameToPngBytes:
 
         assert reopened.mode == "RGBA"
         assert reopened.size == (64, 64)
-        assert list(reopened.getdata()) == list(original.getdata())
+        assert reopened.tobytes() == original.tobytes()
 
     def test_frame_to_png_bytes_valid_png(self, simple_palette: PaletteConfig) -> None:
         """Output bytes start with PNG magic number."""

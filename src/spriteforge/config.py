@@ -64,6 +64,34 @@ def _parse_yaml(path: Path) -> dict:
     return data
 
 
+def _yaml_color_to_model(raw: dict) -> dict:
+    """Transform a YAML color entry to PaletteColor constructor kwargs.
+
+    Handles field renames:
+    - ``name`` → ``element``
+    - ``rgb: [R, G, B]`` → ``r``, ``g``, ``b``
+
+    Args:
+        raw: A single YAML color mapping.
+
+    Returns:
+        Dict ready for ``PaletteColor(**result)``.
+
+    Raises:
+        ValueError: If ``rgb`` is missing or not a 3-element list.
+    """
+    rgb = raw.get("rgb")
+    if not isinstance(rgb, list) or len(rgb) != 3:
+        raise ValueError(f"'rgb' must be a list of 3 ints, got {rgb!r}")
+    return {
+        "element": raw.get("name", ""),
+        "symbol": raw.get("symbol", ""),
+        "r": rgb[0],
+        "g": rgb[1],
+        "b": rgb[2],
+    }
+
+
 def _parse_palette(data: dict) -> PaletteConfig:
     """Parse a YAML palette section into a PaletteConfig.
 
@@ -79,6 +107,11 @@ def _parse_palette(data: dict) -> PaletteConfig:
               name: "Skin"
               rgb: [235, 210, 185]
             ...
+
+    Field name translation (YAML → model) is handled by
+    :func:`_yaml_color_to_model`; all type/constraint validation is
+    delegated to Pydantic's ``PaletteColor`` and ``PaletteConfig``
+    models.
 
     Args:
         data: Parsed YAML dict for the palette section.
@@ -96,48 +129,22 @@ def _parse_palette(data: dict) -> PaletteConfig:
 
     kwargs: dict = {"name": "P1"}
 
-    # --- Parse outline ---
     if "outline" in data:
         outline_raw = data["outline"]
         if not isinstance(outline_raw, dict):
             raise ValueError("'palette.outline' must be a mapping")
-        rgb = outline_raw.get("rgb", [20, 40, 40])
-        if not isinstance(rgb, list) or len(rgb) != 3:
-            raise ValueError(
-                f"'palette.outline.rgb' must be a list of 3 ints, got {rgb!r}"
-            )
-        kwargs["outline"] = PaletteColor(
-            element=outline_raw.get("name", "Outline"),
-            symbol=outline_raw.get("symbol", "O"),
-            r=rgb[0],
-            g=rgb[1],
-            b=rgb[2],
-        )
+        outline_kw = _yaml_color_to_model(outline_raw)
+        outline_kw.setdefault("element", "Outline")
+        outline_kw.setdefault("symbol", "O")
+        kwargs["outline"] = PaletteColor(**outline_kw)
 
-    # --- Parse colors ---
     if "colors" in data:
         colors_raw = data["colors"]
         if not isinstance(colors_raw, list):
             raise ValueError("'palette.colors' must be a YAML sequence")
-        colors: list[PaletteColor] = []
-        for entry in colors_raw:
-            if not isinstance(entry, dict):
-                raise ValueError("Each palette color entry must be a mapping")
-            rgb = entry.get("rgb")
-            if not isinstance(rgb, list) or len(rgb) != 3:
-                raise ValueError(
-                    f"'palette.colors[].rgb' must be a list of 3 ints, got {rgb!r}"
-                )
-            colors.append(
-                PaletteColor(
-                    element=entry.get("name", ""),
-                    symbol=entry.get("symbol", ""),
-                    r=rgb[0],
-                    g=rgb[1],
-                    b=rgb[2],
-                )
-            )
-        kwargs["colors"] = colors
+        kwargs["colors"] = [
+            PaletteColor(**_yaml_color_to_model(entry)) for entry in colors_raw
+        ]
 
     return PaletteConfig(**kwargs)
 

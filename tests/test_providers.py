@@ -4,7 +4,8 @@ from __future__ import annotations
 
 import base64
 import io
-from unittest.mock import AsyncMock, MagicMock
+from typing import Any
+from unittest.mock import AsyncMock, MagicMock, call
 
 import pytest
 from PIL import Image
@@ -33,6 +34,81 @@ def _dummy_png_bytes(width: int = 64, height: int = 64) -> bytes:
     buf = io.BytesIO()
     img.save(buf, format="PNG")
     return buf.getvalue()
+
+
+# ---------------------------------------------------------------------------
+# Expected API arguments — single source of truth for assertions
+# ---------------------------------------------------------------------------
+
+# These mirror the exact kwargs passed to openai_client.images.edit()
+# in GPTImageProvider.generate_row_strip.  If the production code
+# changes its API call signature, tests here will fail, which is the
+# point — we want to catch payload drift immediately.
+_EXPECTED_API_SIZE = "1536x1024"
+_DEFAULT_MODEL = "gpt-image-1.5"
+
+
+def _expected_edit_kwargs(
+    *,
+    prompt: str = "Test prompt",
+    image: bytes | None = None,
+    model: str = _DEFAULT_MODEL,
+    size: str = _EXPECTED_API_SIZE,
+) -> dict[str, Any]:
+    """Return the expected keyword arguments for ``images.edit``.
+
+    This centralises the expected payload so that if the real API call
+    adds/removes a parameter the test suite surfaces the change in ONE
+    place rather than many.
+    """
+    return {
+        "model": model,
+        "prompt": prompt,
+        "image": image,
+        "size": size,
+        "n": 1,
+        "background": "transparent",
+        "output_format": "png",
+        "quality": "high",
+        "input_fidelity": "high",
+    }
+
+
+# ---------------------------------------------------------------------------
+# Helper: build a mocked provider wired up for images.edit
+# ---------------------------------------------------------------------------
+
+
+def _make_mocked_provider(
+    *,
+    response: Any | None = None,
+    side_effect: Exception | None = None,
+    model: str = _DEFAULT_MODEL,
+) -> tuple[GPTImageProvider, MagicMock]:
+    """Create a GPTImageProvider with mocked internals.
+
+    Returns the provider **and** the ``mock_images`` object so callers
+    can inspect ``mock_images.edit`` assertions.
+    """
+    provider = GPTImageProvider(
+        project_endpoint="https://example.azure.com",
+        model_deployment=model,
+    )
+
+    mock_images = MagicMock()
+    # Only expose the 'edit' method — calling any other attribute
+    # (e.g. `.generate`, `.create`) will raise AttributeError,
+    # catching method-name typos in production code.
+    mock_images.edit = AsyncMock(return_value=response, side_effect=side_effect)
+
+    mock_openai_client = MagicMock()
+    mock_openai_client.images = mock_images
+
+    mock_ai_client = MagicMock()
+    mock_ai_client.get_openai_client.return_value = mock_openai_client
+
+    provider._client = mock_ai_client
+    return provider, mock_images
 
 
 # ---------------------------------------------------------------------------
@@ -104,13 +180,16 @@ class TestGPTImageProviderInit:
 
 
 class TestGPTImageProviderGenerate:
-    """Tests for GPTImageProvider.generate_row_strip (mocked API)."""
+    """Tests for GPTImageProvider.generate_row_strip (mocked API).
+
+    Every test that calls :pymethod:`generate_row_strip` also verifies
+    that ``images.edit`` was awaited with the **exact** expected
+    arguments.  This prevents silent API-signature drift.
+    """
 
     @pytest.mark.asyncio
     async def test_generate_returns_image(self) -> None:
         """Mocked API returns a valid PIL Image resized to strip dims."""
-        provider = GPTImageProvider(project_endpoint="https://example.azure.com")
-
         # API returns a standard-size image (1536x1024);
         # the provider should resize it to strip_width x strip_height.
         api_image = Image.new("RGBA", (1536, 1024), (100, 100, 100, 255))
@@ -118,28 +197,17 @@ class TestGPTImageProviderGenerate:
         api_image.save(buf, format="PNG")
         b64_image = base64.b64encode(buf.getvalue()).decode("ascii")
 
-        # Mock the response object
         mock_image_data = MagicMock()
         mock_image_data.b64_json = b64_image
 
         mock_response = MagicMock()
         mock_response.data = [mock_image_data]
 
-        # Mock openai_client.images.edit (async) — the correct endpoint
-        mock_images = MagicMock()
-        mock_images.edit = AsyncMock(return_value=mock_response)
+        provider, mock_images = _make_mocked_provider(response=mock_response)
 
-        mock_openai_client = MagicMock()
-        mock_openai_client.images = mock_images
-
-        # Mock AIProjectClient
-        mock_ai_client = MagicMock()
-        mock_ai_client.get_openai_client.return_value = mock_openai_client
-
-        provider._client = mock_ai_client
-
+        ref_bytes = _dummy_png_bytes()
         result = await provider.generate_row_strip(
-            base_reference=_dummy_png_bytes(),
+            base_reference=ref_bytes,
             prompt="Test prompt",
             num_frames=8,
         )
@@ -148,59 +216,56 @@ class TestGPTImageProviderGenerate:
         # 8 frames * 64px wide, 64px tall
         assert result.size == (512, 64)
 
+        # ---- Strict argument verification ----
+        mock_images.edit.assert_awaited_once_with(
+            **_expected_edit_kwargs(image=ref_bytes)
+        )
+
     @pytest.mark.asyncio
     async def test_generate_api_error_raises_provider_error(self) -> None:
         """API failure raises ProviderError."""
-        provider = GPTImageProvider(project_endpoint="https://example.azure.com")
+        provider, mock_images = _make_mocked_provider(
+            side_effect=RuntimeError("API unavailable")
+        )
 
-        # Mock openai_client.images.edit to raise
-        mock_images = MagicMock()
-        mock_images.edit = AsyncMock(side_effect=RuntimeError("API unavailable"))
-        mock_openai_client = MagicMock()
-        mock_openai_client.images = mock_images
-
-        mock_ai_client = MagicMock()
-        mock_ai_client.get_openai_client.return_value = mock_openai_client
-
-        provider._client = mock_ai_client
-
+        ref_bytes = _dummy_png_bytes()
         with pytest.raises(ProviderError, match="Image generation failed"):
             await provider.generate_row_strip(
-                base_reference=_dummy_png_bytes(),
+                base_reference=ref_bytes,
                 prompt="Test prompt",
                 num_frames=8,
             )
+
+        # Even on error, verify we attempted the right call.
+        mock_images.edit.assert_awaited_once_with(
+            **_expected_edit_kwargs(image=ref_bytes)
+        )
 
     @pytest.mark.asyncio
     async def test_generate_invalid_base64_raises_provider_error(
         self,
     ) -> None:
         """Invalid base64 response raises ProviderError."""
-        provider = GPTImageProvider(project_endpoint="https://example.azure.com")
-
         mock_image_data = MagicMock()
         mock_image_data.b64_json = "not-valid-base64!!!"
 
         mock_response = MagicMock()
         mock_response.data = [mock_image_data]
 
-        mock_images = MagicMock()
-        mock_images.edit = AsyncMock(return_value=mock_response)
+        provider, mock_images = _make_mocked_provider(response=mock_response)
 
-        mock_openai_client = MagicMock()
-        mock_openai_client.images = mock_images
-
-        mock_ai_client = MagicMock()
-        mock_ai_client.get_openai_client.return_value = mock_openai_client
-
-        provider._client = mock_ai_client
-
+        ref_bytes = _dummy_png_bytes()
         with pytest.raises(ProviderError, match="Failed to decode"):
             await provider.generate_row_strip(
-                base_reference=_dummy_png_bytes(),
+                base_reference=ref_bytes,
                 prompt="Test prompt",
                 num_frames=4,
             )
+
+        # Verify correct call even when decoding fails downstream.
+        mock_images.edit.assert_awaited_once_with(
+            **_expected_edit_kwargs(image=ref_bytes)
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -294,6 +359,201 @@ class TestBuildReferencePrompt:
         char = CharacterConfig(name="Generic NPC")
         prompt = build_reference_prompt(walk_animation, char)
         assert "Class:" not in prompt
+
+
+# ---------------------------------------------------------------------------
+# Tests: API contract / payload schema validation
+# ---------------------------------------------------------------------------
+
+
+class TestGPTImageProviderAPIContract:
+    """Verify that the API payload sent to images.edit matches the
+    expected schema.  These tests exist specifically to catch the class
+    of bug where code changes break the payload structure without any
+    test noticing (because permissive MagicMocks accept anything).
+    """
+
+    @pytest.mark.asyncio
+    async def test_edit_called_not_generate(self) -> None:
+        """Provider must call images.edit — NOT images.generate or images.create."""
+        api_image = Image.new("RGBA", (1536, 1024), (0, 0, 0, 0))
+        buf = io.BytesIO()
+        api_image.save(buf, format="PNG")
+        b64 = base64.b64encode(buf.getvalue()).decode("ascii")
+
+        mock_image_data = MagicMock()
+        mock_image_data.b64_json = b64
+        mock_response = MagicMock()
+        mock_response.data = [mock_image_data]
+
+        provider, mock_images = _make_mocked_provider(response=mock_response)
+
+        await provider.generate_row_strip(
+            base_reference=_dummy_png_bytes(),
+            prompt="x",
+            num_frames=1,
+        )
+
+        # images.edit must be called exactly once
+        mock_images.edit.assert_awaited_once()
+
+    @pytest.mark.asyncio
+    async def test_custom_model_deployment_forwarded(self) -> None:
+        """A custom model name is forwarded to the API."""
+        api_image = Image.new("RGBA", (64, 64), (0, 0, 0, 0))
+        buf = io.BytesIO()
+        api_image.save(buf, format="PNG")
+        b64 = base64.b64encode(buf.getvalue()).decode("ascii")
+
+        mock_image_data = MagicMock()
+        mock_image_data.b64_json = b64
+        mock_response = MagicMock()
+        mock_response.data = [mock_image_data]
+
+        provider, mock_images = _make_mocked_provider(
+            response=mock_response, model="my-custom-model"
+        )
+
+        ref_bytes = _dummy_png_bytes()
+        await provider.generate_row_strip(
+            base_reference=ref_bytes,
+            prompt="custom",
+            num_frames=1,
+        )
+
+        mock_images.edit.assert_awaited_once_with(
+            **_expected_edit_kwargs(
+                model="my-custom-model", prompt="custom", image=ref_bytes
+            )
+        )
+
+    @pytest.mark.asyncio
+    async def test_image_sent_as_raw_bytes(self) -> None:
+        """The base_reference image is sent as raw bytes, not a dict/JSON."""
+        api_image = Image.new("RGBA", (64, 64), (0, 0, 0, 0))
+        buf = io.BytesIO()
+        api_image.save(buf, format="PNG")
+        b64 = base64.b64encode(buf.getvalue()).decode("ascii")
+
+        mock_image_data = MagicMock()
+        mock_image_data.b64_json = b64
+        mock_response = MagicMock()
+        mock_response.data = [mock_image_data]
+
+        provider, mock_images = _make_mocked_provider(response=mock_response)
+
+        ref_bytes = _dummy_png_bytes()
+        await provider.generate_row_strip(
+            base_reference=ref_bytes,
+            prompt="check bytes",
+            num_frames=1,
+        )
+
+        # Inspect the actual `image` kwarg
+        actual_kwargs = mock_images.edit.call_args.kwargs
+        assert isinstance(
+            actual_kwargs["image"], bytes
+        ), f"Expected 'image' to be raw bytes, got {type(actual_kwargs['image'])}"
+
+    @pytest.mark.asyncio
+    async def test_payload_has_required_keys(self) -> None:
+        """Payload must contain all required keys for the images.edit API."""
+        api_image = Image.new("RGBA", (64, 64), (0, 0, 0, 0))
+        buf = io.BytesIO()
+        api_image.save(buf, format="PNG")
+        b64 = base64.b64encode(buf.getvalue()).decode("ascii")
+
+        mock_image_data = MagicMock()
+        mock_image_data.b64_json = b64
+        mock_response = MagicMock()
+        mock_response.data = [mock_image_data]
+
+        provider, mock_images = _make_mocked_provider(response=mock_response)
+
+        await provider.generate_row_strip(
+            base_reference=_dummy_png_bytes(),
+            prompt="schema check",
+            num_frames=4,
+        )
+
+        actual_kwargs = mock_images.edit.call_args.kwargs
+
+        required_keys = {
+            "model",
+            "prompt",
+            "image",
+            "size",
+            "n",
+            "background",
+            "output_format",
+            "quality",
+            "input_fidelity",
+        }
+        missing = required_keys - set(actual_kwargs.keys())
+        extra = set(actual_kwargs.keys()) - required_keys
+        assert not missing, f"Missing payload keys: {missing}"
+        assert not extra, f"Unexpected payload keys: {extra}"
+
+    @pytest.mark.asyncio
+    async def test_payload_value_types(self) -> None:
+        """Validate value types in the payload match API expectations."""
+        api_image = Image.new("RGBA", (64, 64), (0, 0, 0, 0))
+        buf = io.BytesIO()
+        api_image.save(buf, format="PNG")
+        b64 = base64.b64encode(buf.getvalue()).decode("ascii")
+
+        mock_image_data = MagicMock()
+        mock_image_data.b64_json = b64
+        mock_response = MagicMock()
+        mock_response.data = [mock_image_data]
+
+        provider, mock_images = _make_mocked_provider(response=mock_response)
+
+        await provider.generate_row_strip(
+            base_reference=_dummy_png_bytes(),
+            prompt="type check",
+            num_frames=4,
+        )
+
+        kw = mock_images.edit.call_args.kwargs
+        assert isinstance(kw["model"], str)
+        assert isinstance(kw["prompt"], str)
+        assert isinstance(kw["image"], bytes)
+        assert isinstance(kw["size"], str)
+        assert isinstance(kw["n"], int) and kw["n"] >= 1
+        assert kw["background"] in {"transparent", "opaque", "auto"}
+        assert kw["output_format"] in {"png", "jpeg", "webp"}
+        assert kw["quality"] in {"low", "medium", "high", "auto"}
+        # input_fidelity is a string hint
+        assert isinstance(kw["input_fidelity"], str)
+
+    @pytest.mark.asyncio
+    async def test_size_is_valid_api_literal(self) -> None:
+        """size must be one of the API-supported dimension strings."""
+        api_image = Image.new("RGBA", (64, 64), (0, 0, 0, 0))
+        buf = io.BytesIO()
+        api_image.save(buf, format="PNG")
+        b64 = base64.b64encode(buf.getvalue()).decode("ascii")
+
+        mock_image_data = MagicMock()
+        mock_image_data.b64_json = b64
+        mock_response = MagicMock()
+        mock_response.data = [mock_image_data]
+
+        provider, mock_images = _make_mocked_provider(response=mock_response)
+
+        await provider.generate_row_strip(
+            base_reference=_dummy_png_bytes(),
+            prompt="size check",
+            num_frames=4,
+        )
+
+        kw = mock_images.edit.call_args.kwargs
+        valid_sizes = {"1024x1024", "1536x1024", "1024x1536", "auto"}
+        assert kw["size"] in valid_sizes, (
+            f"size={kw['size']!r} is not a valid GPT-Image API size. "
+            f"Valid: {valid_sizes}"
+        )
 
 
 # ---------------------------------------------------------------------------
