@@ -52,6 +52,8 @@ against it for identity consistency.
 {frame_description}
 
 {quantized_section}
+
+{additional_guidance}
 """
 
 # ---------------------------------------------------------------------------
@@ -99,6 +101,7 @@ def build_anchor_frame_prompt(
     animation_context: str,
     frame_description: str,
     quantized_section: str,
+    additional_guidance: str = "",
 ) -> str:
     """Build the prompt for generating an anchor frame (Row 0, Frame 0).
 
@@ -107,6 +110,7 @@ def build_anchor_frame_prompt(
         animation_context: Contextual description of the animation.
         frame_description: Description of this specific frame.
         quantized_section: Pre-built quantized reference section (or empty).
+        additional_guidance: Extra prompt text for retry escalation.
 
     Returns:
         Formatted prompt string for anchor frame generation.
@@ -116,6 +120,7 @@ def build_anchor_frame_prompt(
         animation_context=animation_context,
         frame_description=frame_description,
         quantized_section=quantized_section,
+        additional_guidance=additional_guidance,
     )
 
 
