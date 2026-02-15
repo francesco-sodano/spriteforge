@@ -1,6 +1,6 @@
 """SpriteForge — AI-powered spritesheet generator for 2D pixel-art games."""
 
-from spriteforge.config import load_config
+from spriteforge.config import load_config, validate_config
 from spriteforge.errors import (
     ConfigError,
     GateError,
@@ -112,6 +112,7 @@ __all__ = [
     "setup_logging",
     "strip_code_fences",
     "swap_palette_grid",
+    "validate_config",
     "validate_grid_symbols",
     "validate_reference_image",
 ]

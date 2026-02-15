@@ -255,3 +255,111 @@ def load_config(path: str | Path) -> SpritesheetSpec:
     )
 
     return spec
+
+
+def validate_config(
+    path: str | Path,
+    *,
+    check_base_image: bool = True,
+) -> list[str]:
+    """Validate a character config file without running the pipeline.
+
+    Performs all checks that ``load_config()`` does (YAML parsing,
+    Pydantic schema validation) plus additional semantic checks:
+
+    - Palette symbol uniqueness (no duplicate symbols across outline + colors)
+    - Animation row indices are contiguous starting from 0
+    - Frame counts are > 0 and ≤ max_columns
+    - Base image path exists (when ``check_base_image=True``)
+    - Model deployment names are non-empty (when present)
+    - Outline symbol is "O" (conventional)
+
+    Args:
+        path: Path to the YAML configuration file.
+        check_base_image: Whether to verify the base image file exists.
+
+    Returns:
+        List of warning strings (empty if no warnings).
+        Warnings are non-fatal issues (e.g., missing optional sections).
+
+    Raises:
+        FileNotFoundError: If the config file doesn't exist.
+        ValueError: If any validation check fails.
+        ValidationError: If Pydantic schema validation fails.
+    """
+    # First, load the config to run standard validation
+    # This will raise FileNotFoundError, ValueError, or ValidationError if basic checks fail
+    spec = load_config(path)
+
+    warnings: list[str] = []
+
+    # --- Check 1: Duplicate palette symbols ---
+    # This is already checked by PaletteConfig._no_duplicate_symbols() model validator
+    # during load_config(), so we don't need to duplicate it here.
+    # However, we can add additional checks for cross-palette uniqueness if needed later.
+
+    # --- Check 2: Animation row indices are contiguous ---
+    if spec.animations:
+        rows = sorted([a.row for a in spec.animations])
+        expected_rows = list(range(len(rows)))
+        if rows != expected_rows:
+            # Find the gaps
+            missing = set(expected_rows) - set(rows)
+            if missing:
+                warnings.append(
+                    f"Animation row indices have gaps: missing rows {sorted(missing)}"
+                )
+
+    # --- Check 3: Frame counts validation ---
+    # Zero frame count is already prevented by AnimationDef field validator (frames: int = Field(..., ge=1))
+    # Max columns check is already done by SpritesheetSpec._validate_animations()
+    # So these are already covered by load_config()
+
+    # --- Check 4: Base image path exists ---
+    if check_base_image and spec.base_image_path:
+        resolved_path = Path(spec.base_image_path)
+        # If path is relative, resolve it relative to the config file location
+        if not resolved_path.is_absolute():
+            config_path = Path(path).resolve()
+            resolved_path = (config_path.parent / spec.base_image_path).resolve()
+
+        if not resolved_path.is_file():
+            raise ValueError(
+                f"Base image file does not exist: {spec.base_image_path} "
+                f"(resolved to {resolved_path})"
+            )
+
+    # --- Check 5: Model deployment names are non-empty ---
+    if spec.generation:
+        models = [
+            ("grid_model", spec.generation.grid_model),
+            ("gate_model", spec.generation.gate_model),
+            ("labeling_model", spec.generation.labeling_model),
+            ("reference_model", spec.generation.reference_model),
+        ]
+        for model_name, model_value in models:
+            if not model_value or not model_value.strip():
+                warnings.append(
+                    f"Model deployment name '{model_name}' is empty or whitespace-only"
+                )
+
+    # --- Check 6: Outline symbol is "O" (conventional) ---
+    if spec.palettes:
+        for palette_name, palette in spec.palettes.items():
+            if palette.outline.symbol != "O":
+                warnings.append(
+                    f"Palette '{palette_name}' uses non-standard outline symbol "
+                    f"'{palette.outline.symbol}' (convention is 'O')"
+                )
+
+    # --- Check 7: Excessive palette size ---
+    if spec.palettes:
+        for palette_name, palette in spec.palettes.items():
+            color_count = len(palette.colors)
+            if color_count > 20:
+                warnings.append(
+                    f"Palette '{palette_name}' has {color_count} colors (>20), "
+                    f"which may degrade grid generation quality"
+                )
+
+    return warnings
