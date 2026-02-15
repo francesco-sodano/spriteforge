@@ -234,22 +234,29 @@ class ProgrammaticChecker:
         self,
         grid: list[str],
         transparent_symbol: str = ".",
-        expected_foot_row: int = 55,
+        expected_foot_row: int | None = None,
+        frame_height: int = 64,
     ) -> GateVerdict:
         """Verify non-transparent pixels exist near the expected foot row.
 
-        Heuristic: at least some non-transparent pixels in rows 50–58.
+        Heuristic: at least some non-transparent pixels in a window around
+        the expected foot row. Both the foot row and window scale with frame height.
 
         Args:
             grid: The palette-indexed grid to check.
             transparent_symbol: The transparent palette symbol.
             expected_foot_row: The expected y-position for feet (0-indexed).
+                If None, defaults to ~86% of frame_height (~55 for 64px).
+            frame_height: Height of the frame in pixels (default 64).
 
         Returns:
             A ``GateVerdict`` indicating pass/fail with feedback.
         """
-        foot_zone_start = max(0, expected_foot_row - 5)
-        foot_zone_end = min(len(grid), expected_foot_row + 4)
+        if expected_foot_row is None:
+            expected_foot_row = int(frame_height * 0.86)
+        window = max(3, int(frame_height * 0.08))
+        foot_zone_start = max(0, expected_foot_row - window)
+        foot_zone_end = min(len(grid), expected_foot_row + window)
 
         for row_idx in range(foot_zone_start, foot_zone_end):
             if row_idx < len(grid):
@@ -303,7 +310,10 @@ class ProgrammaticChecker:
             self.check_outline_presence(grid, palette.outline.symbol),
             self.check_not_empty(grid, palette.transparent_symbol),
             self.check_feet_position(
-                grid, palette.transparent_symbol, expected_foot_row=feet_row
+                grid,
+                palette.transparent_symbol,
+                expected_foot_row=feet_row,
+                frame_height=frame_height,
             ),
         ]
         for v in verdicts:
