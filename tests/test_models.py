@@ -371,3 +371,46 @@ class TestGenerationConfig:
     def test_generation_config_max_palette_colors_zero(self) -> None:
         with pytest.raises(ValidationError):
             GenerationConfig(max_palette_colors=0)
+
+    def test_generation_config_model_defaults(self) -> None:
+        gen = GenerationConfig()
+        assert gen.grid_model == "gpt-5.2"
+        assert gen.gate_model == "gpt-5-mini"
+        assert gen.labeling_model == "gpt-5-nano"
+        assert gen.reference_model == "gpt-image-1.5"
+
+    def test_generation_config_custom_models(self) -> None:
+        gen = GenerationConfig(
+            grid_model="custom-grid",
+            gate_model="custom-gate",
+            labeling_model="custom-label",
+            reference_model="custom-ref",
+        )
+        assert gen.grid_model == "custom-grid"
+        assert gen.gate_model == "custom-gate"
+        assert gen.labeling_model == "custom-label"
+        assert gen.reference_model == "custom-ref"
+
+    def test_generation_config_partial_override(self) -> None:
+        gen = GenerationConfig(grid_model="custom-only")
+        assert gen.grid_model == "custom-only"
+        assert gen.gate_model == "gpt-5-mini"
+        assert gen.labeling_model == "gpt-5-nano"
+        assert gen.reference_model == "gpt-image-1.5"
+
+    def test_generation_config_serialization(self) -> None:
+        gen = GenerationConfig(
+            grid_model="test-grid",
+            gate_model="test-gate",
+        )
+        data = gen.model_dump()
+        assert data["grid_model"] == "test-grid"
+        assert data["gate_model"] == "test-gate"
+        assert data["labeling_model"] == "gpt-5-nano"
+        assert data["reference_model"] == "gpt-image-1.5"
+        # Test round-trip
+        gen2 = GenerationConfig(**data)
+        assert gen2.grid_model == gen.grid_model
+        assert gen2.gate_model == gen.gate_model
+        assert gen2.labeling_model == gen.labeling_model
+        assert gen2.reference_model == gen.reference_model

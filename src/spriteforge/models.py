@@ -149,6 +149,14 @@ class GenerationConfig(BaseModel):
             is enabled.  Default 16 (1 outline + 15 character colors).
             Limited to 23 (1 outline symbol + 22 available symbols in
             SYMBOL_POOL; '.' transparent symbol is implicit).
+        grid_model: Azure AI Foundry model deployment name for Stage 2 grid
+            generation (needs strong spatial reasoning).
+        gate_model: Azure AI Foundry model deployment name for verification
+            gates (simpler pass/fail checks).
+        labeling_model: Azure AI Foundry model deployment name for semantic
+            palette labeling (color naming).
+        reference_model: Azure AI Foundry model deployment name for Stage 1
+            reference image generation.
     """
 
     style: str = "Modern HD pixel art (Dead Cells / Owlboy style)"
@@ -158,6 +166,10 @@ class GenerationConfig(BaseModel):
     rules: str = ""
     auto_palette: bool = False
     max_palette_colors: int = Field(default=16, ge=2, le=23)
+    grid_model: str = "gpt-5.2"
+    gate_model: str = "gpt-5-mini"
+    labeling_model: str = "gpt-5-nano"
+    reference_model: str = "gpt-image-1.5"
 
     @field_validator("facing")
     @classmethod

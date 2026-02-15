@@ -154,6 +154,26 @@ generation:
   # Valid range: 2–64. Default: 16.
   # max_palette_colors: 16
 
+  # --- Model Deployment Names (Azure AI Foundry) ---
+  # Each pipeline stage can use a different model for cost optimization.
+  # These are Azure AI Foundry deployment names, not model family names.
+  #
+  # grid_model: Model for Stage 2 grid generation (needs strong spatial reasoning)
+  # Default: "gpt-5.2"
+  # grid_model: "gpt-5.2"
+
+  # gate_model: Model for verification gates (simpler pass/fail checks)
+  # Default: "gpt-5-mini"
+  # gate_model: "gpt-5-mini"
+
+  # labeling_model: Model for semantic palette labeling (color naming)
+  # Default: "gpt-5-nano"
+  # labeling_model: "gpt-5-nano"
+
+  # reference_model: Model for Stage 1 reference image generation
+  # Default: "gpt-image-1.5"
+  # reference_model: "gpt-image-1.5"
+
 # --- Paths ---
 # OPTIONAL: Base reference image (relative to repo root or absolute)
 base_image_path: "assets/my_character_reference.png"
