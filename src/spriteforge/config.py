@@ -152,6 +152,9 @@ def _parse_palette(data: dict) -> PaletteConfig:
 def load_config(path: str | Path) -> SpritesheetSpec:
     """Load and validate a spritesheet configuration from a YAML file.
 
+    Structural validation (e.g., duplicate row indices) is handled by
+    ``SpritesheetSpec``'s model validators during construction.
+
     Args:
         path: Path to the YAML configuration file.
 
@@ -204,14 +207,7 @@ def load_config(path: str | Path) -> SpritesheetSpec:
     character = CharacterConfig(**char_raw)
 
     # --- Build AnimationDef list ---
-    animations: list[AnimationDef] = []
-    seen_rows: set[int] = set()
-    for anim_raw in data["animations"]:
-        anim = AnimationDef(**anim_raw)
-        if anim.row in seen_rows:
-            raise ValueError(f"Duplicate row index {anim.row} in animations")
-        seen_rows.add(anim.row)
-        animations.append(anim)
+    animations = [AnimationDef(**anim_raw) for anim_raw in data["animations"]]
 
     # Sort animations by row index
     animations.sort(key=lambda a: a.row)
