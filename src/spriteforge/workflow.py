@@ -832,8 +832,9 @@ async def create_workflow(
     - gate_model → LLMGateChecker
     - reference_model → GPTImageProvider
 
-    All providers share the same Azure credential instance to avoid
-    multiple token fetches.
+    Chat providers share the same Azure credential instance to avoid
+    multiple token fetches. GPTImageProvider uses API key authentication
+    and reads credentials from environment variables.
 
     Args:
         config: Spritesheet specification with model deployment names.
