@@ -332,3 +332,109 @@ class TestCustomConfig:
         assert config.soft_temperature == 1.0
         assert config.guided_temperature == 0.7
         assert config.constrained_temperature == 0.3
+
+
+# ---------------------------------------------------------------------------
+# Dynamic retry guidance dimensions (Phase 5)
+# ---------------------------------------------------------------------------
+
+
+class TestDynamicRetryGuidance:
+    """Tests for parameterized frame dimensions in retry guidance."""
+
+    def test_soft_guidance_default_64x64(self) -> None:
+        mgr = RetryManager()
+        ctx = mgr.create_context("row0_frame0")
+        guidance = mgr.build_escalated_guidance(ctx)
+        assert "64 rows of 64 characters" in guidance
+
+    def test_soft_guidance_32x32(self) -> None:
+        mgr = RetryManager(frame_width=32, frame_height=32)
+        ctx = mgr.create_context("row0_frame0")
+        guidance = mgr.build_escalated_guidance(ctx)
+        assert "32 rows of 32 characters" in guidance
+
+    def test_soft_guidance_128x128(self) -> None:
+        mgr = RetryManager(frame_width=128, frame_height=128)
+        ctx = mgr.create_context("row0_frame0")
+        guidance = mgr.build_escalated_guidance(ctx)
+        assert "128 rows of 128 characters" in guidance
+
+    def test_soft_guidance_no_hardcoded_64(self) -> None:
+        mgr = RetryManager(frame_width=32, frame_height=32)
+        ctx = mgr.create_context("row0_frame0")
+        guidance = mgr.build_escalated_guidance(ctx)
+        assert "64" not in guidance
+
+    def test_constrained_guidance_feet_row_scales(self) -> None:
+        # 64px → feet_row = int(64 * 0.875) = 56
+        mgr64 = RetryManager(frame_width=64, frame_height=64)
+        ctx64 = RetryContext(
+            frame_id="f",
+            current_attempt=6,
+            max_attempts=10,
+            failure_history=[],
+            accumulated_feedback=["fb"],
+        )
+        guidance64 = mgr64.build_escalated_guidance(ctx64)
+        assert "Row 56" in guidance64
+
+        # 32px → feet_row = int(32 * 0.875) = 28
+        mgr32 = RetryManager(frame_width=32, frame_height=32)
+        ctx32 = RetryContext(
+            frame_id="f",
+            current_attempt=6,
+            max_attempts=10,
+            failure_history=[],
+            accumulated_feedback=["fb"],
+        )
+        guidance32 = mgr32.build_escalated_guidance(ctx32)
+        assert "Row 28" in guidance32
+        assert "56" not in guidance32
+
+    def test_guided_prompt_uses_dimensions(self) -> None:
+        mgr = RetryManager(frame_width=48, frame_height=48)
+        ctx = RetryContext(
+            frame_id="f",
+            current_attempt=3,
+            max_attempts=10,
+            failure_history=[
+                _verdict(gate_name="gate_0", feedback="Bad pose"),
+            ],
+            accumulated_feedback=["Bad pose"],
+        )
+        guidance = mgr.build_escalated_guidance(ctx)
+        assert "48 rows of 48 characters" in guidance
+
+    def test_retry_manager_passes_dimensions(self) -> None:
+        mgr = RetryManager(frame_width=48, frame_height=96)
+        # Soft tier: check dimensions in soft guidance
+        ctx_soft = mgr.create_context("f")
+        guidance = mgr.build_escalated_guidance(ctx_soft)
+        assert "96 rows of 48 characters" in guidance
+
+    def test_proportional_top_rows_32(self) -> None:
+        # 32px: top_rows = max(1, int(32 * 0.075)) = max(1, 2) = 2
+        mgr = RetryManager(frame_width=32, frame_height=32)
+        ctx = RetryContext(
+            frame_id="f",
+            current_attempt=6,
+            max_attempts=10,
+            failure_history=[],
+            accumulated_feedback=["fb"],
+        )
+        guidance = mgr.build_escalated_guidance(ctx)
+        assert "Rows 0-2" in guidance
+
+    def test_proportional_top_rows_128(self) -> None:
+        # 128px: top_rows = max(1, int(128 * 0.075)) = max(1, 9) = 9
+        mgr = RetryManager(frame_width=128, frame_height=128)
+        ctx = RetryContext(
+            frame_id="f",
+            current_attempt=6,
+            max_attempts=10,
+            failure_history=[],
+            accumulated_feedback=["fb"],
+        )
+        guidance = mgr.build_escalated_guidance(ctx)
+        assert "Rows 0-9" in guidance
