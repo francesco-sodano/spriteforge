@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import io
 import random
+import os
 from pathlib import Path
 
 import pytest
@@ -585,7 +586,7 @@ class TestLabelPaletteColorsWithLLM:
 @pytest.mark.integration
 @pytest.mark.asyncio
 async def test_label_palette_real_azure(
-    azure_project_endpoint: str, azure_credential, tmp_path: Path
+    azure_project_endpoint: str, tmp_path: Path
 ) -> None:
     """Real GPT-5-nano call with a sample image → returns meaningful labels."""
     from spriteforge.preprocessor import label_palette_colors_with_llm
@@ -617,8 +618,9 @@ async def test_label_palette_real_azure(
     # Create real Azure chat provider with labeling model
     provider = AzureChatProvider(
         project_endpoint=azure_project_endpoint,
-        model_deployment_name="gpt-5-nano",
-        credential=azure_credential,
+        model_deployment_name=os.environ.get(
+            "SPRITEFORGE_TEST_LABELING_MODEL", GenerationConfig().labeling_model
+        ),
     )
 
     try:

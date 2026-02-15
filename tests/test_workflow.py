@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import io
+import os
 from pathlib import Path
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -1487,7 +1488,6 @@ class TestMultipleRunsIndependent:
 @pytest.mark.asyncio
 async def test_workflow_single_row_integration(
     azure_project_endpoint: str,
-    azure_credential: Any,
     tmp_path: Path,
 ) -> None:
     """Integration test: generate a single-row spritesheet with real Azure AI.
@@ -1498,7 +1498,6 @@ async def test_workflow_single_row_integration(
 
     Auto-skips when AZURE_AI_PROJECT_ENDPOINT is not set or credentials unavailable.
     """
-    from spriteforge.config import load_config
     from spriteforge.providers import AzureChatProvider, GPTImageProvider
 
     # Create a minimal test palette
@@ -1553,13 +1552,23 @@ async def test_workflow_single_row_integration(
     )
 
     # Create real Azure providers
-    chat_provider = AzureChatProvider(
+    grid_chat_provider = AzureChatProvider(
         project_endpoint=azure_project_endpoint,
-        model_deployment_name="claude-opus-4.6",
-        credential=azure_credential,
+        model_deployment_name=os.environ.get(
+            "SPRITEFORGE_TEST_GRID_MODEL", config.generation.grid_model
+        ),
+    )
+    gate_chat_provider = AzureChatProvider(
+        project_endpoint=azure_project_endpoint,
+        model_deployment_name=os.environ.get(
+            "SPRITEFORGE_TEST_GATE_MODEL", config.generation.gate_model
+        ),
     )
     ref_provider = GPTImageProvider(
         project_endpoint=azure_project_endpoint,
+        model_deployment=os.environ.get(
+            "SPRITEFORGE_TEST_REFERENCE_MODEL", config.generation.reference_model
+        ),
     )
 
     # Build palette map
@@ -1569,8 +1578,8 @@ async def test_workflow_single_row_integration(
     workflow = SpriteForgeWorkflow(
         config=config,
         reference_provider=ref_provider,
-        grid_generator=GridGenerator(chat_provider),
-        gate_checker=LLMGateChecker(chat_provider),
+        grid_generator=GridGenerator(grid_chat_provider),
+        gate_checker=LLMGateChecker(gate_chat_provider),
         programmatic_checker=ProgrammaticChecker(),
         retry_manager=RetryManager(),
         palette_map=palette_map,
@@ -1603,7 +1612,8 @@ async def test_workflow_single_row_integration(
 
     finally:
         # Clean up provider resources
-        await chat_provider.close()
+        await grid_chat_provider.close()
+        await gate_chat_provider.close()
         await ref_provider.close()
 
 
@@ -1611,7 +1621,6 @@ async def test_workflow_single_row_integration(
 @pytest.mark.asyncio
 async def test_workflow_integration_invalid_config(
     azure_project_endpoint: str,
-    azure_credential: Any,
     tmp_path: Path,
 ) -> None:
     """Integration test: verify proper error handling with invalid config.

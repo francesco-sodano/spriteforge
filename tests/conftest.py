@@ -28,9 +28,17 @@ def _azure_credentials_available() -> bool:
     """Check whether Azure AI Foundry credentials are available.
 
     Returns True when:
+    0. Integration tests are explicitly enabled, AND
     1. The AZURE_AI_PROJECT_ENDPOINT env var is set, AND
     2. DefaultAzureCredential can obtain a token.
     """
+    if os.environ.get("SPRITEFORGE_RUN_INTEGRATION", "").strip().lower() not in (
+        "1",
+        "true",
+        "yes",
+        "on",
+    ):
+        return False
     endpoint = os.environ.get("AZURE_AI_PROJECT_ENDPOINT", "")
     if not endpoint:
         return False
@@ -63,7 +71,10 @@ def pytest_collection_modifyitems(
     if _is_azure_available():
         return
     skip_marker = pytest.mark.skip(
-        reason="Integration test skipped: AZURE_AI_PROJECT_ENDPOINT not set or DefaultAzureCredential cannot authenticate."
+        reason=(
+            "Integration test skipped: set SPRITEFORGE_RUN_INTEGRATION=1 and "
+            "ensure AZURE_AI_PROJECT_ENDPOINT is set and DefaultAzureCredential can authenticate."
+        )
     )
     for item in items:
         if "integration" in item.keywords:

@@ -1,19 +1,21 @@
 # SpriteForge
 
-An AI-powered spritesheet generator for 2D pixel-art games. Feed it a **base character reference image** and a **self-contained YAML config file** defining the character (palette, animations, generation rules), and it uses a **two-stage AI pipeline** — GPT-Image-1.5 for rough reference generation and Claude Opus 4.6 for pixel-precise grid generation — both hosted on **Azure AI Foundry**, to produce a game-ready spritesheet PNG with transparent backgrounds.
+An AI-powered spritesheet generator for 2D pixel-art games. Feed it a **base character reference image** and a **self-contained YAML config file** defining the character (palette, animations, generation rules), and it uses a **two-stage AI pipeline** (hosted on **Azure AI Foundry**) to produce a game-ready spritesheet PNG with transparent backgrounds.
 
-**One run = one character spritesheet.** Any character — heroes, enemies, bosses, NPCs — can be generated from the same standard input format.
+**One run = one character spritesheet.** Any character — heroes, enemies, bosses, NPCs — can be generated from the same input format.
 
 ## Features
 
-- **AI-Powered Generation** — Uses a two-stage AI pipeline: GPT-Image-1.5 generates rough animation references, then Claude Opus 4.6 (with vision) translates them into pixel-precise 64×64 grids. Both models are accessed via Azure AI Foundry.
+- **Two-Stage Pipeline** — Stage 1 uses **GPT-Image-1.5** to generate rough animation reference strips; Stage 2 uses **GPT-5.2** (vision) to produce **pixel-precise 64×64 grids**.
 - **Any Character, One YAML** — Each character is fully defined by a single self-contained YAML config file. Heroes get 16 animations, enemies might need 5, bosses 20 — the pipeline handles any layout.
 - **YAML-Driven Configuration** — Define character description, color palette, animations, frame counts, timing, and generation rules in one YAML file. No code changes needed for new characters.
-- **Automatic Spritesheet Assembly** — Generates individual animation rows and stitches them into a single, game-ready spritesheet PNG.
+- **Verification Gates + Retry** — Uses a deterministic gate model (**GPT-5-mini**, temp 0.0) plus programmatic checks; failed frames retry with 3-tier escalation.
+- **Deterministic Rendering** — The LLM outputs a structured grid (JSON); pure Python renders the grid to PNG using exact palette RGB.
+- **Automatic Spritesheet Assembly** — Generates animation rows and stitches them into a final spritesheet PNG.
 - **Transparent Backgrounds** — All output sprites use PNG-32 with full alpha transparency, ready for any game engine.
 - **Palette Swap Support** — Config files support P1/P2 color palettes for easy character recoloring via pixel-level color replacement.
 - **Flexible Animation System** — Define any number of animation rows per character with any frame count. Standard 2D game animations (idle, walk, attack, death, etc.) and custom animations are all supported.
-- **Auto-Palette Extraction** — Optionally skip manual palette definition: SpriteForge can auto-extract a color palette from the base reference image using median-cut quantization. Set `auto_palette: true` in the generation settings and the preprocessor handles resize, quantize, and symbol assignment automatically.
+- **Auto-Palette Extraction (Optional)** — Extract a palette from the base reference image via median-cut quantization, with optional **semantic color labels** via **GPT-5-nano**.
 
 ## Preprocessor (Auto-Palette)
 
@@ -44,7 +46,7 @@ When `auto_palette` is `true`, the `palette` section in the YAML becomes optiona
 ## Requirements
 
 - Python 3.12
-- An Azure AI Foundry project endpoint (hosts both GPT-Image-1.5 and Claude Opus 4.6)
+- An Azure AI Foundry project endpoint (hosts your deployed models)
 - Azure authentication via `DefaultAzureCredential` (no API keys needed)
 
 **Per character:**
@@ -65,7 +67,7 @@ uv sync --group dev
 
 | Variable | Description |
 |---|---|
-| `AZURE_AI_PROJECT_ENDPOINT` | The Azure AI Foundry project endpoint (hosts both GPT-Image-1.5 and Claude Opus 4.6) |
+| `AZURE_AI_PROJECT_ENDPOINT` | Azure AI Foundry project endpoint for all model deployments |
 
 Authentication uses `DefaultAzureCredential` — no API keys needed.
 
@@ -168,19 +170,34 @@ output_path: "output/goblin_scout_spritesheet.png"
 
 ## Usage
 
-```bash
-# Generate a spritesheet for any character
-python -m spriteforge --config configs/goblin_scout.yaml --base-image assets/goblin_ref.png
+There is no CLI entry point yet (see `tests/test_app.py`, pending issue #10). For now, use the programmatic workflow.
 
-# With explicit output path
-python -m spriteforge --config configs/sylara.yaml --base-image assets/sylara_ref.png --output output/sylara.png
+```python
+import asyncio
+from pathlib import Path
 
-# Validate config without calling AI APIs
-python -m spriteforge --config configs/my_character.yaml --dry-run
+from spriteforge import create_workflow, load_config
 
-# With verbose logging and debug artifacts
-python -m spriteforge --config configs/theron.yaml --base-image assets/theron_ref.png --verbose --debug
+
+async def main() -> None:
+  config = load_config("configs/theron.yaml")
+  workflow = await create_workflow(config=config)
+
+  try:
+    output_path = Path("output") / f"{config.character.name}_spritesheet.png"
+    result_path = await workflow.run(
+      base_reference_path=config.base_image_path,
+      output_path=output_path,
+    )
+    print(f"Saved: {result_path}")
+  finally:
+    await workflow.close()
+
+
+asyncio.run(main())
 ```
+
+Also see `scripts/example_factory.py` for a minimal “create workflow + close” example.
 
 ## Development
 
@@ -196,9 +213,8 @@ This project uses [uv](https://docs.astral.sh/uv/) as the package manager and a 
 ```
 src/spriteforge/        # Package source code
 ├── __init__.py         # Package exports
-├── __main__.py         # CLI entry point (planned)
 ├── config.py           # YAML config loading and validation (Pydantic models)
-├── generator.py        # Claude Opus 4.6 grid generation (Stage 2)
+├── generator.py        # GPT-5.2 grid generation (Stage 2)
 ├── assembler.py        # Sprite row assembly into final spritesheet
 ├── models.py           # Data models for animations, characters, and spritesheets
 ├── palette.py          # Palette symbol → RGBA mapping (generic, config-driven)
@@ -227,6 +243,21 @@ docs_assets/            # Character instruction docs & base reference images
 pytest
 ```
 
+Integration tests are opt-in and make real Azure calls:
+
+```bash
+SPRITEFORGE_RUN_INTEGRATION=1 pytest -m integration
+```
+
+You can override the Azure model deployment names used by integration tests via env vars:
+
+| Variable | Purpose |
+|---|---|
+| `SPRITEFORGE_TEST_GRID_MODEL` | Grid generation model deployment (defaults to `generation.grid_model`) |
+| `SPRITEFORGE_TEST_GATE_MODEL` | Gate verification model deployment (defaults to `generation.gate_model`) |
+| `SPRITEFORGE_TEST_REFERENCE_MODEL` | Reference image model deployment (defaults to `generation.reference_model`) |
+| `SPRITEFORGE_TEST_LABELING_MODEL` | Auto-palette labeling model deployment (defaults to `generation.labeling_model`) |
+
 ### Format & Lint
 
 ```bash
@@ -244,13 +275,9 @@ black . && mypy src/ && pytest
 
 ```bash
 docker build -t spriteforge .
-docker run --rm \
-  -e AZURE_AI_PROJECT_ENDPOINT="https://your-project.services.ai.azure.com" \
-  -v $(pwd)/configs:/app/configs \
-  -v $(pwd)/assets:/app/assets \
-  -v $(pwd)/output:/app/output \
-  spriteforge --config configs/my_character.yaml --base-image assets/my_character_ref.png
 ```
+
+Note: the Docker image currently builds the library environment, but running it as a CLI is still pending (issue #10). The current `Dockerfile` uses `python -m spriteforge` as a placeholder.
 
 ## Creating New Characters
 
@@ -268,9 +295,34 @@ See [Character Config Guide](docs/character-config-guide.md) for a full walkthro
 cp configs/template.yaml configs/my_enemy.yaml
 
 # 2. Edit with your character's details (description, palette, animations)
-# 3. Create or generate a base reference image
-# 4. Run SpriteForge
-python -m spriteforge --config configs/my_enemy.yaml --base-image assets/my_enemy_ref.png
+# 3. Create or generate a base reference image (PNG)
+```
+
+Run SpriteForge using the programmatic workflow (CLI is pending issue #10):
+
+```python
+import asyncio
+from pathlib import Path
+
+from spriteforge import create_workflow, load_config
+
+
+async def main() -> None:
+  config = load_config("configs/my_enemy.yaml")
+  workflow = await create_workflow(config=config)
+
+  try:
+    output_path = Path("output") / f"{config.character.name}_spritesheet.png"
+    result_path = await workflow.run(
+      base_reference_path=config.base_image_path,
+      output_path=output_path,
+    )
+    print(f"Saved: {result_path}")
+  finally:
+    await workflow.close()
+
+
+asyncio.run(main())
 ```
 
 ## Character Reference Docs (Original Heroes)

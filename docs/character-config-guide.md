@@ -9,11 +9,32 @@ This guide explains how to create a YAML configuration file for a new SpriteForg
    cp configs/template.yaml configs/my_character.yaml
    ```
 2. Fill in the character metadata, palette, and animations.
-3. Run SpriteForge:
-   ```bash
-   python -m spriteforge --config configs/my_character.yaml \
-                          --base-image assets/my_character_ref.png
+3. Run SpriteForge (programmatic workflow):
+   ```python
+   import asyncio
+   from pathlib import Path
+
+   from spriteforge import create_workflow, load_config
+
+
+   async def main() -> None:
+     spec = load_config("configs/my_character.yaml")
+     workflow = await create_workflow(config=spec)
+     try:
+       output_path = Path("output") / f"{spec.character.name}_spritesheet.png"
+       result = await workflow.run(
+         base_reference_path=spec.base_image_path,
+         output_path=output_path,
+       )
+       print(f"Saved: {result}")
+     finally:
+       await workflow.close()
+
+
+   asyncio.run(main())
    ```
+
+Note: a CLI entry point is still pending (see `tests/test_app.py`, issue #10).
 
 For complete runnable examples, see:
 - `configs/examples/simple_enemy.yaml` — A goblin with 5 animations and 5 colors.
