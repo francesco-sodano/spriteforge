@@ -213,9 +213,9 @@ class RetryManager:
             # Clamp to the constrained range upper bound to avoid
             # out-of-range errors when tier ranges don't cover every
             # possible attempt number.
-            display_attempt = min(next_attempt + 1, self._config.constrained_range[1])
-            tier = self.get_tier(display_attempt)
-            temperature = self.get_temperature(display_attempt)
+            clamped_attempt = min(next_attempt + 1, self._config.constrained_range[1])
+            tier = self.get_tier(clamped_attempt)
+            temperature = self.get_temperature(clamped_attempt)
             logger.info(
                 "Retry %d/%d for %s — %s (temp=%.1f)",
                 next_attempt + 1,
