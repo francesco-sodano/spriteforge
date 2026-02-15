@@ -21,11 +21,11 @@ The original target game is **Blades of the Fallen Realm** — a Golden Axe-styl
 The core innovation is a **two-stage generation approach** that mimics how human pixel artists work: sketch first, then pixel.
 
 ```
-Stage 1 (Image Model) → Gate -1 → Stage 2 (Claude Vision → Grid) → Gates → Retry → Render → Assemble
+Stage 1 (Image Model) → Gate -1 → Stage 2 (GPT Vision → Grid) → Gates → Retry → Render → Assemble
 ```
 
 - **Stage 1 — Reference Generation:** GPT-Image-1.5 (via Azure AI Foundry) produces a rough, non-pixel-precise animation strip for each row. This is a visual reference, NOT the final output.
-- **Stage 2 — Grid Generation:** Claude Opus 4.6 (with vision) receives the rough reference + anchor frame + palette spec, and outputs a **pixel-precise 64×64 JSON grid** (64 strings of 64 single-character palette symbols). This grid IS the final output — rendered to PNG by pure Python code.
+- **Stage 2 — Grid Generation:** GPT-5.2 (via Azure AI Foundry) receives the rough reference + anchor frame + palette spec, and outputs a **pixel-precise 64×64 JSON grid** (64 strings of 64 single-character palette symbols). This grid IS the final output — rendered to PNG by pure Python code.
 
 ### Key Design Principle
 
@@ -74,7 +74,7 @@ A multi-gate verification system ensures quality:
 | Gate 2 | LLM (vision) | Frame-to-frame continuity — smooth transition from previous frame |
 | Gate 3A | LLM (vision) | Row coherence — assembled strip looks like a valid animation sequence |
 
-All LLM gates use Claude Opus 4.6 at **temperature 0.0** for deterministic verification.
+All LLM gates use GPT-5-mini at **temperature 0.0** for deterministic verification.
 
 ### Retry & Escalation
 
@@ -109,6 +109,12 @@ Each character in the grid maps to a palette entry (e.g., `.` = transparent, `O`
 Each character has a **palette defined in its YAML config** — typically 10–15 symbols: `.` (transparent), `O` (outline/dark border), plus 8–12 character-specific color symbols. Symbols are single characters, kept mnemonic (`s`=skin, `h`=hair, `v`=vest, etc.).
 
 **The YAML config is the single source of truth for palette data.** Palette symbols, RGB values, and outline color are all defined per-character in their YAML config file. There are no hardcoded palette constants in the Python code.
+
+#### Semantic Palette Labeling
+
+When `generation.auto_palette` is enabled, SpriteForge can automatically generate semantic color labels (e.g., "Skin", "Hair", "Armor") using GPT-5-nano instead of generic names like "Color 1", "Color 2". This is controlled by the `generation.semantic_labels` boolean field (default: `true`).
+
+The LLM sees the character reference image and description to provide contextually appropriate labels. If LLM labeling fails, the system falls back to HSL-based descriptive names via `_describe_color()` (e.g., "dark greenish-blue").
 
 Example palette section (from a YAML config):
 ```yaml
@@ -186,7 +192,7 @@ src/spriteforge/
 ├── palette.py           # Palette symbol → RGBA mapping, validation
 ├── renderer.py          # Grid (list[str]) → PIL Image rendering
 ├── assembler.py         # Row images → final spritesheet assembly (EXISTING)
-├── generator.py         # Claude Opus 4.6 grid generation (Stage 2)
+├── generator.py         # Grid generation (Stage 2) using configurable chat model
 ├── gates.py             # Verification gates (programmatic + LLM)
 ├── retry.py             # Retry & escalation engine (3-tier)
 ├── workflow.py          # Full pipeline orchestrator (async Python + optional Agent Framework)
@@ -258,9 +264,10 @@ retry.py ← workflow.py  (depends on gates.py)
 | Language | Python 3.12.12+ | `>=3.12.12,<3.13` |
 | Package Manager | uv | `pyproject.toml` as single source of truth |
 | Build Backend | hatchling | |
-| Stage 1 (Reference) | GPT-Image-1.5 | Via Azure AI Foundry (same project as Stage 2) |
-| Stage 2 (Grid Gen) | Claude Opus 4.6 (vision) | Via Azure AI Foundry |
-| Verification Gates | Claude Opus 4.6 | Temperature 0.0 for deterministic checks |
+| Stage 1 (Reference) | GPT-Image-1.5 | Via Azure AI Foundry |
+| Stage 2 (Grid Gen) | Configurable (default: `gpt-5.2`) | Via Azure AI Foundry |
+| Verification Gates | Configurable (default: `gpt-5-mini`) | Temperature 0.0 for deterministic checks |
+| Semantic Labeling | Configurable (default: `gpt-5-nano`) | For auto-palette color naming |
 | Azure Client | `azure-ai-projects` | `AzureAIClient` with `project_endpoint` + `model_deployment_name` |
 | Azure Auth | `azure-identity` | `DefaultAzureCredential` (async) |
 | Image Processing | Pillow (PIL) | Grid → PNG rendering, image assembly |
@@ -275,9 +282,9 @@ retry.py ← workflow.py  (depends on gates.py)
 
 | Variable | Provider | Description |
 |----------|----------|-------------|
-| `AZURE_AI_PROJECT_ENDPOINT` | Azure Foundry | Endpoint for Claude Opus 4.6 + GPT-Image-1.5 |
+| `AZURE_AI_PROJECT_ENDPOINT` | Azure Foundry | Endpoint for all deployed models (GPT-5.2, GPT-5-mini, GPT-5-nano, GPT-Image-1.5) |
 
-Authentication to Azure uses `DefaultAzureCredential` — no API keys needed. Both models (Claude Opus 4.6 and GPT-Image-1.5) are accessed through the same Azure AI Foundry project.
+Authentication to Azure uses `DefaultAzureCredential` — no API keys needed. All models are accessed through the same Azure AI Foundry project. Model deployment names are configurable per-character in the YAML config's `generation:` section.
 
 ## Project Plan (GitHub Issues)
 
@@ -399,7 +406,7 @@ dependencies = [
 - Always be mindful of security best practices.
 - Never hardcode secrets, API keys, or other sensitive credentials in the source code. Use environment variables or a secrets management system.
 - Azure authentication uses `DefaultAzureCredential` — never store Azure keys in code.
-- All models (Claude Opus 4.6 and GPT-Image-1.5) are accessed through Azure AI Foundry — no separate API keys needed.
+- All models are accessed through Azure AI Foundry — no separate API keys needed.
 - Sanitize all external inputs to prevent injection attacks (e.g., SQL injection, command injection).
 - Be cautious when adding new dependencies and prefer packages with a good reputation and active maintenance.
 - Write code that is resilient to denial-of-service attacks (e.g., by avoiding unbounded resource allocation).
@@ -480,8 +487,8 @@ When generating a frame, the LLM receives:
 ### Provider Architecture
 - `ReferenceProvider` is the base class for Stage 1 reference generation
 - `GPTImageProvider` is the sole provider — uses `AzureAIClient` from `azure-ai-projects` (through Azure Foundry)
-- Both Stage 1 (GPT-Image-1.5) and Stage 2 (Claude Opus 4.6) use the **same Azure AI Foundry project** and `DefaultAzureCredential`
-- No provider selection needed — GPT-Image-1.5 is the only reference image provider
+- All models (Stage 1 reference, Stage 2 grid generation, verification gates, semantic labeling) use the **same Azure AI Foundry project** and `DefaultAzureCredential`
+- Model deployment names are configurable per-character via the `generation:` section of the YAML config
 - Provider interface: `async generate_row_strip(base_ref, animation, char_desc) -> Image`
 
 ### Retry Conventions
@@ -489,7 +496,8 @@ When generating a frame, the LLM receives:
 - Gate feedback is accumulated across retries — each retry sees ALL previous gate failures
 - Temperature decreases as retries escalate: 1.0 → 0.7 → 0.3
 - Reference strip retries are simpler: max 3 retries, no escalation
-- If a frame exhausts all retries: raise `GenerationError` (pipeline halts for that character)
+- If a frame exhausts all retries: raise `RetryExhaustedError` (pipeline halts for that character)
+- If a reference strip exhausts retries: raise `ProviderError` (not `RetryExhaustedError`)
 
 ### File Naming
 - Row strips: `{character}_row{NN:02d}_{animation}.png`

@@ -249,6 +249,11 @@ generation:
 | `rules` | `""` | Free-form generation rules |
 | `auto_palette` | `false` | Extract palette from reference image |
 | `max_palette_colors` | `16` | Max colors when using auto_palette |
+| `semantic_labels` | `true` | Use LLM to generate semantic palette color names when `auto_palette` is `true` |
+| `grid_model` | `"gpt-5.2"` | Azure AI Foundry deployment name for Stage 2 grid generation |
+| `gate_model` | `"gpt-5-mini"` | Azure AI Foundry deployment name for verification gates |
+| `labeling_model` | `"gpt-5-nano"` | Azure AI Foundry deployment name for semantic palette labeling |
+| `reference_model` | `"gpt-image-1.5"` | Azure AI Foundry deployment name for Stage 1 reference generation |
 
 ---
 
