@@ -212,11 +212,10 @@ class RetryManager:
             tier = self.get_tier(next_attempt + 1)
             temperature = self.get_temperature(next_attempt + 1)
             logger.info(
-                "Retry %d/%d for %s — %s (tier %s, temp=%.1f)",
+                "Retry %d/%d for %s — %s (temp=%.1f)",
                 next_attempt,
                 context.max_attempts,
                 context.frame_id,
-                tier.value,
                 tier.value,
                 temperature,
             )
