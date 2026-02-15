@@ -628,3 +628,171 @@ class TestMockChatProvider:
         await mock.chat(messages=[])
         with pytest.raises(ValueError, match="no more responses"):
             await mock.chat(messages=[])
+
+
+# ---------------------------------------------------------------------------
+# Tests: AzureChatProvider client reuse
+# ---------------------------------------------------------------------------
+
+
+class TestAzureChatProviderClientReuse:
+    """Tests for client reuse and resource management in AzureChatProvider."""
+
+    @pytest.mark.asyncio
+    async def test_azure_chat_reuses_client(self) -> None:
+        """Call chat() twice → verify AIProjectClient is created only once."""
+        from unittest.mock import MagicMock, patch
+
+        # Create mocks that will be injected
+        mock_credential = AsyncMock()
+        mock_project_client = AsyncMock()
+        mock_openai_client = AsyncMock()
+
+        # Mock the response
+        mock_message = MagicMock()
+        mock_message.content = "response text"
+        mock_choice = MagicMock()
+        mock_choice.message = mock_message
+        mock_response = MagicMock()
+        mock_response.choices = [mock_choice]
+
+        mock_openai_client.chat.completions.create = AsyncMock(
+            return_value=mock_response
+        )
+        mock_project_client.get_openai_client.return_value = mock_openai_client
+
+        # Create provider with user credential
+        provider = AzureChatProvider(
+            project_endpoint="https://example.azure.com",
+            model_deployment_name="test-model",
+            credential=mock_credential,
+        )
+
+        # Manually inject the clients to simulate lazy initialization
+        provider._credential = mock_credential
+        provider._project_client = mock_project_client
+        provider._openai_client = mock_openai_client
+
+        # First chat call - clients already initialized
+        result1 = await provider.chat(messages=[{"role": "user", "content": "test1"}])
+        assert result1 == "response text"
+
+        # Capture current client references
+        first_credential = provider._credential
+        first_project = provider._project_client
+        first_openai = provider._openai_client
+
+        # Second chat call - should reuse same clients
+        result2 = await provider.chat(messages=[{"role": "user", "content": "test2"}])
+        assert result2 == "response text"
+
+        # Verify same client instances are reused
+        assert provider._credential is first_credential
+        assert provider._project_client is first_project
+        assert provider._openai_client is first_openai
+
+        # Verify chat was called TWICE (once per call)
+        assert mock_openai_client.chat.completions.create.call_count == 2
+
+        await provider.close()
+
+    @pytest.mark.asyncio
+    async def test_azure_chat_close_cleanup(self) -> None:
+        """Call close() → verify all resources are released."""
+        provider = AzureChatProvider(
+            project_endpoint="https://example.azure.com",
+            model_deployment_name="test-model",
+        )
+
+        # Mock clients
+        mock_credential = AsyncMock()
+        mock_project_client = AsyncMock()
+        mock_openai_client = AsyncMock()
+
+        # Manually inject mocked clients
+        provider._credential = mock_credential
+        provider._project_client = mock_project_client
+        provider._openai_client = mock_openai_client
+        provider._owns_credential = True
+
+        await provider.close()
+
+        # Verify all close methods were called
+        mock_openai_client.close.assert_awaited_once()
+        mock_project_client.close.assert_awaited_once()
+        mock_credential.close.assert_awaited_once()
+
+        # Verify all references are cleared
+        assert provider._openai_client is None
+        assert provider._project_client is None
+        assert provider._credential is None
+
+    @pytest.mark.asyncio
+    async def test_azure_chat_context_manager(self) -> None:
+        """Use async with AzureChatProvider(...) as provider → auto-cleanup."""
+        mock_credential = AsyncMock()
+        mock_project_client = AsyncMock()
+        mock_openai_client = AsyncMock()
+
+        # Mock response
+        mock_message = MagicMock()
+        mock_message.content = "context manager response"
+        mock_choice = MagicMock()
+        mock_choice.message = mock_message
+        mock_response = MagicMock()
+        mock_response.choices = [mock_choice]
+        mock_openai_client.chat.completions.create = AsyncMock(
+            return_value=mock_response
+        )
+        mock_project_client.get_openai_client.return_value = mock_openai_client
+
+        # Create provider
+        provider = AzureChatProvider(
+            project_endpoint="https://example.azure.com",
+            model_deployment_name="test-model",
+        )
+
+        # Manually inject the clients
+        provider._credential = mock_credential
+        provider._project_client = mock_project_client
+        provider._openai_client = mock_openai_client
+        provider._owns_credential = True
+
+        # Use as context manager
+        async with provider:
+            result = await provider.chat(messages=[{"role": "user", "content": "test"}])
+            assert result == "context manager response"
+
+        # After exiting context, all clients should be closed
+        mock_openai_client.close.assert_awaited_once()
+        mock_project_client.close.assert_awaited_once()
+        mock_credential.close.assert_awaited_once()
+
+    @pytest.mark.asyncio
+    async def test_azure_chat_does_not_close_user_credential(self) -> None:
+        """Pass external credential → verify it's not closed on close()."""
+        user_credential = AsyncMock()
+
+        provider = AzureChatProvider(
+            project_endpoint="https://example.azure.com",
+            model_deployment_name="test-model",
+            credential=user_credential,
+        )
+
+        # Mock other clients
+        mock_project_client = AsyncMock()
+        mock_openai_client = AsyncMock()
+
+        # Manually inject mocked clients
+        provider._credential = user_credential  # Same as user_credential
+        provider._project_client = mock_project_client
+        provider._openai_client = mock_openai_client
+
+        await provider.close()
+
+        # Verify openai and project clients were closed
+        mock_openai_client.close.assert_awaited_once()
+        mock_project_client.close.assert_awaited_once()
+
+        # Verify user credential was NOT closed
+        user_credential.close.assert_not_awaited()
