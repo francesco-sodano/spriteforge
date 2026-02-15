@@ -12,78 +12,14 @@ from typing import Any
 
 from spriteforge.errors import GenerationError
 from spriteforge.models import AnimationDef, GenerationConfig, PaletteConfig
+from spriteforge.prompts.generator import (
+    GRID_SYSTEM_PROMPT,
+    QUANTIZED_REFERENCE_SECTION,
+    build_anchor_frame_prompt,
+    build_frame_prompt,
+)
 from spriteforge.providers.chat import ChatProvider
 from spriteforge.utils import image_to_data_url
-
-# ---------------------------------------------------------------------------
-# Prompt templates
-# ---------------------------------------------------------------------------
-
-SYSTEM_PROMPT = """\
-You are an expert pixel artist. Your job is to translate a visual reference \
-image into a precise {width}×{height} grid of single-character palette symbols.
-
-## Output format
-Return **only** valid JSON with a single key `"grid"` whose value is a list of \
-{height} strings, each exactly {width} characters long. Example (4×4):
-{{"grid":["....","..O.",".sO.","...."]}}
-
-## Palette symbols
-{palette_map_text}
-
-## Art style
-{style}
-
-## Rules
-- The character faces **{facing}**.
-- Feet touch row y≈{feet_row} (0-indexed from top).
-- Every non-transparent sprite pixel must have a 1-pixel dark outline \
-(symbol `{outline_symbol}`).
-- The background MUST be transparent (`.`).
-- Use ONLY the palette symbols listed above — no other characters.
-{extra_rules}
-"""
-
-ANCHOR_FRAME_PROMPT_TEMPLATE = """\
-Generate the **anchor frame** (Row 0, Frame 0) for the animation "{animation_name}".
-
-{animation_context}
-
-This is the single most important frame: it establishes the character's \
-canonical pixel-level appearance. All subsequent frames will be verified \
-against it for identity consistency.
-
-{frame_description}
-
-{quantized_section}
-"""
-
-QUANTIZED_REFERENCE_PROMPT_SECTION = """\
-## Pixel-Level Reference Guide
-The attached quantized reference image shows the character at the exact target \
-resolution ({width}×{height} pixels) with a reduced color palette. Use this as \
-your primary spatial guide:
-
-- Match the character's outline, proportions, and position as closely as possible
-- Map each color region in the quantized image to the corresponding palette symbol
-- The quantized image's colors are approximate — use the exact palette symbols provided
-- Refine details (subpixel accuracy, outline consistency, transparent background) \
-that the quantization may have degraded
-
-Think of this as "tracing" the quantized reference while applying the precise \
-palette symbols and pixel-art cleanup rules.
-"""
-
-FRAME_PROMPT_TEMPLATE = """\
-Generate frame **{frame_index}** for the animation "{animation_name}".
-
-{animation_context}
-
-{frame_description}
-
-{additional_guidance}
-"""
-
 
 # ---------------------------------------------------------------------------
 # Response parser
@@ -177,7 +113,7 @@ def _build_system_prompt(
     """Build the system prompt from palette and generation config."""
     palette_map_text = _build_palette_map_text(palette)
     extra_rules = generation.rules if generation.rules else ""
-    return SYSTEM_PROMPT.format(
+    return GRID_SYSTEM_PROMPT.format(
         width=width,
         height=height,
         palette_map_text=palette_map_text,
@@ -254,9 +190,7 @@ class GridGenerator:
         # Build quantized reference section
         quantized_section = ""
         if quantized_reference is not None:
-            quantized_section = QUANTIZED_REFERENCE_PROMPT_SECTION.format(
-                width=64, height=64
-            )
+            quantized_section = QUANTIZED_REFERENCE_SECTION.format(width=64, height=64)
 
         frame_desc = ""
         if animation.frame_descriptions:
@@ -266,7 +200,7 @@ class GridGenerator:
         if animation.prompt_context:
             animation_context = f"Animation context: {animation.prompt_context}"
 
-        user_text = ANCHOR_FRAME_PROMPT_TEMPLATE.format(
+        user_text = build_anchor_frame_prompt(
             animation_name=animation.name,
             animation_context=animation_context,
             frame_description=frame_desc,
@@ -353,7 +287,7 @@ class GridGenerator:
         if animation.prompt_context:
             animation_context = f"Animation context: {animation.prompt_context}"
 
-        user_text = FRAME_PROMPT_TEMPLATE.format(
+        user_text = build_frame_prompt(
             frame_index=frame_index,
             animation_name=animation.name,
             animation_context=animation_context,
