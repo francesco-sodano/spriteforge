@@ -10,7 +10,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 from PIL import Image
 
-from spriteforge.errors import GateError
+from spriteforge.errors import GateError, RetryExhaustedError
 from spriteforge.gates import GateVerdict, LLMGateChecker, ProgrammaticChecker
 from spriteforge.generator import GenerationError, GridGenerator
 from spriteforge.models import (
@@ -368,7 +368,7 @@ class TestRunFrameRetryOnGateFailure:
 
 
 class TestRunFrameExhaustsRetries:
-    """All 10 attempts fail → raises GenerationError."""
+    """All 10 attempts fail → raises RetryExhaustedError."""
 
     @pytest.mark.asyncio
     async def test_run_frame_exhausts_retries(
@@ -393,8 +393,44 @@ class TestRunFrameExhaustsRetries:
         ref_img.save(str(ref_path))
         out_path = tmp_path / "out.png"
 
-        with pytest.raises(GenerationError, match="failed verification"):
+        with pytest.raises(RetryExhaustedError, match="failed verification"):
             await wf.run(ref_path, out_path)
+
+    @pytest.mark.asyncio
+    async def test_retry_exhausted_error_message(
+        self,
+        single_row_config: SpritesheetSpec,
+        sample_palette: PaletteConfig,
+        tmp_path: Path,
+    ) -> None:
+        """Verify RetryExhaustedError message includes frame ID, attempts, tier, and failure count."""
+        # Make programmatic checker always fail
+        prog_checker = MagicMock(spec=ProgrammaticChecker)
+        prog_checker.run_all = MagicMock(
+            return_value=[_failing_verdict("programmatic")]
+        )
+
+        wf = _build_workflow(
+            single_row_config,
+            sample_palette,
+            programmatic_checker=prog_checker,
+        )
+        ref_img = Image.new("RGBA", (64, 64), (100, 100, 100, 255))
+        ref_path = tmp_path / "ref.png"
+        ref_img.save(str(ref_path))
+        out_path = tmp_path / "out.png"
+
+        try:
+            await wf.run(ref_path, out_path)
+            pytest.fail("Expected RetryExhaustedError to be raised")
+        except RetryExhaustedError as e:
+            error_message = str(e)
+            # Verify all required components are in the message
+            assert "row0_frame0" in error_message or "Frame" in error_message
+            assert "10 attempts" in error_message  # max_attempts
+            assert "tier" in error_message.lower()
+            assert "constrained" in error_message  # Last tier
+            assert "failures:" in error_message.lower()
 
 
 class TestRunReferenceRetry:
