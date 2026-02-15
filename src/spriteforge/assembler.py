@@ -64,7 +64,7 @@ def assemble_spritesheet(
 
     sheet = Image.new("RGBA", (sheet_w, sheet_h), (0, 0, 0, 0))
 
-    for animation in spec.animations:
+    for seq_idx, animation in enumerate(sorted(spec.animations, key=lambda a: a.row)):
         row_idx = animation.row
         if row_idx not in row_images:
             raise ValueError(f"Missing image for row {row_idx} ({animation.name})")
@@ -85,7 +85,7 @@ def assemble_spritesheet(
                 f"{row_img.width}px exceeds sheet width {sheet_w}px"
             )
 
-        y_offset = row_idx * frame_h
+        y_offset = seq_idx * frame_h
         sheet.paste(row_img, (0, y_offset), row_img)
 
     if output_path is not None:
