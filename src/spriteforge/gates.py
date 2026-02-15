@@ -439,7 +439,9 @@ class LLMGateChecker:
         ]
 
         response_text = await self._chat.chat(
-            [{"role": "user", "content": content}], temperature=0.0
+            [{"role": "user", "content": content}],
+            temperature=0.0,
+            response_format="json_object",
         )
         verdict = parse_verdict_response(response_text, "gate_minus_1")
         if verdict.passed:
@@ -490,7 +492,9 @@ class LLMGateChecker:
         ]
 
         response_text = await self._chat.chat(
-            [{"role": "user", "content": content}], temperature=0.0
+            [{"role": "user", "content": content}],
+            temperature=0.0,
+            response_format="json_object",
         )
         verdict = parse_verdict_response(response_text, "gate_0")
         if verdict.passed:
@@ -532,7 +536,9 @@ class LLMGateChecker:
         ]
 
         response_text = await self._chat.chat(
-            [{"role": "user", "content": content}], temperature=0.0
+            [{"role": "user", "content": content}],
+            temperature=0.0,
+            response_format="json_object",
         )
         verdict = parse_verdict_response(response_text, "gate_1")
         if verdict.passed:
@@ -574,7 +580,9 @@ class LLMGateChecker:
         ]
 
         response_text = await self._chat.chat(
-            [{"role": "user", "content": content}], temperature=0.0
+            [{"role": "user", "content": content}],
+            temperature=0.0,
+            response_format="json_object",
         )
         verdict = parse_verdict_response(response_text, "gate_2")
         if verdict.passed:
@@ -620,7 +628,9 @@ class LLMGateChecker:
         ]
 
         response_text = await self._chat.chat(
-            [{"role": "user", "content": content}], temperature=0.0
+            [{"role": "user", "content": content}],
+            temperature=0.0,
+            response_format="json_object",
         )
         verdict = parse_verdict_response(response_text, "gate_3a")
         if verdict.passed:

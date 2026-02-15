@@ -113,6 +113,8 @@ class AzureChatProvider(ChatProvider):
             "temperature": temperature,
             "max_tokens": 16384,
         }
+        if response_format:
+            kwargs["response_format"] = {"type": response_format}
         response = await client.chat.completions.create(
             **kwargs,  # type: ignore[arg-type]
         )

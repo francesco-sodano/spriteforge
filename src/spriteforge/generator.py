@@ -253,7 +253,9 @@ class GridGenerator:
             {"role": "user", "content": content},
         ]
 
-        response_text = await self._chat.chat(messages, temperature=temperature)
+        response_text = await self._chat.chat(
+            messages, temperature=temperature, response_format="json_object"
+        )
         grid = parse_grid_response(
             response_text, expected_rows=frame_height, expected_cols=frame_width
         )
@@ -372,7 +374,9 @@ class GridGenerator:
             temperature,
         )
 
-        response_text = await self._chat.chat(messages, temperature=temperature)
+        response_text = await self._chat.chat(
+            messages, temperature=temperature, response_format="json_object"
+        )
         grid = parse_grid_response(
             response_text, expected_rows=frame_height, expected_cols=frame_width
         )
