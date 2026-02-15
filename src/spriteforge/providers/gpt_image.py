@@ -15,8 +15,11 @@ from typing import Any
 
 from PIL import Image
 
+from spriteforge.logging import get_logger
 from spriteforge.prompts.providers import build_reference_prompt
 from spriteforge.providers._base import ProviderError, ReferenceProvider
+
+logger = get_logger("providers")
 
 
 class GPTImageProvider(ReferenceProvider):
@@ -101,6 +104,13 @@ class GPTImageProvider(ReferenceProvider):
         strip_width = frame_size[0] * num_frames
         strip_height = frame_size[1]
 
+        logger.info(
+            "Generating reference strip via GPT-Image-1.5 (%d frames, %dx%d)",
+            num_frames,
+            strip_width,
+            strip_height,
+        )
+
         try:
             openai_client = client.get_openai_client()
 
@@ -121,6 +131,7 @@ class GPTImageProvider(ReferenceProvider):
                 response_format="b64_json",
             )
         except Exception as exc:
+            logger.error("Reference generation failed: %s", exc)
             raise ProviderError(f"Image generation failed: {exc}") from exc
 
         try:
@@ -128,8 +139,10 @@ class GPTImageProvider(ReferenceProvider):
             image_bytes = base64.b64decode(image_b64)
             image = Image.open(io.BytesIO(image_bytes))
             image.load()
+            logger.info("Reference strip generated (%dx%d)", image.width, image.height)
             return image
         except Exception as exc:
+            logger.error("Failed to decode generated image: %s", exc)
             raise ProviderError(f"Failed to decode generated image: {exc}") from exc
 
     async def close(self) -> None:

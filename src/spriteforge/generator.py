@@ -11,6 +11,7 @@ import re
 from typing import Any
 
 from spriteforge.errors import GenerationError
+from spriteforge.logging import get_logger
 from spriteforge.models import AnimationDef, GenerationConfig, PaletteConfig
 from spriteforge.prompts.generator import (
     GRID_SYSTEM_PROMPT,
@@ -20,6 +21,8 @@ from spriteforge.prompts.generator import (
 )
 from spriteforge.providers.chat import ChatProvider
 from spriteforge.utils import image_to_data_url
+
+logger = get_logger("generator")
 
 # ---------------------------------------------------------------------------
 # Response parser
@@ -59,6 +62,7 @@ def parse_grid_response(
     try:
         data: Any = json.loads(text)
     except json.JSONDecodeError as exc:
+        logger.warning("Failed to parse grid JSON: %s", exc)
         raise GenerationError(f"Failed to parse grid JSON: {exc}") from exc
 
     if not isinstance(data, dict) or "grid" not in data:
@@ -234,7 +238,9 @@ class GridGenerator:
         ]
 
         response_text = await self._chat.chat(messages, temperature=1.0)
-        return parse_grid_response(response_text)
+        grid = parse_grid_response(response_text)
+        logger.debug("Grid response: %d rows, all valid symbols", len(grid))
+        return grid
 
     async def generate_frame(
         self,
@@ -335,5 +341,14 @@ class GridGenerator:
             {"role": "user", "content": content},
         ]
 
+        logger.info(
+            "Generating frame: %s F%d (temp=%.1f)",
+            animation.name,
+            frame_index,
+            temperature,
+        )
+
         response_text = await self._chat.chat(messages, temperature=temperature)
-        return parse_grid_response(response_text)
+        grid = parse_grid_response(response_text)
+        logger.debug("Grid response: %d rows, all valid symbols", len(grid))
+        return grid

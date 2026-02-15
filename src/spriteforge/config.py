@@ -7,6 +7,7 @@ from pathlib import Path
 import yaml
 from pydantic import ValidationError
 
+from spriteforge.logging import get_logger
 from spriteforge.models import (
     AnimationDef,
     CharacterConfig,
@@ -15,6 +16,8 @@ from spriteforge.models import (
     PaletteConfig,
     SpritesheetSpec,
 )
+
+logger = get_logger("config")
 
 
 def validate_config_path(path: str | Path) -> Path:
@@ -236,4 +239,16 @@ def load_config(path: str | Path) -> SpritesheetSpec:
     elif "output" in data and isinstance(data["output"], dict):
         spec_kwargs["output_path"] = data["output"].get("path", "")
 
-    return SpritesheetSpec(**spec_kwargs)
+    spec = SpritesheetSpec(**spec_kwargs)
+
+    num_colors = (
+        len(spec.palettes.get("P1", PaletteConfig()).colors) if spec.palettes else 0
+    )
+    logger.info(
+        "Loaded config: %s (%d animations, %d palette colors)",
+        spec.character.name,
+        len(spec.animations),
+        num_colors,
+    )
+
+    return spec

@@ -15,6 +15,7 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
+from spriteforge.logging import get_logger
 from spriteforge.models import AnimationDef, PaletteConfig
 from spriteforge.prompts.gates import (
     GATE_0_PROMPT,
@@ -26,6 +27,8 @@ from spriteforge.prompts.gates import (
 )
 from spriteforge.providers.chat import ChatProvider
 from spriteforge.utils import image_to_data_url
+
+logger = get_logger("gates")
 
 # ---------------------------------------------------------------------------
 # Verdict model
@@ -292,7 +295,7 @@ class ProgrammaticChecker:
             A list of ``GateVerdict`` objects, one per check.
         """
         feet_row = int(frame_height * 0.875)
-        return [
+        verdicts = [
             self.check_dimensions(
                 grid, expected_rows=frame_height, expected_cols=frame_width
             ),
@@ -303,6 +306,14 @@ class ProgrammaticChecker:
                 grid, palette.transparent_symbol, expected_foot_row=feet_row
             ),
         ]
+        for v in verdicts:
+            if v.passed:
+                logger.info("Programmatic check %s PASSED", v.gate_name)
+            else:
+                logger.warning(
+                    "Programmatic check %s FAILED: %s", v.gate_name, v.feedback
+                )
+        return verdicts
 
 
 # ---------------------------------------------------------------------------
@@ -430,7 +441,14 @@ class LLMGateChecker:
         response_text = await self._chat.chat(
             [{"role": "user", "content": content}], temperature=0.0
         )
-        return parse_verdict_response(response_text, "gate_minus_1")
+        verdict = parse_verdict_response(response_text, "gate_minus_1")
+        if verdict.passed:
+            logger.info("Gate -1 PASSED for %s", animation.name)
+        else:
+            logger.warning(
+                "Gate -1 FAILED for %s: %s", animation.name, verdict.feedback
+            )
+        return verdict
 
     async def gate_0(
         self,
@@ -474,7 +492,12 @@ class LLMGateChecker:
         response_text = await self._chat.chat(
             [{"role": "user", "content": content}], temperature=0.0
         )
-        return parse_verdict_response(response_text, "gate_0")
+        verdict = parse_verdict_response(response_text, "gate_0")
+        if verdict.passed:
+            logger.info("Gate 0 PASSED")
+        else:
+            logger.warning("Gate 0 FAILED: %s", verdict.feedback)
+        return verdict
 
     async def gate_1(
         self,
@@ -511,7 +534,12 @@ class LLMGateChecker:
         response_text = await self._chat.chat(
             [{"role": "user", "content": content}], temperature=0.0
         )
-        return parse_verdict_response(response_text, "gate_1")
+        verdict = parse_verdict_response(response_text, "gate_1")
+        if verdict.passed:
+            logger.info("Gate 1 PASSED")
+        else:
+            logger.warning("Gate 1 FAILED: %s", verdict.feedback)
+        return verdict
 
     async def gate_2(
         self,
@@ -548,7 +576,12 @@ class LLMGateChecker:
         response_text = await self._chat.chat(
             [{"role": "user", "content": content}], temperature=0.0
         )
-        return parse_verdict_response(response_text, "gate_2")
+        verdict = parse_verdict_response(response_text, "gate_2")
+        if verdict.passed:
+            logger.info("Gate 2 PASSED")
+        else:
+            logger.warning("Gate 2 FAILED: %s", verdict.feedback)
+        return verdict
 
     async def gate_3a(
         self,
@@ -589,4 +622,11 @@ class LLMGateChecker:
         response_text = await self._chat.chat(
             [{"role": "user", "content": content}], temperature=0.0
         )
-        return parse_verdict_response(response_text, "gate_3a")
+        verdict = parse_verdict_response(response_text, "gate_3a")
+        if verdict.passed:
+            logger.info("Gate 3A PASSED for %s", animation.name)
+        else:
+            logger.warning(
+                "Gate 3A FAILED for %s: %s", animation.name, verdict.feedback
+            )
+        return verdict

@@ -18,11 +18,14 @@ from enum import Enum
 from pydantic import BaseModel
 
 from spriteforge.gates import GateVerdict
+from spriteforge.logging import get_logger
 from spriteforge.prompts.retry import (
     build_constrained_guidance,
     build_guided_guidance,
     build_soft_guidance,
 )
+
+logger = get_logger("retry")
 
 # ---------------------------------------------------------------------------
 # Retry tier
@@ -204,9 +207,28 @@ class RetryManager:
             Updated :class:`RetryContext`.
         """
         new_feedback = [v.feedback for v in verdicts if v.feedback]
+        next_attempt = context.current_attempt + 1
+        if next_attempt < context.max_attempts:
+            tier = self.get_tier(next_attempt + 1)
+            temperature = self.get_temperature(next_attempt + 1)
+            logger.info(
+                "Retry %d/%d for %s — %s (tier %s, temp=%.1f)",
+                next_attempt,
+                context.max_attempts,
+                context.frame_id,
+                tier.value,
+                tier.value,
+                temperature,
+            )
+        else:
+            logger.error(
+                "All %d retries exhausted for %s",
+                context.max_attempts,
+                context.frame_id,
+            )
         return context.model_copy(
             update={
-                "current_attempt": context.current_attempt + 1,
+                "current_attempt": next_attempt,
                 "failure_history": context.failure_history + verdicts,
                 "accumulated_feedback": context.accumulated_feedback + new_feedback,
                 "last_grid": grid if grid is not None else context.last_grid,

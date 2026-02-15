@@ -15,7 +15,6 @@ from __future__ import annotations
 
 import asyncio
 import io
-import logging
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any
@@ -25,6 +24,7 @@ from PIL import Image
 from spriteforge.assembler import assemble_spritesheet
 from spriteforge.gates import GateVerdict, LLMGateChecker, ProgrammaticChecker
 from spriteforge.generator import GenerationError, GridGenerator
+from spriteforge.logging import get_logger
 from spriteforge.models import AnimationDef, PaletteConfig, SpritesheetSpec
 from spriteforge.palette import build_palette_map
 from spriteforge.preprocessor import PreprocessResult, preprocess_reference
@@ -37,7 +37,7 @@ from spriteforge.renderer import (
 )
 from spriteforge.retry import RetryManager
 
-logger = logging.getLogger(__name__)
+logger = get_logger("workflow")
 
 
 class SpriteForgeWorkflow:
@@ -119,6 +119,12 @@ class SpriteForgeWorkflow:
         total_rows = len(self.config.animations)
         palette = self._get_palette()
 
+        logger.info(
+            "Starting spritesheet generation for '%s' (%d rows)",
+            self.config.character.name,
+            total_rows,
+        )
+
         # ---- Preprocessing step (optional) ----
         quantized_reference: bytes | None = None
         if self.preprocessor is not None:
@@ -145,6 +151,12 @@ class SpriteForgeWorkflow:
             progress_callback("row", 0, total_rows)
 
         anchor_animation = self.config.animations[0]
+        logger.info(
+            "Processing row 0/%d: %s (%d frames)",
+            total_rows,
+            anchor_animation.name,
+            anchor_animation.frames,
+        )
         anchor_grid, row0_grids = await self._process_anchor_row(
             base_reference,
             anchor_animation,
@@ -171,12 +183,27 @@ class SpriteForgeWorkflow:
         )
         row_images[anchor_animation.row] = frame_to_png_bytes(row0_strip)
 
+        logger.info(
+            "Row 0 (%s) complete: %d/%d frames generated",
+            anchor_animation.name,
+            anchor_animation.frames,
+            anchor_animation.frames,
+        )
+
         if progress_callback:
             progress_callback("row", 1, total_rows)
 
         # ---- Process remaining rows ----
         for row_idx_seq in range(1, total_rows):
             animation = self.config.animations[row_idx_seq]
+
+            logger.info(
+                "Processing row %d/%d: %s (%d frames)",
+                row_idx_seq,
+                total_rows,
+                animation.name,
+                animation.frames,
+            )
 
             row_grids = await self._process_row(
                 base_reference,
@@ -195,6 +222,14 @@ class SpriteForgeWorkflow:
             )
             row_images[animation.row] = frame_to_png_bytes(row_strip)
 
+            logger.info(
+                "Row %d (%s) complete: %d/%d frames generated",
+                row_idx_seq,
+                animation.name,
+                animation.frames,
+                animation.frames,
+            )
+
             if progress_callback:
                 progress_callback("row", row_idx_seq + 1, total_rows)
 
@@ -203,6 +238,8 @@ class SpriteForgeWorkflow:
             progress_callback("assembly", 0, 1)
 
         assemble_spritesheet(row_images, self.config, output_path=out)
+
+        logger.info("Spritesheet saved: %s", out)
 
         if progress_callback:
             progress_callback("assembly", 1, 1)

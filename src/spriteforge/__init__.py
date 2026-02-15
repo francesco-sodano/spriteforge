@@ -18,6 +18,7 @@ from spriteforge.gates import (
     parse_verdict_response,
 )
 from spriteforge.generator import GridGenerator, parse_grid_response
+from spriteforge.logging import get_logger, setup_logging
 from spriteforge.models import (
     AnimationDef,
     CharacterConfig,
@@ -96,6 +97,7 @@ __all__ = [
     "build_palette_map",
     "extract_palette_from_image",
     "frame_to_png_bytes",
+    "get_logger",
     "image_to_base64",
     "image_to_data_url",
     "load_config",
@@ -107,6 +109,7 @@ __all__ = [
     "render_row_strip",
     "render_spritesheet",
     "resize_reference",
+    "setup_logging",
     "strip_code_fences",
     "swap_palette_grid",
     "validate_grid_symbols",
