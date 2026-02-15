@@ -1564,8 +1564,9 @@ async def test_workflow_single_row_integration(
             "SPRITEFORGE_TEST_GATE_MODEL", config.generation.gate_model
         ),
     )
+    # GPTImageProvider now reads AZURE_OPENAI_GPT_IMAGE_API_KEY and
+    # AZURE_OPENAI_GPT_IMAGE_ENDPOINT from environment
     ref_provider = GPTImageProvider(
-        project_endpoint=azure_project_endpoint,
         model_deployment=os.environ.get(
             "SPRITEFORGE_TEST_REFERENCE_MODEL", config.generation.reference_model
         ),
@@ -1799,11 +1800,10 @@ async def test_create_workflow_uses_reference_model(
             credential=mock_credential,
         )
 
-        # Verify GPTImageProvider was called with reference_model
+        # Verify GPTImageProvider was called with reference_model only
+        # (it reads API key and endpoint from environment)
         MockImageProvider.assert_called_once_with(
-            project_endpoint="https://test.azure.com",
             model_deployment="custom-ref-model",
-            credential=mock_credential,
         )
 
         await workflow.close()
@@ -1836,12 +1836,13 @@ async def test_create_workflow_shared_credential(
             credential=mock_credential,
         )
 
-        # All providers should receive the same credential
+        # All chat providers should receive the same credential
         for call in MockChatProvider.call_args_list:
             assert call.kwargs["credential"] == mock_credential
 
         MockImageProvider.assert_called_once()
-        assert MockImageProvider.call_args.kwargs["credential"] == mock_credential
+        # GPTImageProvider no longer uses credential - it uses API key auth
+        assert "credential" not in MockImageProvider.call_args.kwargs
 
         # When user-provided credential, it should not be closed
         await workflow.close()
@@ -1878,15 +1879,14 @@ async def test_create_workflow_fallback_env(
             credential=mock_credential,
         )
 
-        # All providers should use the env var endpoint
+        # All chat providers should use the env var endpoint
         for call in MockChatProvider.call_args_list:
             assert call.kwargs["project_endpoint"] == "https://env-endpoint.azure.com"
 
         MockImageProvider.assert_called_once()
-        assert (
-            MockImageProvider.call_args.kwargs["project_endpoint"]
-            == "https://env-endpoint.azure.com"
-        )
+        # GPTImageProvider no longer uses project_endpoint - it uses
+        # AZURE_OPENAI_GPT_IMAGE_ENDPOINT from environment
+        assert "project_endpoint" not in MockImageProvider.call_args.kwargs
 
         await workflow.close()
 

@@ -905,11 +905,11 @@ async def create_workflow(
         credential=shared_credential,
     )
 
-    # Create reference provider
+    # Create reference provider (uses API key authentication)
     reference_provider = GPTImageProvider(
-        project_endpoint=endpoint,
         model_deployment=config.generation.reference_model,
-        credential=shared_credential,
+        # GPTImageProvider reads AZURE_OPENAI_GPT_IMAGE_API_KEY and
+        # AZURE_OPENAI_GPT_IMAGE_ENDPOINT from environment by default
     )
 
     # Create components

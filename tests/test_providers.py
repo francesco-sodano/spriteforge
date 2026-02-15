@@ -91,7 +91,8 @@ def _make_mocked_provider(
     can inspect ``mock_images.edit`` assertions.
     """
     provider = GPTImageProvider(
-        project_endpoint="https://example.azure.com",
+        api_key="test-api-key",
+        azure_endpoint="https://example.openai.azure.com",
         model_deployment=model,
     )
 
@@ -101,13 +102,10 @@ def _make_mocked_provider(
     # catching method-name typos in production code.
     mock_images.edit = AsyncMock(return_value=response, side_effect=side_effect)
 
-    mock_openai_client = MagicMock()
-    mock_openai_client.images = mock_images
+    mock_client = MagicMock()
+    mock_client.images = mock_images
 
-    mock_ai_client = MagicMock()
-    mock_ai_client.get_openai_client.return_value = mock_openai_client
-
-    provider._client = mock_ai_client
+    provider._client = mock_client
     return provider, mock_images
 
 
@@ -146,32 +144,56 @@ def character() -> CharacterConfig:
 class TestGPTImageProviderInit:
     """Tests for GPTImageProvider.__init__."""
 
-    def test_init_explicit_endpoint(self) -> None:
-        """Provider accepts an explicit endpoint."""
-        provider = GPTImageProvider(project_endpoint="https://example.azure.com")
-        assert provider._endpoint == "https://example.azure.com"
+    def test_init_explicit_credentials(self) -> None:
+        """Provider accepts explicit API key and endpoint."""
+        provider = GPTImageProvider(
+            api_key="test-key",
+            azure_endpoint="https://example.openai.azure.com",
+        )
+        assert provider._api_key == "test-key"
+        assert provider._endpoint == "https://example.openai.azure.com"
 
     def test_init_from_env(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        """Provider reads AZURE_AI_PROJECT_ENDPOINT from environment."""
-        monkeypatch.setenv("AZURE_AI_PROJECT_ENDPOINT", "https://env.azure.com")
+        """Provider reads credentials from environment variables."""
+        monkeypatch.setenv("AZURE_OPENAI_GPT_IMAGE_API_KEY", "env-key")
+        monkeypatch.setenv(
+            "AZURE_OPENAI_GPT_IMAGE_ENDPOINT", "https://env.openai.azure.com"
+        )
         provider = GPTImageProvider()
-        assert provider._endpoint == "https://env.azure.com"
+        assert provider._api_key == "env-key"
+        assert provider._endpoint == "https://env.openai.azure.com"
+
+    def test_init_missing_api_key_raises(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Provider raises ProviderError when API key is missing."""
+        monkeypatch.delenv("AZURE_OPENAI_GPT_IMAGE_API_KEY", raising=False)
+        with pytest.raises(ProviderError, match="API key is required"):
+            GPTImageProvider(azure_endpoint="https://example.openai.azure.com")
 
     def test_init_missing_endpoint_raises(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """Provider raises ProviderError when no endpoint is available."""
-        monkeypatch.delenv("AZURE_AI_PROJECT_ENDPOINT", raising=False)
-        with pytest.raises(ProviderError):
-            GPTImageProvider()
+        """Provider raises ProviderError when endpoint is missing."""
+        monkeypatch.delenv("AZURE_OPENAI_GPT_IMAGE_ENDPOINT", raising=False)
+        with pytest.raises(ProviderError, match="endpoint is required"):
+            GPTImageProvider(api_key="test-key")
 
     def test_init_custom_model(self) -> None:
         """Provider stores a custom model deployment name."""
         provider = GPTImageProvider(
-            project_endpoint="https://example.azure.com",
+            api_key="test-key",
+            azure_endpoint="https://example.openai.azure.com",
             model_deployment="my-custom-model",
         )
         assert provider._model == "my-custom-model"
+
+    def test_init_custom_api_version(self) -> None:
+        """Provider stores a custom API version."""
+        provider = GPTImageProvider(
+            api_key="test-key",
+            azure_endpoint="https://example.openai.azure.com",
+            api_version="2024-12-01-preview",
+        )
+        assert provider._api_version == "2024-12-01-preview"
 
 
 # ---------------------------------------------------------------------------
@@ -279,13 +301,19 @@ class TestGPTImageProviderClose:
     @pytest.mark.asyncio
     async def test_close_no_client(self) -> None:
         """close() does not raise when no client was created."""
-        provider = GPTImageProvider(project_endpoint="https://example.azure.com")
+        provider = GPTImageProvider(
+            api_key="test-key",
+            azure_endpoint="https://example.openai.azure.com",
+        )
         await provider.close()  # should not raise
 
     @pytest.mark.asyncio
     async def test_close_with_client(self) -> None:
         """close() calls close on the underlying client."""
-        provider = GPTImageProvider(project_endpoint="https://example.azure.com")
+        provider = GPTImageProvider(
+            api_key="test-key",
+            azure_endpoint="https://example.openai.azure.com",
+        )
         mock_client = AsyncMock()
         provider._client = mock_client
 
@@ -1020,24 +1048,20 @@ class TestAzureSDKErrorMessages:
     def test_gpt_image_provider_missing_sdk_error(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """GPTImageProvider shows clear error when Azure SDK is missing."""
+        """GPTImageProvider shows clear error when OpenAI SDK is missing."""
         import sys
         import builtins
 
-        # Remove azure SDK modules from sys.modules to simulate missing SDK
-        azure_sdk_modules = [
-            key
-            for key in sys.modules.keys()
-            if key.startswith("azure.ai.") or key.startswith("azure.identity")
-        ]
-        for key in azure_sdk_modules:
+        # Remove OpenAI SDK modules from sys.modules to simulate missing SDK
+        openai_modules = [key for key in sys.modules.keys() if key.startswith("openai")]
+        for key in openai_modules:
             monkeypatch.delitem(sys.modules, key, raising=False)
 
-        # Mock the import to fail for Azure SDK packages only
+        # Mock the import to fail for OpenAI SDK only
         original_import = builtins.__import__
 
         def mock_import(name, *args, **kwargs):
-            if name.startswith("azure.ai.") or name.startswith("azure.identity"):
+            if name == "openai" or name.startswith("openai."):
                 raise ImportError(f"No module named '{name}'")
             return original_import(name, *args, **kwargs)
 
@@ -1046,14 +1070,15 @@ class TestAzureSDKErrorMessages:
         # Import and create provider (doesn't fail yet)
         from spriteforge.providers.gpt_image import GPTImageProvider
 
-        provider = GPTImageProvider(project_endpoint="https://test.azure.com")
+        provider = GPTImageProvider(
+            api_key="test-key",
+            azure_endpoint="https://test.openai.azure.com",
+        )
 
         # Using the provider should fail with clear error message
         with pytest.raises(ImportError) as exc_info:
             provider._get_client()
 
         error_msg = str(exc_info.value)
-        assert "Azure SDK packages are required" in error_msg
-        assert "pip install spriteforge[azure]" in error_msg
-        assert "azure-ai-projects" in error_msg
-        assert "azure-identity" in error_msg
+        assert "OpenAI SDK package is required" in error_msg
+        assert "pip install openai" in error_msg
