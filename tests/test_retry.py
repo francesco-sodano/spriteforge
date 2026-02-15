@@ -196,6 +196,69 @@ class TestRecordFailure:
         ctx = mgr.record_failure(ctx, [_verdict(feedback="")])
         assert ctx.accumulated_feedback == []
 
+    def test_record_failure_last_valid_attempt(self) -> None:
+        """current_attempt=8, max_attempts=10 → no crash, correct tier."""
+        mgr = RetryManager()
+        ctx = RetryContext(frame_id="row0_frame0", current_attempt=8, max_attempts=10)
+        # Should not raise — next_attempt=9 is still < 10
+        ctx = mgr.record_failure(ctx, [_verdict()])
+        assert ctx.current_attempt == 9
+
+    def test_record_failure_first_attempt(self) -> None:
+        """current_attempt=0 → tier is 'soft', no crash."""
+        mgr = RetryManager()
+        ctx = mgr.create_context("row0_frame0")
+        ctx = mgr.record_failure(ctx, [_verdict()])
+        assert ctx.current_attempt == 1
+
+    def test_record_failure_exhausted(self) -> None:
+        """current_attempt=9, max_attempts=10 → 'exhausted' path, no crash."""
+        mgr = RetryManager()
+        ctx = RetryContext(frame_id="row0_frame0", current_attempt=9, max_attempts=10)
+        ctx = mgr.record_failure(ctx, [_verdict()])
+        assert ctx.current_attempt == 10
+
+    def test_record_failure_custom_max_attempts(self) -> None:
+        """Non-default max_attempts boundary values work correctly."""
+        config = RetryConfig(
+            max_retries=3,
+            soft_range=(1, 1),
+            guided_range=(2, 2),
+            constrained_range=(3, 3),
+        )
+        mgr = RetryManager(config=config)
+        # current_attempt=0 → next=1 < 3 → get_tier(min(2,3)) works
+        ctx = RetryContext(frame_id="f", current_attempt=0, max_attempts=3)
+        ctx = mgr.record_failure(ctx, [_verdict()])
+        assert ctx.current_attempt == 1
+
+        # current_attempt=1 → next=2 < 3 → get_tier(min(3,3)) works
+        ctx = mgr.record_failure(ctx, [_verdict()])
+        assert ctx.current_attempt == 2
+
+        # current_attempt=2 → next=3, 3 < 3 is False → exhausted
+        ctx = mgr.record_failure(ctx, [_verdict()])
+        assert ctx.current_attempt == 3
+
+    def test_record_failure_no_value_error_at_boundary(self) -> None:
+        """get_tier/get_temperature must not receive out-of-range values.
+
+        With constrained_range=(4,4) and max_retries=5, current_attempt=3
+        makes next_attempt=4 and the old code would call get_tier(5) which
+        is outside all tier ranges → ValueError.
+        """
+        config = RetryConfig(
+            max_retries=5,
+            soft_range=(1, 2),
+            guided_range=(3, 3),
+            constrained_range=(4, 4),
+        )
+        mgr = RetryManager(config=config)
+        ctx = RetryContext(frame_id="f", current_attempt=3, max_attempts=5)
+        # Must not raise ValueError
+        ctx = mgr.record_failure(ctx, [_verdict()])
+        assert ctx.current_attempt == 4
+
 
 # ---------------------------------------------------------------------------
 # create_context
