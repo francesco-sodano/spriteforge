@@ -1082,3 +1082,187 @@ class TestGate3aCheckedInProcessRow:
 
         # Gate 3A was called twice (anchor row + second row)
         assert gate_checker.gate_3a.call_count == 2
+
+
+# ---------------------------------------------------------------------------
+# Anchor retry escalation tests (bug fix)
+# ---------------------------------------------------------------------------
+
+
+class TestAnchorRetryEscalatesTemperature:
+    """After failures, anchor frame is retried with lower temperature."""
+
+    @pytest.mark.asyncio
+    async def test_anchor_retry_escalates_temperature(
+        self,
+        sample_palette: PaletteConfig,
+        tmp_path: Path,
+    ) -> None:
+        """After 3 failures, verify anchor is retried with lower temperature."""
+        config = SpritesheetSpec(
+            character=CharacterConfig(
+                name="TestChar",
+                character_class="Warrior",
+                description="A test character",
+                frame_width=64,
+                frame_height=64,
+                spritesheet_columns=14,
+            ),
+            animations=[
+                AnimationDef(
+                    name="idle",
+                    row=0,
+                    frames=1,
+                    timing_ms=150,
+                    prompt_context="Standing idle",
+                ),
+            ],
+            palettes={"P1": sample_palette},
+            generation=GenerationConfig(),
+        )
+
+        # Track calls to generate_anchor_frame to inspect temperature
+        anchor_calls: list[dict[str, Any]] = []
+
+        async def mock_anchor(*args: Any, **kwargs: Any) -> list[str]:
+            anchor_calls.append(kwargs)
+            return _make_sprite_grid()
+
+        gen = AsyncMock(spec=GridGenerator)
+        gen.generate_anchor_frame = mock_anchor
+        gen.generate_frame = AsyncMock(return_value=_make_sprite_grid())
+
+        # Programmatic checker fails first 4 times, then passes
+        prog_checker = MagicMock(spec=ProgrammaticChecker)
+        fail_count = 0
+
+        def prog_side_effect(*args: Any, **kwargs: Any) -> list[GateVerdict]:
+            nonlocal fail_count
+            fail_count += 1
+            if fail_count <= 4:
+                return [_failing_verdict("programmatic")]
+            return [_passing_verdict("programmatic")]
+
+        prog_checker.run_all = MagicMock(side_effect=prog_side_effect)
+
+        gate_checker = AsyncMock(spec=LLMGateChecker)
+        gate_checker.gate_minus_1 = AsyncMock(
+            return_value=_passing_verdict("gate_minus_1")
+        )
+        gate_checker.gate_0 = AsyncMock(return_value=_passing_verdict("gate_0"))
+        gate_checker.gate_1 = AsyncMock(return_value=_passing_verdict("gate_1"))
+        gate_checker.gate_2 = AsyncMock(return_value=_passing_verdict("gate_2"))
+        gate_checker.gate_3a = AsyncMock(return_value=_passing_verdict("gate_3a"))
+
+        wf = _build_workflow(
+            config,
+            sample_palette,
+            grid_generator=gen,
+            programmatic_checker=prog_checker,
+            gate_checker=gate_checker,
+        )
+
+        ref_img = Image.new("RGBA", (64, 64), (100, 100, 100, 255))
+        ref_path = tmp_path / "ref.png"
+        ref_img.save(str(ref_path))
+        out_path = tmp_path / "out.png"
+
+        await wf.run(ref_path, out_path)
+
+        # Should have been called 5 times (4 failures + 1 success)
+        assert len(anchor_calls) == 5
+
+        # First 3 attempts at soft tier (temp=1.0)
+        assert anchor_calls[0].get("temperature") == 1.0
+        assert anchor_calls[1].get("temperature") == 1.0
+        assert anchor_calls[2].get("temperature") == 1.0
+
+        # Attempt 4+ at guided tier (temp=0.7)
+        assert anchor_calls[3].get("temperature") == 0.7
+        assert anchor_calls[4].get("temperature") == 0.7
+
+
+class TestAnchorRetryPassesGuidance:
+    """Gate failure feedback is passed as additional_guidance to anchor."""
+
+    @pytest.mark.asyncio
+    async def test_anchor_retry_passes_guidance(
+        self,
+        sample_palette: PaletteConfig,
+        tmp_path: Path,
+    ) -> None:
+        """Verify gate failure feedback is passed as additional_guidance."""
+        config = SpritesheetSpec(
+            character=CharacterConfig(
+                name="TestChar",
+                character_class="Warrior",
+                description="A test character",
+                frame_width=64,
+                frame_height=64,
+                spritesheet_columns=14,
+            ),
+            animations=[
+                AnimationDef(
+                    name="idle",
+                    row=0,
+                    frames=1,
+                    timing_ms=150,
+                    prompt_context="Standing idle",
+                ),
+            ],
+            palettes={"P1": sample_palette},
+            generation=GenerationConfig(),
+        )
+
+        anchor_calls: list[dict[str, Any]] = []
+
+        async def mock_anchor(*args: Any, **kwargs: Any) -> list[str]:
+            anchor_calls.append(kwargs)
+            return _make_sprite_grid()
+
+        gen = AsyncMock(spec=GridGenerator)
+        gen.generate_anchor_frame = mock_anchor
+        gen.generate_frame = AsyncMock(return_value=_make_sprite_grid())
+
+        # Programmatic checker fails first, then passes
+        prog_checker = MagicMock(spec=ProgrammaticChecker)
+        call_count = 0
+
+        def prog_side_effect(*args: Any, **kwargs: Any) -> list[GateVerdict]:
+            nonlocal call_count
+            call_count += 1
+            if call_count <= 1:
+                return [_failing_verdict("programmatic")]
+            return [_passing_verdict("programmatic")]
+
+        prog_checker.run_all = MagicMock(side_effect=prog_side_effect)
+
+        gate_checker = AsyncMock(spec=LLMGateChecker)
+        gate_checker.gate_minus_1 = AsyncMock(
+            return_value=_passing_verdict("gate_minus_1")
+        )
+        gate_checker.gate_0 = AsyncMock(return_value=_passing_verdict("gate_0"))
+        gate_checker.gate_1 = AsyncMock(return_value=_passing_verdict("gate_1"))
+        gate_checker.gate_2 = AsyncMock(return_value=_passing_verdict("gate_2"))
+        gate_checker.gate_3a = AsyncMock(return_value=_passing_verdict("gate_3a"))
+
+        wf = _build_workflow(
+            config,
+            sample_palette,
+            grid_generator=gen,
+            programmatic_checker=prog_checker,
+            gate_checker=gate_checker,
+        )
+
+        ref_img = Image.new("RGBA", (64, 64), (100, 100, 100, 255))
+        ref_path = tmp_path / "ref.png"
+        ref_img.save(str(ref_path))
+        out_path = tmp_path / "out.png"
+
+        await wf.run(ref_path, out_path)
+
+        # First call: no guidance (first attempt)
+        assert anchor_calls[0].get("additional_guidance") == ""
+
+        # Second call: guidance should be non-empty (retry with feedback)
+        assert anchor_calls[1].get("additional_guidance") != ""
