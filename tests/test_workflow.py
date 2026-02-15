@@ -657,8 +657,8 @@ class TestRunWithPreprocessorAutoPalette:
         await wf.run(ref_path, out_path)
 
         mock_preprocessor.assert_called_once()
-        # Palette should have been replaced
-        assert wf.config.palettes["P1"].name == "auto"
+        # Config should NOT have been mutated — palette stays original
+        assert wf.config.palettes["P1"].name == "P1"
 
 
 class TestRunWithPreprocessorManualPalette:
@@ -831,10 +831,8 @@ class TestPreprocessorResultReplacesPalette:
 
         await wf.run(ref_path, out_path)
 
-        # palette_map should have been rebuilt with new colors
-        assert wf.palette_map != original_map
-        assert wf.palette_map["O"] == (0, 0, 0, 255)
-        assert wf.palette_map["s"] == (255, 0, 0, 255)
+        # palette_map should NOT have been mutated — instance state is preserved
+        assert wf.palette_map == original_map
 
 
 # ---------------------------------------------------------------------------
@@ -1266,3 +1264,177 @@ class TestAnchorRetryPassesGuidance:
 
         # Second call: guidance should be non-empty (retry with feedback)
         assert anchor_calls[1].get("additional_guidance") != ""
+
+
+# ---------------------------------------------------------------------------
+# Re-entrancy / no-mutation tests (bug fix)
+# ---------------------------------------------------------------------------
+
+
+class TestRunDoesNotMutateConfig:
+    """run() must not mutate self.config."""
+
+    @pytest.mark.asyncio
+    async def test_run_does_not_mutate_config(
+        self,
+        single_row_config: SpritesheetSpec,
+        sample_palette: PaletteConfig,
+        tmp_path: Path,
+    ) -> None:
+        """After run(), self.config should be identical to the original."""
+        wf = _build_workflow(single_row_config, sample_palette)
+
+        # Snapshot original config state
+        original_palettes = dict(wf.config.palettes)
+        original_palette_map = dict(wf.palette_map)
+
+        ref_img = Image.new("RGBA", (64, 64), (100, 100, 100, 255))
+        ref_path = tmp_path / "ref.png"
+        ref_img.save(str(ref_path))
+        out_path = tmp_path / "out.png"
+
+        await wf.run(ref_path, out_path)
+
+        # Config must not have been mutated
+        assert wf.config.palettes == original_palettes
+        assert wf.palette_map == original_palette_map
+
+
+class TestAutoPaletteUsesLocalState:
+    """With auto_palette=True, extracted palette is used without mutating self.config."""
+
+    @pytest.mark.asyncio
+    async def test_auto_palette_uses_local_state(
+        self,
+        sample_palette: PaletteConfig,
+        tmp_path: Path,
+    ) -> None:
+        auto_config = SpritesheetSpec(
+            character=CharacterConfig(
+                name="TestChar",
+                frame_width=64,
+                frame_height=64,
+                spritesheet_columns=14,
+            ),
+            animations=[
+                AnimationDef(
+                    name="idle",
+                    row=0,
+                    frames=1,
+                    timing_ms=150,
+                    prompt_context="Idle",
+                ),
+            ],
+            palettes={"P1": sample_palette},
+            generation=GenerationConfig(auto_palette=True),
+        )
+
+        extracted_palette = PaletteConfig(
+            name="auto",
+            outline=PaletteColor(element="Outline", symbol="O", r=10, g=10, b=10),
+            colors=[
+                PaletteColor(element="Color 1", symbol="s", r=200, g=200, b=200),
+                PaletteColor(element="Color 2", symbol="h", r=100, g=100, b=100),
+            ],
+        )
+
+        mock_preprocessor = MagicMock()
+        mock_preprocessor.return_value = PreprocessResult(
+            quantized_image=Image.new("RGBA", (64, 64)),
+            palette=extracted_palette,
+            quantized_png_bytes=_TINY_PNG,
+            original_color_count=100,
+            final_color_count=3,
+        )
+
+        wf = _build_workflow(
+            auto_config, sample_palette, preprocessor=mock_preprocessor
+        )
+
+        # Snapshot original state
+        original_palette_name = wf.config.palettes["P1"].name
+        original_palette_map = dict(wf.palette_map)
+
+        ref_img = Image.new("RGBA", (64, 64), (100, 100, 100, 255))
+        ref_path = tmp_path / "ref.png"
+        ref_img.save(str(ref_path))
+        out_path = tmp_path / "out.png"
+
+        await wf.run(ref_path, out_path)
+
+        # Config must NOT have been mutated
+        assert wf.config.palettes["P1"].name == original_palette_name
+        assert wf.palette_map == original_palette_map
+
+
+class TestMultipleRunsIndependent:
+    """Calling run() multiple times should produce independent results."""
+
+    @pytest.mark.asyncio
+    async def test_multiple_runs_independent(
+        self,
+        sample_palette: PaletteConfig,
+        tmp_path: Path,
+    ) -> None:
+        auto_config = SpritesheetSpec(
+            character=CharacterConfig(
+                name="TestChar",
+                frame_width=64,
+                frame_height=64,
+                spritesheet_columns=14,
+            ),
+            animations=[
+                AnimationDef(
+                    name="idle",
+                    row=0,
+                    frames=1,
+                    timing_ms=150,
+                    prompt_context="Idle",
+                ),
+            ],
+            palettes={"P1": sample_palette},
+            generation=GenerationConfig(auto_palette=True),
+        )
+
+        extracted_palette = PaletteConfig(
+            name="auto",
+            outline=PaletteColor(element="Outline", symbol="O", r=10, g=10, b=10),
+            colors=[
+                PaletteColor(element="Color 1", symbol="s", r=200, g=200, b=200),
+                PaletteColor(element="Color 2", symbol="h", r=100, g=100, b=100),
+            ],
+        )
+
+        mock_preprocessor = MagicMock()
+        mock_preprocessor.return_value = PreprocessResult(
+            quantized_image=Image.new("RGBA", (64, 64)),
+            palette=extracted_palette,
+            quantized_png_bytes=_TINY_PNG,
+            original_color_count=100,
+            final_color_count=3,
+        )
+
+        wf = _build_workflow(
+            auto_config, sample_palette, preprocessor=mock_preprocessor
+        )
+
+        # Snapshot original config state
+        original_config_dict = wf.config.model_dump()
+
+        ref_img = Image.new("RGBA", (64, 64), (100, 100, 100, 255))
+        ref_path = tmp_path / "ref.png"
+        ref_img.save(str(ref_path))
+
+        # Run twice
+        out1 = tmp_path / "out1.png"
+        await wf.run(ref_path, out1)
+
+        out2 = tmp_path / "out2.png"
+        await wf.run(ref_path, out2)
+
+        # Both outputs should exist
+        assert out1.exists()
+        assert out2.exists()
+
+        # Config should still be identical to original
+        assert wf.config.model_dump() == original_config_dict
