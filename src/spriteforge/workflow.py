@@ -22,6 +22,7 @@ from typing import Any
 from PIL import Image
 
 from spriteforge.assembler import assemble_spritesheet
+from spriteforge.errors import GateError
 from spriteforge.gates import GateVerdict, LLMGateChecker, ProgrammaticChecker
 from spriteforge.generator import GenerationError, GridGenerator
 from spriteforge.logging import get_logger
@@ -372,7 +373,17 @@ class SpriteForgeWorkflow:
         row_strip_bytes = frame_to_png_bytes(row_strip)
         ref_strip_bytes = frame_to_png_bytes(reference_strip.convert("RGBA"))
 
-        await self.gate_checker.gate_3a(row_strip_bytes, ref_strip_bytes, animation)
+        verdict = await self.gate_checker.gate_3a(
+            row_strip_bytes, ref_strip_bytes, animation
+        )
+        if not verdict.passed:
+            logger.warning(
+                "Gate 3A failed for %s: %s", animation.name, verdict.feedback
+            )
+            raise GateError(
+                f"Gate 3A (row coherence) failed for '{animation.name}': "
+                f"{verdict.feedback}"
+            )
 
         return anchor_grid, frame_grids
 
@@ -438,7 +449,17 @@ class SpriteForgeWorkflow:
         row_strip_bytes = frame_to_png_bytes(row_strip)
         ref_strip_bytes = frame_to_png_bytes(reference_strip.convert("RGBA"))
 
-        await self.gate_checker.gate_3a(row_strip_bytes, ref_strip_bytes, animation)
+        verdict = await self.gate_checker.gate_3a(
+            row_strip_bytes, ref_strip_bytes, animation
+        )
+        if not verdict.passed:
+            logger.warning(
+                "Gate 3A failed for %s: %s", animation.name, verdict.feedback
+            )
+            raise GateError(
+                f"Gate 3A (row coherence) failed for '{animation.name}': "
+                f"{verdict.feedback}"
+            )
 
         return frame_grids
 
