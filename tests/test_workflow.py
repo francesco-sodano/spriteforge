@@ -10,6 +10,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 from PIL import Image
 
+from spriteforge.errors import GateError
 from spriteforge.gates import GateVerdict, LLMGateChecker, ProgrammaticChecker
 from spriteforge.generator import GenerationError, GridGenerator
 from spriteforge.models import (
@@ -834,3 +835,148 @@ class TestPreprocessorResultReplacesPalette:
         assert wf.palette_map != original_map
         assert wf.palette_map["O"] == (0, 0, 0, 255)
         assert wf.palette_map["s"] == (255, 0, 0, 255)
+
+
+# ---------------------------------------------------------------------------
+# Gate 3A verdict checking tests
+# ---------------------------------------------------------------------------
+
+
+class TestGate3aFailureIsDetected:
+    """Gate 3A failure raises GateError."""
+
+    @pytest.mark.asyncio
+    async def test_gate_3a_failure_is_detected(
+        self,
+        single_row_config: SpritesheetSpec,
+        sample_palette: PaletteConfig,
+        tmp_path: Path,
+    ) -> None:
+        gate_checker = AsyncMock(spec=LLMGateChecker)
+        gate_checker.gate_minus_1 = AsyncMock(
+            return_value=_passing_verdict("gate_minus_1")
+        )
+        gate_checker.gate_0 = AsyncMock(return_value=_passing_verdict("gate_0"))
+        gate_checker.gate_1 = AsyncMock(return_value=_passing_verdict("gate_1"))
+        gate_checker.gate_2 = AsyncMock(return_value=_passing_verdict("gate_2"))
+        gate_checker.gate_3a = AsyncMock(return_value=_failing_verdict("gate_3a"))
+
+        wf = _build_workflow(
+            single_row_config, sample_palette, gate_checker=gate_checker
+        )
+        ref_img = Image.new("RGBA", (64, 64), (100, 100, 100, 255))
+        ref_path = tmp_path / "ref.png"
+        ref_img.save(str(ref_path))
+        out_path = tmp_path / "out.png"
+
+        with pytest.raises(GateError, match="Gate 3A"):
+            await wf.run(ref_path, out_path)
+
+
+class TestGate3aPassContinuesNormally:
+    """Gate 3A pass allows pipeline to complete successfully."""
+
+    @pytest.mark.asyncio
+    async def test_gate_3a_pass_continues_normally(
+        self,
+        single_row_config: SpritesheetSpec,
+        sample_palette: PaletteConfig,
+        tmp_path: Path,
+    ) -> None:
+        gate_checker = AsyncMock(spec=LLMGateChecker)
+        gate_checker.gate_minus_1 = AsyncMock(
+            return_value=_passing_verdict("gate_minus_1")
+        )
+        gate_checker.gate_0 = AsyncMock(return_value=_passing_verdict("gate_0"))
+        gate_checker.gate_1 = AsyncMock(return_value=_passing_verdict("gate_1"))
+        gate_checker.gate_2 = AsyncMock(return_value=_passing_verdict("gate_2"))
+        gate_checker.gate_3a = AsyncMock(return_value=_passing_verdict("gate_3a"))
+
+        wf = _build_workflow(
+            single_row_config, sample_palette, gate_checker=gate_checker
+        )
+        ref_img = Image.new("RGBA", (64, 64), (100, 100, 100, 255))
+        ref_path = tmp_path / "ref.png"
+        ref_img.save(str(ref_path))
+        out_path = tmp_path / "out.png"
+
+        result = await wf.run(ref_path, out_path)
+
+        assert result == out_path
+        assert out_path.exists()
+
+
+class TestGate3aCheckedInAnchorRow:
+    """_process_anchor_row inspects Gate 3A verdict."""
+
+    @pytest.mark.asyncio
+    async def test_gate_3a_checked_in_anchor_row(
+        self,
+        single_row_config: SpritesheetSpec,
+        sample_palette: PaletteConfig,
+        tmp_path: Path,
+    ) -> None:
+        """Single-row config only uses _process_anchor_row; Gate 3A failure raises."""
+        gate_checker = AsyncMock(spec=LLMGateChecker)
+        gate_checker.gate_minus_1 = AsyncMock(
+            return_value=_passing_verdict("gate_minus_1")
+        )
+        gate_checker.gate_0 = AsyncMock(return_value=_passing_verdict("gate_0"))
+        gate_checker.gate_1 = AsyncMock(return_value=_passing_verdict("gate_1"))
+        gate_checker.gate_2 = AsyncMock(return_value=_passing_verdict("gate_2"))
+        gate_checker.gate_3a = AsyncMock(return_value=_failing_verdict("gate_3a"))
+
+        wf = _build_workflow(
+            single_row_config, sample_palette, gate_checker=gate_checker
+        )
+        ref_img = Image.new("RGBA", (64, 64), (100, 100, 100, 255))
+        ref_path = tmp_path / "ref.png"
+        ref_img.save(str(ref_path))
+        out_path = tmp_path / "out.png"
+
+        with pytest.raises(GateError, match="Gate 3A"):
+            await wf.run(ref_path, out_path)
+
+        # Gate 3A was called exactly once (for anchor row)
+        assert gate_checker.gate_3a.call_count == 1
+
+
+class TestGate3aCheckedInProcessRow:
+    """_process_row inspects Gate 3A verdict."""
+
+    @pytest.mark.asyncio
+    async def test_gate_3a_checked_in_process_row(
+        self,
+        multi_row_config: SpritesheetSpec,
+        sample_palette: PaletteConfig,
+        tmp_path: Path,
+    ) -> None:
+        """Multi-row config: anchor row passes, second row Gate 3A fails."""
+        gate_checker = AsyncMock(spec=LLMGateChecker)
+        gate_checker.gate_minus_1 = AsyncMock(
+            return_value=_passing_verdict("gate_minus_1")
+        )
+        gate_checker.gate_0 = AsyncMock(return_value=_passing_verdict("gate_0"))
+        gate_checker.gate_1 = AsyncMock(return_value=_passing_verdict("gate_1"))
+        gate_checker.gate_2 = AsyncMock(return_value=_passing_verdict("gate_2"))
+        # First call (anchor row) passes, second call (_process_row) fails
+        gate_checker.gate_3a = AsyncMock(
+            side_effect=[
+                _passing_verdict("gate_3a"),
+                _failing_verdict("gate_3a"),
+            ]
+        )
+
+        wf = _build_workflow(
+            multi_row_config, sample_palette, gate_checker=gate_checker
+        )
+        ref_img = Image.new("RGBA", (64, 64), (100, 100, 100, 255))
+        ref_path = tmp_path / "ref.png"
+        ref_img.save(str(ref_path))
+        out_path = tmp_path / "out.png"
+
+        with pytest.raises(GateError, match="Gate 3A"):
+            await wf.run(ref_path, out_path)
+
+        # Gate 3A was called twice (anchor row + second row)
+        assert gate_checker.gate_3a.call_count == 2
