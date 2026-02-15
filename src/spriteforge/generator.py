@@ -167,6 +167,8 @@ class GridGenerator:
         animation: AnimationDef,
         generation: GenerationConfig | None = None,
         quantized_reference: bytes | None = None,
+        temperature: float = 1.0,
+        additional_guidance: str = "",
         frame_width: int = 64,
         frame_height: int = 64,
     ) -> list[str]:
@@ -188,6 +190,8 @@ class GridGenerator:
             generation: Generation config (style, facing, feet_row, rules).
                 If ``None``, defaults are used.
             quantized_reference: Optional quantized PNG from preprocessor.
+            temperature: LLM temperature (1.0=creative, 0.3=constrained).
+            additional_guidance: Extra prompt text for retry escalation.
             frame_width: Width of each frame in pixels (grid columns).
             frame_height: Height of each frame in pixels (grid rows).
 
@@ -220,6 +224,7 @@ class GridGenerator:
             animation_context=animation_context,
             frame_description=frame_desc,
             quantized_section=quantized_section,
+            additional_guidance=additional_guidance,
         )
 
         # Build multimodal content parts
@@ -248,7 +253,7 @@ class GridGenerator:
             {"role": "user", "content": content},
         ]
 
-        response_text = await self._chat.chat(messages, temperature=1.0)
+        response_text = await self._chat.chat(messages, temperature=temperature)
         grid = parse_grid_response(
             response_text, expected_rows=frame_height, expected_cols=frame_width
         )
