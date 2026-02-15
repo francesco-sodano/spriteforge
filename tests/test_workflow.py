@@ -1419,7 +1419,8 @@ class TestMultipleRunsIndependent:
         )
 
         # Snapshot original config state
-        original_config_dict = wf.config.model_dump()
+        original_palettes = dict(wf.config.palettes)
+        original_palette_map = dict(wf.palette_map)
 
         ref_img = Image.new("RGBA", (64, 64), (100, 100, 100, 255))
         ref_path = tmp_path / "ref.png"
@@ -1436,5 +1437,6 @@ class TestMultipleRunsIndependent:
         assert out1.exists()
         assert out2.exists()
 
-        # Config should still be identical to original
-        assert wf.config.model_dump() == original_config_dict
+        # Config and palette_map should still be identical to originals
+        assert wf.config.palettes == original_palettes
+        assert wf.palette_map == original_palette_map

@@ -496,12 +496,12 @@ class SpriteForgeWorkflow:
         palette: PaletteConfig,
         animation: AnimationDef,
         frame_index: int,
+        palette_map: dict[str, tuple[int, int, int, int]],
         prev_frame_grid: list[str] | None = None,
         prev_frame_rendered: bytes | None = None,
         is_anchor: bool = False,
         base_reference: bytes | None = None,
         quantized_reference: bytes | None = None,
-        palette_map: dict[str, tuple[int, int, int, int]] | None = None,
     ) -> list[str]:
         """Generate a single frame with full verification and retry loop.
 
@@ -513,15 +513,11 @@ class SpriteForgeWorkflow:
         6. After max failures: raise GenerationError
 
         Args:
-            palette_map: Symbol → RGBA mapping for rendering.  Falls back to
-                ``self.palette_map`` when *None* (the default).
+            palette_map: Symbol → RGBA mapping for rendering.
 
         Returns:
             Verified frame grid (list of 64 strings).
         """
-        active_palette_map = (
-            palette_map if palette_map is not None else self.palette_map
-        )
         frame_id = f"row{animation.row}_frame{frame_index}"
         retry_ctx = self.retry_manager.create_context(frame_id)
 
@@ -580,7 +576,7 @@ class SpriteForgeWorkflow:
             # Render grid to PNG
             frame_img = render_frame(
                 grid,
-                active_palette_map,
+                palette_map,
                 frame_width=self.config.character.frame_width,
                 frame_height=self.config.character.frame_height,
             )
