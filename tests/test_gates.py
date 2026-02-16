@@ -15,9 +15,12 @@ from spriteforge.gates import (
 )
 from spriteforge.models import (
     AnimationDef,
+    FrameContext,
+    GenerationConfig,
     PaletteColor,
     PaletteConfig,
 )
+from spriteforge.palette import build_palette_map
 
 from mock_chat_provider import MockChatProvider
 
@@ -296,11 +299,23 @@ class TestRunAll:
     """Tests for ProgrammaticChecker.run_all."""
 
     def test_run_all_returns_all_verdicts(
-        self, checker: ProgrammaticChecker, sample_palette: PaletteConfig
+        self,
+        checker: ProgrammaticChecker,
+        sample_palette: PaletteConfig,
+        sample_animation: AnimationDef,
     ) -> None:
         """Returns 5 verdicts."""
         grid = _make_valid_grid(".", 64, 64)
-        verdicts = checker.run_all(grid, sample_palette)
+        context = FrameContext(
+            palette=sample_palette,
+            palette_map=build_palette_map(sample_palette),
+            generation=GenerationConfig(),
+            frame_width=64,
+            frame_height=64,
+            animation=sample_animation,
+            spritesheet_columns=14,
+        )
+        verdicts = checker.run_all(grid, context)
         assert len(verdicts) == 5
         assert all(isinstance(v, GateVerdict) for v in verdicts)
 
@@ -328,30 +343,50 @@ class TestProgrammaticCheckerVariableSize:
         assert verdict.passed is True
 
     def test_programmatic_checker_feet_row_scales(
-        self, checker: ProgrammaticChecker, sample_palette: PaletteConfig
+        self,
+        checker: ProgrammaticChecker,
+        sample_palette: PaletteConfig,
+        sample_animation: AnimationDef,
     ) -> None:
         """feet_row for 32-row grid is 28 (int(32 * 0.875)), not 56."""
         grid = _make_valid_grid(".", 32, 32)
         # Place non-transparent pixels near row 28 (expected feet for 32px)
         grid[27] = "." * 15 + "s" + "." * 16
-        verdicts = checker.run_all(
-            grid, sample_palette, frame_width=32, frame_height=32
+        context = FrameContext(
+            palette=sample_palette,
+            palette_map=build_palette_map(sample_palette),
+            generation=GenerationConfig(),
+            frame_width=32,
+            frame_height=32,
+            animation=sample_animation,
+            spritesheet_columns=14,
         )
+        verdicts = checker.run_all(grid, context)
         feet_verdict = [
             v for v in verdicts if v.gate_name == "programmatic_feet_position"
         ][0]
         assert feet_verdict.passed is True
 
     def test_programmatic_checker_feet_row_scales_128(
-        self, checker: ProgrammaticChecker, sample_palette: PaletteConfig
+        self,
+        checker: ProgrammaticChecker,
+        sample_palette: PaletteConfig,
+        sample_animation: AnimationDef,
     ) -> None:
         """feet_row for 128-row grid is 112 (int(128 * 0.875))."""
         grid = _make_valid_grid(".", 128, 128)
         # Place non-transparent pixels near row 112
         grid[112] = "." * 60 + "s" + "." * 67
-        verdicts = checker.run_all(
-            grid, sample_palette, frame_width=128, frame_height=128
+        context = FrameContext(
+            palette=sample_palette,
+            palette_map=build_palette_map(sample_palette),
+            generation=GenerationConfig(),
+            frame_width=128,
+            frame_height=128,
+            animation=sample_animation,
+            spritesheet_columns=14,
         )
+        verdicts = checker.run_all(grid, context)
         feet_verdict = [
             v for v in verdicts if v.gate_name == "programmatic_feet_position"
         ][0]

@@ -16,7 +16,7 @@ from typing import Any
 from pydantic import BaseModel, Field
 
 from spriteforge.logging import get_logger
-from spriteforge.models import AnimationDef, PaletteConfig
+from spriteforge.models import AnimationDef, FrameContext, PaletteConfig
 from spriteforge.prompts.gates import (
     GATE_0_PROMPT,
     GATE_1_PROMPT,
@@ -286,21 +286,20 @@ class ProgrammaticChecker:
     def run_all(
         self,
         grid: list[str],
-        palette: PaletteConfig,
-        frame_width: int = 64,
-        frame_height: int = 64,
+        context: FrameContext,
     ) -> list[GateVerdict]:
         """Run all programmatic checks and return all verdicts.
 
         Args:
             grid: The palette-indexed grid to check.
-            palette: Palette config defining valid symbols.
-            frame_width: Expected width of the grid (columns per row).
-            frame_height: Expected height of the grid (number of rows).
+            context: Frame context containing palette, frame_width, and frame_height.
 
         Returns:
             A list of ``GateVerdict`` objects, one per check.
         """
+        frame_width = context.frame_width
+        frame_height = context.frame_height
+        palette = context.palette
         feet_row = int(frame_height * 0.875)
         verdicts = [
             self.check_dimensions(

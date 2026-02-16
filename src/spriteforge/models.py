@@ -180,6 +180,39 @@ class GenerationConfig(BaseModel):
         return v.lower()
 
 
+class FrameContext(BaseModel):
+    """Context bundle for frame generation and verification.
+
+    Encapsulates all immutable frame-generation parameters to reduce
+    parameter threading across the call chain.
+
+    Attributes:
+        palette: Palette config with symbol → RGBA mappings.
+        palette_map: Pre-computed symbol → RGBA tuple mapping.
+        generation: Generation config (style, facing, rules).
+        frame_width: Width of each frame in pixels.
+        frame_height: Height of each frame in pixels.
+        animation: Animation definition for this frame's row.
+        spritesheet_columns: Number of columns in the output spritesheet.
+        anchor_grid: Optional anchor frame grid (from row 0, frame 0).
+        anchor_rendered: Optional anchor frame PNG bytes.
+        quantized_reference: Optional quantized reference PNG bytes.
+    """
+
+    palette: PaletteConfig
+    palette_map: dict[str, tuple[int, int, int, int]]
+    generation: GenerationConfig
+    frame_width: int = Field(gt=0)
+    frame_height: int = Field(gt=0)
+    animation: AnimationDef
+    spritesheet_columns: int = Field(gt=0)
+    anchor_grid: list[str] | None = None
+    anchor_rendered: bytes | None = None
+    quantized_reference: bytes | None = None
+
+    model_config = {"frozen": True}
+
+
 class SpritesheetSpec(BaseModel):
     """Top-level model combining character, animations, and layout.
 

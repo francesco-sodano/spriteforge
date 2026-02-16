@@ -26,7 +26,12 @@ from spriteforge.errors import GateError, RetryExhaustedError
 from spriteforge.gates import GateVerdict, LLMGateChecker, ProgrammaticChecker
 from spriteforge.generator import GenerationError, GridGenerator
 from spriteforge.logging import get_logger
-from spriteforge.models import AnimationDef, PaletteConfig, SpritesheetSpec
+from spriteforge.models import (
+    AnimationDef,
+    FrameContext,
+    PaletteConfig,
+    SpritesheetSpec,
+)
 from spriteforge.palette import build_palette_map
 from spriteforge.preprocessor import PreprocessResult, preprocess_reference
 from spriteforge.providers._base import ProviderError, ReferenceProvider
@@ -205,22 +210,20 @@ class SpriteForgeWorkflow:
         )
 
         # Render and save anchor row strip
+        # Create context for rendering with the anchor grid we just generated
+        anchor_render_context = self._build_frame_context(
+            palette=palette,
+            palette_map=palette_map,
+            animation=anchor_animation,
+            anchor_grid=anchor_grid,
+            anchor_rendered=None,
+            quantized_reference=None,
+        )
         anchor_rendered = frame_to_png_bytes(
-            render_frame(
-                anchor_grid,
-                palette_map,
-                frame_width=self.config.character.frame_width,
-                frame_height=self.config.character.frame_height,
-            )
+            render_frame(anchor_grid, anchor_render_context)
         )
         row_images: dict[int, bytes] = {}
-        row0_strip = render_row_strip(
-            row0_grids,
-            palette_map,
-            spritesheet_columns=self.config.character.spritesheet_columns,
-            frame_width=self.config.character.frame_width,
-            frame_height=self.config.character.frame_height,
-        )
+        row0_strip = render_row_strip(row0_grids, anchor_render_context)
         row_images[anchor_animation.row] = frame_to_png_bytes(row0_strip)
 
         logger.info(
@@ -266,13 +269,16 @@ class SpriteForgeWorkflow:
                         palette_map,
                     )
 
-                    row_strip = render_row_strip(
-                        row_grids,
-                        palette_map,
-                        spritesheet_columns=self.config.character.spritesheet_columns,
-                        frame_width=self.config.character.frame_width,
-                        frame_height=self.config.character.frame_height,
+                    # Create context for rendering this row
+                    row_render_context = self._build_frame_context(
+                        palette=palette,
+                        palette_map=palette_map,
+                        animation=animation,
+                        anchor_grid=anchor_grid,
+                        anchor_rendered=anchor_rendered,
+                        quantized_reference=None,
                     )
+                    row_strip = render_row_strip(row_grids, row_render_context)
                     row_images[animation.row] = frame_to_png_bytes(row_strip)
 
                     logger.info(
@@ -347,29 +353,37 @@ class SpriteForgeWorkflow:
             self.config.character.frame_height,
         )
 
-        anchor_grid = await self._generate_and_verify_frame(
-            reference_frame=ref_frame,
+        # Build context for anchor frame
+        anchor_context = self._build_frame_context(
+            palette=palette,
+            palette_map=palette_map,
+            animation=animation,
             anchor_grid=None,
             anchor_rendered=None,
-            palette=palette,
-            animation=animation,
+            quantized_reference=quantized_reference,
+        )
+
+        anchor_grid = await self._generate_and_verify_frame(
+            reference_frame=ref_frame,
+            context=anchor_context,
             frame_index=0,
             is_anchor=True,
             base_reference=base_reference,
-            quantized_reference=quantized_reference,
-            palette_map=palette_map,
         )
 
-        anchor_rendered = frame_to_png_bytes(
-            render_frame(
-                anchor_grid,
-                palette_map,
-                frame_width=self.config.character.frame_width,
-                frame_height=self.config.character.frame_height,
-            )
-        )
+        anchor_rendered = frame_to_png_bytes(render_frame(anchor_grid, anchor_context))
 
         frame_grids: list[list[str]] = [anchor_grid]
+
+        # Build context for remaining frames (with anchor references)
+        frame_context = self._build_frame_context(
+            palette=palette,
+            palette_map=palette_map,
+            animation=animation,
+            anchor_grid=anchor_grid,
+            anchor_rendered=anchor_rendered,
+            quantized_reference=None,
+        )
 
         # Generate remaining frames with anchor + prev frame context
         prev_grid = anchor_grid
@@ -383,35 +397,18 @@ class SpriteForgeWorkflow:
             )
             grid = await self._generate_and_verify_frame(
                 reference_frame=ref_frame,
-                anchor_grid=anchor_grid,
-                anchor_rendered=anchor_rendered,
-                palette=palette,
-                animation=animation,
+                context=frame_context,
                 frame_index=fi,
                 prev_frame_grid=prev_grid,
                 prev_frame_rendered=prev_rendered,
                 base_reference=base_reference,
-                palette_map=palette_map,
             )
             frame_grids.append(grid)
             prev_grid = grid
-            prev_rendered = frame_to_png_bytes(
-                render_frame(
-                    grid,
-                    palette_map,
-                    frame_width=self.config.character.frame_width,
-                    frame_height=self.config.character.frame_height,
-                )
-            )
+            prev_rendered = frame_to_png_bytes(render_frame(grid, frame_context))
 
         # Gate 3A: Validate assembled row
-        row_strip = render_row_strip(
-            frame_grids,
-            palette_map,
-            spritesheet_columns=self.config.character.spritesheet_columns,
-            frame_width=self.config.character.frame_width,
-            frame_height=self.config.character.frame_height,
-        )
+        row_strip = render_row_strip(frame_grids, frame_context)
         row_strip_bytes = frame_to_png_bytes(row_strip)
         ref_strip_bytes = frame_to_png_bytes(reference_strip.convert("RGBA"))
 
@@ -456,6 +453,16 @@ class SpriteForgeWorkflow:
             base_reference, animation
         )
 
+        # Build context for this row
+        frame_context = self._build_frame_context(
+            palette=palette,
+            palette_map=palette_map,
+            animation=animation,
+            anchor_grid=anchor_grid,
+            anchor_rendered=anchor_rendered,
+            quantized_reference=None,
+        )
+
         frame_grids: list[list[str]] = []
         prev_grid: list[str] | None = None
         prev_rendered: bytes | None = None
@@ -469,35 +476,18 @@ class SpriteForgeWorkflow:
             )
             grid = await self._generate_and_verify_frame(
                 reference_frame=ref_frame,
-                anchor_grid=anchor_grid,
-                anchor_rendered=anchor_rendered,
-                palette=palette,
-                animation=animation,
+                context=frame_context,
                 frame_index=fi,
                 prev_frame_grid=prev_grid,
                 prev_frame_rendered=prev_rendered,
                 base_reference=base_reference,
-                palette_map=palette_map,
             )
             frame_grids.append(grid)
             prev_grid = grid
-            prev_rendered = frame_to_png_bytes(
-                render_frame(
-                    grid,
-                    palette_map,
-                    frame_width=self.config.character.frame_width,
-                    frame_height=self.config.character.frame_height,
-                )
-            )
+            prev_rendered = frame_to_png_bytes(render_frame(grid, frame_context))
 
         # Gate 3A: Validate assembled row
-        row_strip = render_row_strip(
-            frame_grids,
-            palette_map,
-            spritesheet_columns=self.config.character.spritesheet_columns,
-            frame_width=self.config.character.frame_width,
-            frame_height=self.config.character.frame_height,
-        )
+        row_strip = render_row_strip(frame_grids, frame_context)
         row_strip_bytes = frame_to_png_bytes(row_strip)
         ref_strip_bytes = frame_to_png_bytes(reference_strip.convert("RGBA"))
 
@@ -519,20 +509,50 @@ class SpriteForgeWorkflow:
     # Frame generation with retry loop
     # ------------------------------------------------------------------
 
+    def _build_frame_context(
+        self,
+        palette: PaletteConfig,
+        palette_map: dict[str, tuple[int, int, int, int]],
+        animation: AnimationDef,
+        anchor_grid: list[str] | None = None,
+        anchor_rendered: bytes | None = None,
+        quantized_reference: bytes | None = None,
+    ) -> FrameContext:
+        """Build a FrameContext from the current workflow state.
+
+        Args:
+            palette: Palette configuration.
+            palette_map: Symbol → RGBA mapping for rendering.
+            animation: Animation definition for this frame's row.
+            anchor_grid: Optional anchor frame grid.
+            anchor_rendered: Optional anchor frame PNG bytes.
+            quantized_reference: Optional quantized reference PNG bytes.
+
+        Returns:
+            A frozen FrameContext with all frame generation parameters.
+        """
+        return FrameContext(
+            palette=palette,
+            palette_map=palette_map,
+            generation=self.config.generation,
+            frame_width=self.config.character.frame_width,
+            frame_height=self.config.character.frame_height,
+            animation=animation,
+            spritesheet_columns=self.config.character.spritesheet_columns,
+            anchor_grid=anchor_grid,
+            anchor_rendered=anchor_rendered,
+            quantized_reference=quantized_reference,
+        )
+
     async def _generate_and_verify_frame(
         self,
         reference_frame: bytes,
-        anchor_grid: list[str] | None,
-        anchor_rendered: bytes | None,
-        palette: PaletteConfig,
-        animation: AnimationDef,
+        context: FrameContext,
         frame_index: int,
-        palette_map: dict[str, tuple[int, int, int, int]],
         prev_frame_grid: list[str] | None = None,
         prev_frame_rendered: bytes | None = None,
         is_anchor: bool = False,
         base_reference: bytes | None = None,
-        quantized_reference: bytes | None = None,
     ) -> list[str]:
         """Generate a single frame with full verification and retry loop.
 
@@ -544,11 +564,19 @@ class SpriteForgeWorkflow:
         6. After max failures: raise GenerationError
 
         Args:
-            palette_map: Symbol → RGBA mapping for rendering.
+            reference_frame: PNG bytes of the rough reference for this frame.
+            context: Frame context containing palette, animation, generation config,
+                frame dimensions, palette_map, and optional anchor/quantized references.
+            frame_index: Index of this frame within the row.
+            prev_frame_grid: Grid of the previous frame (for continuity).
+            prev_frame_rendered: PNG bytes of the rendered previous frame.
+            is_anchor: Whether this is the anchor frame (Row 0, Frame 0).
+            base_reference: Optional base character reference PNG bytes (for anchor only).
 
         Returns:
-            Verified frame grid (list of 64 strings).
+            Verified frame grid (list of frame_height strings).
         """
+        animation = context.animation
         frame_id = f"row{animation.row}_frame{frame_index}"
         retry_ctx = self.retry_manager.create_context(frame_id)
 
@@ -564,39 +592,23 @@ class SpriteForgeWorkflow:
                 grid = await self.grid_generator.generate_anchor_frame(
                     base_reference=base_reference or b"",
                     reference_frame=reference_frame,
-                    palette=palette,
-                    animation=animation,
-                    generation=self.config.generation,
-                    quantized_reference=quantized_reference,
+                    context=context,
                     temperature=temperature,
                     additional_guidance=guidance,
-                    frame_width=self.config.character.frame_width,
-                    frame_height=self.config.character.frame_height,
                 )
             else:
                 grid = await self.grid_generator.generate_frame(
                     reference_frame=reference_frame,
-                    anchor_grid=anchor_grid or [],
-                    anchor_rendered=anchor_rendered or b"",
-                    palette=palette,
-                    animation=animation,
+                    context=context,
                     frame_index=frame_index,
-                    generation=self.config.generation,
                     prev_frame_grid=prev_frame_grid,
                     prev_frame_rendered=prev_frame_rendered,
                     temperature=temperature,
                     additional_guidance=guidance,
-                    frame_width=self.config.character.frame_width,
-                    frame_height=self.config.character.frame_height,
                 )
 
             # Programmatic checks (fast-fail)
-            prog_verdicts = self.programmatic_checker.run_all(
-                grid,
-                palette,
-                frame_width=self.config.character.frame_width,
-                frame_height=self.config.character.frame_height,
-            )
+            prog_verdicts = self.programmatic_checker.run_all(grid, context)
             prog_failures = [v for v in prog_verdicts if not v.passed]
             if prog_failures:
                 retry_ctx = self.retry_manager.record_failure(
@@ -605,18 +617,13 @@ class SpriteForgeWorkflow:
                 continue
 
             # Render grid to PNG
-            frame_img = render_frame(
-                grid,
-                palette_map,
-                frame_width=self.config.character.frame_width,
-                frame_height=self.config.character.frame_height,
-            )
+            frame_img = render_frame(grid, context)
             frame_bytes = frame_to_png_bytes(frame_img)
 
             # Run LLM gates in parallel
             llm_verdicts = await self._run_gates_parallel(
                 frame_rendered=frame_bytes,
-                anchor_rendered=anchor_rendered,
+                anchor_rendered=context.anchor_rendered,
                 reference_frame=reference_frame,
                 prev_frame_rendered=prev_frame_rendered,
                 frame_index=frame_index,

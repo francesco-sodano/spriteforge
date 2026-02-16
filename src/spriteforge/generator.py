@@ -2,8 +2,8 @@
 
 Translates rough reference frames into structured JSON grids of
 palette symbols using Claude Opus 4.6 with vision input via Azure AI Foundry.
-Grid dimensions are configurable (default 64×64) via ``frame_width`` and
-``frame_height`` parameters passed from the character configuration.
+Grid dimensions are configurable (default 64×64) via ``context.frame_width`` and
+``context.frame_height`` passed from the character configuration.
 """
 
 from __future__ import annotations
@@ -14,7 +14,12 @@ from typing import Any
 
 from spriteforge.errors import GenerationError
 from spriteforge.logging import get_logger
-from spriteforge.models import AnimationDef, GenerationConfig, PaletteConfig
+from spriteforge.models import (
+    AnimationDef,
+    FrameContext,
+    GenerationConfig,
+    PaletteConfig,
+)
 from spriteforge.prompts.generator import (
     GRID_SYSTEM_PROMPT,
     QUANTIZED_REFERENCE_SECTION,
@@ -163,14 +168,9 @@ class GridGenerator:
         self,
         base_reference: bytes,
         reference_frame: bytes,
-        palette: PaletteConfig,
-        animation: AnimationDef,
-        generation: GenerationConfig | None = None,
-        quantized_reference: bytes | None = None,
+        context: FrameContext,
         temperature: float = 1.0,
         additional_guidance: str = "",
-        frame_width: int = 64,
-        frame_height: int = 64,
     ) -> list[str]:
         """Generate the IDLE Frame 0 anchor — the identity reference for all other frames.
 
@@ -178,30 +178,30 @@ class GridGenerator:
         canonical appearance at pixel level. All subsequent frames are
         verified against it.
 
-        When *quantized_reference* is provided (from the preprocessor), the
+        When *context.quantized_reference* is provided (from the preprocessor), the
         LLM uses it as a pixel-level guide — "trace and refine" rather than
         "imagine from scratch".
 
         Args:
             base_reference: PNG bytes of the full base character reference image.
             reference_frame: PNG bytes of the rough reference for IDLE frame 0.
-            palette: Palette config with symbol → RGBA mappings.
-            animation: The IDLE animation definition.
-            generation: Generation config (style, facing, feet_row, rules).
-                If ``None``, defaults are used.
-            quantized_reference: Optional quantized PNG from preprocessor.
+            context: Frame context containing palette, animation, generation config,
+                frame dimensions, and optional quantized_reference.
             temperature: LLM temperature (1.0=creative, 0.3=constrained).
             additional_guidance: Extra prompt text for retry escalation.
-            frame_width: Width of each frame in pixels (grid columns).
-            frame_height: Height of each frame in pixels (grid rows).
 
         Returns:
-            A list of *frame_height* strings, each *frame_width* characters.
+            A list of *context.frame_height* strings, each *context.frame_width* characters.
         """
-        gen = generation or GenerationConfig()
+        palette = context.palette
+        animation = context.animation
+        generation = context.generation
+        frame_width = context.frame_width
+        frame_height = context.frame_height
+        quantized_reference = context.quantized_reference
 
         system_prompt = _build_system_prompt(
-            palette, gen, width=frame_width, height=frame_height
+            palette, generation, width=frame_width, height=frame_height
         )
 
         # Build quantized reference section
@@ -265,47 +265,49 @@ class GridGenerator:
     async def generate_frame(
         self,
         reference_frame: bytes,
-        anchor_grid: list[str],
-        anchor_rendered: bytes,
-        palette: PaletteConfig,
-        animation: AnimationDef,
+        context: FrameContext,
         frame_index: int,
-        generation: GenerationConfig | None = None,
         prev_frame_grid: list[str] | None = None,
         prev_frame_rendered: bytes | None = None,
         temperature: float = 1.0,
         additional_guidance: str = "",
-        frame_width: int = 64,
-        frame_height: int = 64,
     ) -> list[str]:
         """Generate a single pixel-precise frame grid.
 
         Args:
             reference_frame: PNG bytes of the rough reference for this frame.
-            anchor_grid: The IDLE F0 anchor grid (for prompt context).
-            anchor_rendered: PNG bytes of the rendered anchor frame.
-            palette: Palette config.
-            animation: Animation definition for this row.
+            context: Frame context containing anchor_grid, anchor_rendered, palette,
+                animation, generation config, and frame dimensions.
             frame_index: Index of this frame within the row.
-            generation: Generation config. If ``None``, defaults are used.
             prev_frame_grid: Grid of the previous frame (for continuity).
             prev_frame_rendered: PNG bytes of the rendered previous frame.
             temperature: LLM temperature (1.0=creative, 0.3=constrained).
             additional_guidance: Extra prompt text for retry escalation.
-            frame_width: Width of each frame in pixels (grid columns).
-            frame_height: Height of each frame in pixels (grid rows).
 
         Returns:
-            A list of *frame_height* strings, each *frame_width* characters.
+            A list of *context.frame_height* strings, each *context.frame_width* characters.
 
         Raises:
             GenerationError: If the LLM fails to produce a valid grid.
         """
-        gen = generation or GenerationConfig()
+        palette = context.palette
+        animation = context.animation
+        generation = context.generation
+        frame_width = context.frame_width
+        frame_height = context.frame_height
+        anchor_grid = context.anchor_grid
+        anchor_rendered = context.anchor_rendered
 
         system_prompt = _build_system_prompt(
-            palette, gen, width=frame_width, height=frame_height
+            palette, generation, width=frame_width, height=frame_height
         )
+
+        # Validate context for non-anchor frame generation
+        if anchor_rendered is None or anchor_grid is None:
+            raise ValueError(
+                "anchor_rendered and anchor_grid must be provided in context "
+                "for non-anchor frame generation"
+            )
 
         frame_desc = ""
         if animation.frame_descriptions and frame_index < len(

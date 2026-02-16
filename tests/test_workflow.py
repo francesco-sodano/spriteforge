@@ -625,10 +625,14 @@ class TestAnchorPassedToAllFrames:
 
         await wf.run(ref_path, out_path)
 
-        # All generate_frame calls should have anchor_grid set
+        # All generate_frame calls should have context with anchor_grid set
         for call in gen.generate_frame.call_args_list:
-            assert call.kwargs.get("anchor_grid") is not None
-            assert call.kwargs.get("anchor_rendered") is not None
+            context = call.kwargs.get("context")
+            assert context is not None, "context parameter must be present"
+            assert context.anchor_grid is not None, "context.anchor_grid must be set"
+            assert (
+                context.anchor_rendered is not None
+            ), "context.anchor_rendered must be set"
 
 
 # ---------------------------------------------------------------------------
@@ -790,9 +794,11 @@ class TestQuantizedReferencePassedToAnchor:
 
         await wf.run(ref_path, out_path)
 
-        # Check that generate_anchor_frame was called with quantized_reference
+        # Check that generate_anchor_frame was called with quantized_reference in context
         call_kwargs = gen.generate_anchor_frame.call_args.kwargs
-        assert call_kwargs.get("quantized_reference") == b"quantized_bytes_here"
+        context = call_kwargs.get("context")
+        assert context is not None, "context parameter must be present"
+        assert context.quantized_reference == b"quantized_bytes_here"
 
 
 class TestPreprocessorResultReplacesPalette:
@@ -923,8 +929,10 @@ class TestFrameDimensionsPassedToGenerator:
         await wf.run(ref_path, out_path)
 
         call_kwargs = gen.generate_anchor_frame.call_args.kwargs
-        assert call_kwargs["frame_width"] == 32
-        assert call_kwargs["frame_height"] == 32
+        context = call_kwargs["context"]
+        assert context is not None
+        assert context.frame_width == 32
+        assert context.frame_height == 32
 
     @pytest.mark.asyncio
     async def test_custom_dimensions_passed_to_frame(
@@ -970,8 +978,10 @@ class TestFrameDimensionsPassedToGenerator:
 
         # generate_frame called for frames 1 and 2
         for call in gen.generate_frame.call_args_list:
-            assert call.kwargs["frame_width"] == 32
-            assert call.kwargs["frame_height"] == 32
+            context = call.kwargs["context"]
+            assert context is not None
+            assert context.frame_width == 32
+            assert context.frame_height == 32
 
 
 # ---------------------------------------------------------------------------
