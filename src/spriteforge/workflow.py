@@ -593,7 +593,7 @@ class SpriteForgeWorkflow:
                 context=context,
                 frame_index=frame_index,
                 is_anchor=is_anchor,
-                base_reference=base_reference if is_anchor else None,
+                base_reference=base_reference,
                 prev_frame_grid=prev_frame_grid if not is_anchor else None,
                 prev_frame_rendered=prev_frame_rendered if not is_anchor else None,
                 temperature=temperature,
