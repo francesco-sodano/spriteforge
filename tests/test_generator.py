@@ -18,10 +18,12 @@ from spriteforge.generator import (
 from spriteforge.utils import image_to_data_url
 from spriteforge.models import (
     AnimationDef,
+    FrameContext,
     GenerationConfig,
     PaletteColor,
     PaletteConfig,
 )
+from spriteforge.palette import build_palette_map
 
 from mock_chat_provider import MockChatProvider
 
@@ -301,11 +303,19 @@ class TestGenerateAnchorFrame:
         sample_animation: AnimationDef,
     ) -> None:
         """Verify multimodal request includes base_ref and reference images."""
+        context = FrameContext(
+            palette=sample_palette,
+            palette_map=build_palette_map(sample_palette),
+            generation=GenerationConfig(),
+            frame_width=64,
+            frame_height=64,
+            animation=sample_animation,
+            spritesheet_columns=14,
+        )
         grid = await generator.generate_anchor_frame(
             base_reference=_TINY_PNG,
             reference_frame=_TINY_PNG,
-            palette=sample_palette,
-            animation=sample_animation,
+            context=context,
         )
 
         assert len(grid) == 64
@@ -334,11 +344,19 @@ class TestGenerateAnchorFrame:
         sample_animation: AnimationDef,
     ) -> None:
         """System prompt contains palette symbols."""
+        context = FrameContext(
+            palette=sample_palette,
+            palette_map=build_palette_map(sample_palette),
+            generation=GenerationConfig(),
+            frame_width=64,
+            frame_height=64,
+            animation=sample_animation,
+            spritesheet_columns=14,
+        )
         await generator.generate_anchor_frame(
             base_reference=_TINY_PNG,
             reference_frame=_TINY_PNG,
-            palette=sample_palette,
-            animation=sample_animation,
+            context=context,
         )
 
         messages = mock_provider._call_history[0]["messages"]
@@ -359,12 +377,20 @@ class TestGenerateAnchorFrame:
         mock = MockChatProvider(responses=[_make_valid_json_response(".")])
         gen = GridGenerator(chat_provider=mock)
 
+        context = FrameContext(
+            palette=sample_palette,
+            palette_map=build_palette_map(sample_palette),
+            generation=GenerationConfig(),
+            frame_width=64,
+            frame_height=64,
+            animation=sample_animation,
+            spritesheet_columns=14,
+            quantized_reference=_TINY_PNG,
+        )
         grid = await gen.generate_anchor_frame(
             base_reference=_TINY_PNG,
             reference_frame=_TINY_PNG,
-            palette=sample_palette,
-            animation=sample_animation,
-            quantized_reference=_TINY_PNG,
+            context=context,
         )
 
         assert len(grid) == 64
@@ -384,12 +410,20 @@ class TestGenerateAnchorFrame:
         sample_animation: AnimationDef,
     ) -> None:
         """Works as before when quantized_reference=None."""
+        context = FrameContext(
+            palette=sample_palette,
+            palette_map=build_palette_map(sample_palette),
+            generation=GenerationConfig(),
+            frame_width=64,
+            frame_height=64,
+            animation=sample_animation,
+            spritesheet_columns=14,
+            quantized_reference=None,
+        )
         grid = await generator.generate_anchor_frame(
             base_reference=_TINY_PNG,
             reference_frame=_TINY_PNG,
-            palette=sample_palette,
-            animation=sample_animation,
-            quantized_reference=None,
+            context=context,
         )
 
         assert len(grid) == 64
@@ -410,12 +444,20 @@ class TestGenerateAnchorFrame:
         mock = MockChatProvider(responses=[_make_valid_json_response(".")])
         gen = GridGenerator(chat_provider=mock)
 
+        context = FrameContext(
+            palette=sample_palette,
+            palette_map=build_palette_map(sample_palette),
+            generation=GenerationConfig(),
+            frame_width=64,
+            frame_height=64,
+            animation=sample_animation,
+            spritesheet_columns=14,
+            quantized_reference=_TINY_PNG,
+        )
         await gen.generate_anchor_frame(
             base_reference=_TINY_PNG,
             reference_frame=_TINY_PNG,
-            palette=sample_palette,
-            animation=sample_animation,
-            quantized_reference=_TINY_PNG,
+            context=context,
         )
 
         messages = mock._call_history[0]["messages"]
@@ -437,13 +479,19 @@ class TestGenerateAnchorFrame:
         mock = MockChatProvider(responses=[response])
         gen = GridGenerator(chat_provider=mock)
 
+        context = FrameContext(
+            palette=sample_palette,
+            palette_map=build_palette_map(sample_palette),
+            generation=GenerationConfig(),
+            frame_width=32,
+            frame_height=32,
+            animation=sample_animation,
+            spritesheet_columns=14,
+        )
         grid = await gen.generate_anchor_frame(
             base_reference=_TINY_PNG,
             reference_frame=_TINY_PNG,
-            palette=sample_palette,
-            animation=sample_animation,
-            frame_width=32,
-            frame_height=32,
+            context=context,
         )
 
         assert len(grid) == 32
@@ -466,14 +514,20 @@ class TestGenerateAnchorFrame:
         mock = MockChatProvider(responses=[response])
         gen = GridGenerator(chat_provider=mock)
 
+        context = FrameContext(
+            palette=sample_palette,
+            palette_map=build_palette_map(sample_palette),
+            generation=GenerationConfig(),
+            frame_width=48,
+            frame_height=48,
+            animation=sample_animation,
+            spritesheet_columns=14,
+            quantized_reference=_TINY_PNG,
+        )
         await gen.generate_anchor_frame(
             base_reference=_TINY_PNG,
             reference_frame=_TINY_PNG,
-            palette=sample_palette,
-            animation=sample_animation,
-            quantized_reference=_TINY_PNG,
-            frame_width=48,
-            frame_height=48,
+            context=context,
         )
 
         messages = mock._call_history[0]["messages"]
@@ -513,12 +567,20 @@ class TestGenerateFrame:
         anchor_grid: list[str],
     ) -> None:
         """Request includes rendered anchor image."""
-        grid = await generator.generate_frame(
-            reference_frame=_TINY_PNG,
+        context = FrameContext(
+            palette=sample_palette,
+            palette_map=build_palette_map(sample_palette),
+            generation=GenerationConfig(),
+            frame_width=64,
+            frame_height=64,
+            animation=sample_animation,
+            spritesheet_columns=14,
             anchor_grid=anchor_grid,
             anchor_rendered=_TINY_PNG,
-            palette=sample_palette,
-            animation=sample_animation,
+        )
+        grid = await generator.generate_frame(
+            reference_frame=_TINY_PNG,
+            context=context,
             frame_index=1,
         )
 
@@ -542,12 +604,20 @@ class TestGenerateFrame:
         anchor_grid = _make_valid_grid(".")
         prev_grid = _make_valid_grid(".")
 
-        grid = await gen.generate_frame(
-            reference_frame=_TINY_PNG,
+        context = FrameContext(
+            palette=sample_palette,
+            palette_map=build_palette_map(sample_palette),
+            generation=GenerationConfig(),
+            frame_width=64,
+            frame_height=64,
+            animation=sample_animation,
+            spritesheet_columns=14,
             anchor_grid=anchor_grid,
             anchor_rendered=_TINY_PNG,
-            palette=sample_palette,
-            animation=sample_animation,
+        )
+        grid = await gen.generate_frame(
+            reference_frame=_TINY_PNG,
+            context=context,
             frame_index=2,
             prev_frame_grid=prev_grid,
             prev_frame_rendered=_TINY_PNG,
@@ -576,12 +646,20 @@ class TestGenerateFrame:
         anchor_grid: list[str],
     ) -> None:
         """No previous frame → not in request."""
-        grid = await generator.generate_frame(
-            reference_frame=_TINY_PNG,
+        context = FrameContext(
+            palette=sample_palette,
+            palette_map=build_palette_map(sample_palette),
+            generation=GenerationConfig(),
+            frame_width=64,
+            frame_height=64,
+            animation=sample_animation,
+            spritesheet_columns=14,
             anchor_grid=anchor_grid,
             anchor_rendered=_TINY_PNG,
-            palette=sample_palette,
-            animation=sample_animation,
+        )
+        grid = await generator.generate_frame(
+            reference_frame=_TINY_PNG,
+            context=context,
             frame_index=1,
             prev_frame_grid=None,
             prev_frame_rendered=None,
@@ -610,12 +688,20 @@ class TestGenerateFrame:
         gen = GridGenerator(chat_provider=mock)
         anchor_grid = _make_valid_grid(".")
 
-        await gen.generate_frame(
-            reference_frame=_TINY_PNG,
+        context = FrameContext(
+            palette=sample_palette,
+            palette_map=build_palette_map(sample_palette),
+            generation=GenerationConfig(),
+            frame_width=64,
+            frame_height=64,
+            animation=sample_animation,
+            spritesheet_columns=14,
             anchor_grid=anchor_grid,
             anchor_rendered=_TINY_PNG,
-            palette=sample_palette,
-            animation=sample_animation,
+        )
+        await gen.generate_frame(
+            reference_frame=_TINY_PNG,
+            context=context,
             frame_index=1,
             temperature=0.3,
         )
@@ -635,12 +721,20 @@ class TestGenerateFrame:
 
         guidance = "Focus on arm position and ensure sword is visible"
 
-        await gen.generate_frame(
-            reference_frame=_TINY_PNG,
+        context = FrameContext(
+            palette=sample_palette,
+            palette_map=build_palette_map(sample_palette),
+            generation=GenerationConfig(),
+            frame_width=64,
+            frame_height=64,
+            animation=sample_animation,
+            spritesheet_columns=14,
             anchor_grid=anchor_grid,
             anchor_rendered=_TINY_PNG,
-            palette=sample_palette,
-            animation=sample_animation,
+        )
+        await gen.generate_frame(
+            reference_frame=_TINY_PNG,
+            context=context,
             frame_index=1,
             additional_guidance=guidance,
         )
@@ -661,12 +755,20 @@ class TestGenerateFrame:
         anchor_grid: list[str],
     ) -> None:
         """Regular frames don't receive quantized reference (only anchor does)."""
-        await generator.generate_frame(
-            reference_frame=_TINY_PNG,
+        context = FrameContext(
+            palette=sample_palette,
+            palette_map=build_palette_map(sample_palette),
+            generation=GenerationConfig(),
+            frame_width=64,
+            frame_height=64,
+            animation=sample_animation,
+            spritesheet_columns=14,
             anchor_grid=anchor_grid,
             anchor_rendered=_TINY_PNG,
-            palette=sample_palette,
-            animation=sample_animation,
+        )
+        await generator.generate_frame(
+            reference_frame=_TINY_PNG,
+            context=context,
             frame_index=1,
         )
 
@@ -690,15 +792,21 @@ class TestGenerateFrame:
         gen = GridGenerator(chat_provider=mock)
         anchor_grid_32 = _make_valid_grid(".", rows=32, cols=32)
 
-        grid = await gen.generate_frame(
-            reference_frame=_TINY_PNG,
-            anchor_grid=anchor_grid_32,
-            anchor_rendered=_TINY_PNG,
+        context = FrameContext(
             palette=sample_palette,
-            animation=sample_animation,
-            frame_index=1,
+            palette_map=build_palette_map(sample_palette),
+            generation=GenerationConfig(),
             frame_width=32,
             frame_height=32,
+            animation=sample_animation,
+            spritesheet_columns=14,
+            anchor_grid=anchor_grid_32,
+            anchor_rendered=_TINY_PNG,
+        )
+        grid = await gen.generate_frame(
+            reference_frame=_TINY_PNG,
+            context=context,
+            frame_index=1,
         )
 
         assert len(grid) == 32
@@ -722,15 +830,21 @@ class TestGenerateFrame:
         gen = GridGenerator(chat_provider=mock)
         anchor_grid_ns = _make_valid_grid(".", rows=32, cols=48)
 
-        grid = await gen.generate_frame(
-            reference_frame=_TINY_PNG,
-            anchor_grid=anchor_grid_ns,
-            anchor_rendered=_TINY_PNG,
+        context = FrameContext(
             palette=sample_palette,
-            animation=sample_animation,
-            frame_index=1,
+            palette_map=build_palette_map(sample_palette),
+            generation=GenerationConfig(),
             frame_width=48,
             frame_height=32,
+            animation=sample_animation,
+            spritesheet_columns=14,
+            anchor_grid=anchor_grid_ns,
+            anchor_rendered=_TINY_PNG,
+        )
+        grid = await gen.generate_frame(
+            reference_frame=_TINY_PNG,
+            context=context,
+            frame_index=1,
         )
 
         assert len(grid) == 32
@@ -755,11 +869,19 @@ class TestAnchorFrameRetryParams:
         mock = MockChatProvider(responses=[_make_valid_json_response(".")])
         gen = GridGenerator(chat_provider=mock)
 
+        context = FrameContext(
+            palette=sample_palette,
+            palette_map=build_palette_map(sample_palette),
+            generation=GenerationConfig(),
+            frame_width=64,
+            frame_height=64,
+            animation=sample_animation,
+            spritesheet_columns=14,
+        )
         await gen.generate_anchor_frame(
             base_reference=_TINY_PNG,
             reference_frame=_TINY_PNG,
-            palette=sample_palette,
-            animation=sample_animation,
+            context=context,
             temperature=0.5,
         )
 
@@ -777,11 +899,19 @@ class TestAnchorFrameRetryParams:
 
         guidance = "Focus on arm position and ensure sword is visible"
 
+        context = FrameContext(
+            palette=sample_palette,
+            palette_map=build_palette_map(sample_palette),
+            generation=GenerationConfig(),
+            frame_width=64,
+            frame_height=64,
+            animation=sample_animation,
+            spritesheet_columns=14,
+        )
         await gen.generate_anchor_frame(
             base_reference=_TINY_PNG,
             reference_frame=_TINY_PNG,
-            palette=sample_palette,
-            animation=sample_animation,
+            context=context,
             additional_guidance=guidance,
         )
 
@@ -801,11 +931,19 @@ class TestAnchorFrameRetryParams:
         mock = MockChatProvider(responses=[_make_valid_json_response(".")])
         gen = GridGenerator(chat_provider=mock)
 
+        context = FrameContext(
+            palette=sample_palette,
+            palette_map=build_palette_map(sample_palette),
+            generation=GenerationConfig(),
+            frame_width=64,
+            frame_height=64,
+            animation=sample_animation,
+            spritesheet_columns=14,
+        )
         await gen.generate_anchor_frame(
             base_reference=_TINY_PNG,
             reference_frame=_TINY_PNG,
-            palette=sample_palette,
-            animation=sample_animation,
+            context=context,
         )
 
         assert mock._call_history[0]["temperature"] == 1.0
@@ -850,11 +988,19 @@ class TestResponseFormatParameter:
         mock = MockChatProvider(responses=[_make_valid_json_response(".")])
         gen = GridGenerator(chat_provider=mock)
 
+        context = FrameContext(
+            palette=sample_palette,
+            palette_map=build_palette_map(sample_palette),
+            generation=GenerationConfig(),
+            frame_width=64,
+            frame_height=64,
+            animation=sample_animation,
+            spritesheet_columns=14,
+        )
         await gen.generate_anchor_frame(
             base_reference=_TINY_PNG,
             reference_frame=_TINY_PNG,
-            palette=sample_palette,
-            animation=sample_animation,
+            context=context,
         )
 
         assert len(mock._call_history) == 1
@@ -872,12 +1018,20 @@ class TestResponseFormatParameter:
 
         anchor_grid = _make_valid_grid(".")
 
-        await gen.generate_frame(
-            reference_frame=_TINY_PNG,
+        context = FrameContext(
+            palette=sample_palette,
+            palette_map=build_palette_map(sample_palette),
+            generation=GenerationConfig(),
+            frame_width=64,
+            frame_height=64,
+            animation=sample_animation,
+            spritesheet_columns=14,
             anchor_grid=anchor_grid,
             anchor_rendered=_TINY_PNG,
-            palette=sample_palette,
-            animation=sample_animation,
+        )
+        await gen.generate_frame(
+            reference_frame=_TINY_PNG,
+            context=context,
             frame_index=1,
         )
 
@@ -894,11 +1048,19 @@ class TestResponseFormatParameter:
         mock = MockChatProvider(responses=[_make_valid_json_response(".")])
         gen = GridGenerator(chat_provider=mock)
 
+        context = FrameContext(
+            palette=sample_palette,
+            palette_map=build_palette_map(sample_palette),
+            generation=GenerationConfig(),
+            frame_width=64,
+            frame_height=64,
+            animation=sample_animation,
+            spritesheet_columns=14,
+        )
         await gen.generate_anchor_frame(
             base_reference=_TINY_PNG,
             reference_frame=_TINY_PNG,
-            palette=sample_palette,
-            animation=sample_animation,
+            context=context,
             temperature=0.5,
         )
 

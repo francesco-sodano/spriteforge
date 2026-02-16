@@ -205,22 +205,18 @@ class SpriteForgeWorkflow:
         )
 
         # Render and save anchor row strip
-        anchor_rendered = frame_to_png_bytes(
-            render_frame(
-                anchor_grid,
-                palette_map,
-                frame_width=self.config.character.frame_width,
-                frame_height=self.config.character.frame_height,
-            )
+        # Create a context for rendering (reuse from _process_anchor_row)
+        anchor_render_context = self._build_frame_context(
+            palette=palette,
+            palette_map=palette_map,
+            animation=anchor_animation,
+            anchor_grid=anchor_grid,
+            anchor_rendered=None,
+            quantized_reference=None,
         )
+        anchor_rendered = frame_to_png_bytes(render_frame(anchor_grid, anchor_render_context))
         row_images: dict[int, bytes] = {}
-        row0_strip = render_row_strip(
-            row0_grids,
-            palette_map,
-            spritesheet_columns=self.config.character.spritesheet_columns,
-            frame_width=self.config.character.frame_width,
-            frame_height=self.config.character.frame_height,
-        )
+        row0_strip = render_row_strip(row0_grids, anchor_render_context)
         row_images[anchor_animation.row] = frame_to_png_bytes(row0_strip)
 
         logger.info(
@@ -266,13 +262,16 @@ class SpriteForgeWorkflow:
                         palette_map,
                     )
 
-                    row_strip = render_row_strip(
-                        row_grids,
-                        palette_map,
-                        spritesheet_columns=self.config.character.spritesheet_columns,
-                        frame_width=self.config.character.frame_width,
-                        frame_height=self.config.character.frame_height,
+                    # Create context for rendering this row
+                    row_render_context = self._build_frame_context(
+                        palette=palette,
+                        palette_map=palette_map,
+                        animation=animation,
+                        anchor_grid=anchor_grid,
+                        anchor_rendered=anchor_rendered,
+                        quantized_reference=None,
                     )
+                    row_strip = render_row_strip(row_grids, row_render_context)
                     row_images[animation.row] = frame_to_png_bytes(row_strip)
 
                     logger.info(
