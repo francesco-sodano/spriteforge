@@ -210,7 +210,7 @@ class SpriteForgeWorkflow:
         )
 
         # Render and save anchor row strip
-        # Create a context for rendering (reuse from _process_anchor_row)
+        # Create context for rendering with the anchor grid we just generated
         anchor_render_context = self._build_frame_context(
             palette=palette,
             palette_map=palette_map,
