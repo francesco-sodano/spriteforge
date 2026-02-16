@@ -14,7 +14,12 @@ from typing import Any
 
 from spriteforge.errors import GenerationError
 from spriteforge.logging import get_logger
-from spriteforge.models import AnimationDef, FrameContext, GenerationConfig, PaletteConfig
+from spriteforge.models import (
+    AnimationDef,
+    FrameContext,
+    GenerationConfig,
+    PaletteConfig,
+)
 from spriteforge.prompts.generator import (
     GRID_SYSTEM_PROMPT,
     QUANTIZED_REFERENCE_SECTION,
@@ -296,6 +301,13 @@ class GridGenerator:
         system_prompt = _build_system_prompt(
             palette, generation, width=frame_width, height=frame_height
         )
+
+        # Validate context for non-anchor frame generation
+        if anchor_rendered is None or anchor_grid is None:
+            raise ValueError(
+                "anchor_rendered and anchor_grid must be provided in context "
+                "for non-anchor frame generation"
+            )
 
         frame_desc = ""
         if animation.frame_descriptions and frame_index < len(

@@ -630,7 +630,9 @@ class TestAnchorPassedToAllFrames:
             context = call.kwargs.get("context")
             assert context is not None, "context parameter must be present"
             assert context.anchor_grid is not None, "context.anchor_grid must be set"
-            assert context.anchor_rendered is not None, "context.anchor_rendered must be set"
+            assert (
+                context.anchor_rendered is not None
+            ), "context.anchor_rendered must be set"
 
 
 # ---------------------------------------------------------------------------

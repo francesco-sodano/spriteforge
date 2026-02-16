@@ -26,7 +26,12 @@ from spriteforge.errors import GateError, RetryExhaustedError
 from spriteforge.gates import GateVerdict, LLMGateChecker, ProgrammaticChecker
 from spriteforge.generator import GenerationError, GridGenerator
 from spriteforge.logging import get_logger
-from spriteforge.models import AnimationDef, FrameContext, PaletteConfig, SpritesheetSpec
+from spriteforge.models import (
+    AnimationDef,
+    FrameContext,
+    PaletteConfig,
+    SpritesheetSpec,
+)
 from spriteforge.palette import build_palette_map
 from spriteforge.preprocessor import PreprocessResult, preprocess_reference
 from spriteforge.providers._base import ProviderError, ReferenceProvider
@@ -214,7 +219,9 @@ class SpriteForgeWorkflow:
             anchor_rendered=None,
             quantized_reference=None,
         )
-        anchor_rendered = frame_to_png_bytes(render_frame(anchor_grid, anchor_render_context))
+        anchor_rendered = frame_to_png_bytes(
+            render_frame(anchor_grid, anchor_render_context)
+        )
         row_images: dict[int, bytes] = {}
         row0_strip = render_row_strip(row0_grids, anchor_render_context)
         row_images[anchor_animation.row] = frame_to_png_bytes(row0_strip)
