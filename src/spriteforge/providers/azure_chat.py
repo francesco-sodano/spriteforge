@@ -177,9 +177,21 @@ class AzureChatProvider(ChatProvider):
         }
         if response_format:
             kwargs["response_format"] = {"type": response_format}
-        response = await client.chat.completions.create(
-            **kwargs,  # type: ignore[arg-type]
-        )
+
+        try:
+            response = await client.chat.completions.create(
+                **kwargs,  # type: ignore[arg-type]
+            )
+        except Exception as exc:
+            # Reasoning models (e.g. gpt-5-mini) reject temperature != 1.
+            # Retry without temperature when the API tells us so.
+            if "temperature" in str(exc) and "unsupported" in str(exc).lower():
+                kwargs.pop("temperature", None)
+                response = await client.chat.completions.create(
+                    **kwargs,  # type: ignore[arg-type]
+                )
+            else:
+                raise
 
         if (
             not response.choices
