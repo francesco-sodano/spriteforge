@@ -406,6 +406,70 @@ class LLMGateChecker:
         self._chat = chat_provider
 
     # ------------------------------------------------------------------
+    # Helper method
+    # ------------------------------------------------------------------
+
+    async def _run_gate(
+        self,
+        gate_name: str,
+        prompt_text: str,
+        images: list[bytes],
+        context: str = "",
+    ) -> GateVerdict:
+        """Run a gate check with images and text prompt.
+
+        Args:
+            gate_name: Name of the gate for verdict (e.g., "gate_0", "gate_minus_1").
+            prompt_text: The formatted prompt text to send to the LLM.
+            images: List of image bytes to include in the request.
+            context: Optional context for logging (e.g., animation name).
+
+        Returns:
+            A ``GateVerdict`` with the assessment.
+        """
+        content: list[dict[str, Any]] = [{"type": "text", "text": prompt_text}]
+        for img in images:
+            content.append(
+                {"type": "image_url", "image_url": {"url": image_to_data_url(img)}}
+            )
+
+        response_text = await self._chat.chat(
+            [{"role": "user", "content": content}],
+            temperature=0.0,
+            response_format="json_object",
+        )
+        verdict = parse_verdict_response(response_text, gate_name)
+
+        # Format gate name for logging
+        if gate_name == "gate_minus_1":
+            log_name = "Gate -1"
+        elif gate_name == "gate_0":
+            log_name = "Gate 0"
+        elif gate_name == "gate_1":
+            log_name = "Gate 1"
+        elif gate_name == "gate_2":
+            log_name = "Gate 2"
+        elif gate_name == "gate_3a":
+            log_name = "Gate 3A"
+        else:
+            log_name = gate_name
+
+        if verdict.passed:
+            if context:
+                logger.info("%s PASSED for %s", log_name, context)
+            else:
+                logger.info("%s PASSED", log_name)
+        else:
+            if context:
+                logger.warning(
+                    "%s FAILED for %s: %s", log_name, context, verdict.feedback
+                )
+            else:
+                logger.warning("%s FAILED: %s", log_name, verdict.feedback)
+
+        return verdict
+
+    # ------------------------------------------------------------------
     # Gate methods
     # ------------------------------------------------------------------
 
@@ -434,32 +498,12 @@ class LLMGateChecker:
             animation_context=animation.prompt_context or animation.name,
             verdict_schema=GATE_VERDICT_SCHEMA,
         )
-
-        content: list[dict[str, Any]] = [
-            {"type": "text", "text": prompt_text},
-            {
-                "type": "image_url",
-                "image_url": {"url": image_to_data_url(reference_strip)},
-            },
-            {
-                "type": "image_url",
-                "image_url": {"url": image_to_data_url(base_reference)},
-            },
-        ]
-
-        response_text = await self._chat.chat(
-            [{"role": "user", "content": content}],
-            temperature=0.0,
-            response_format="json_object",
+        return await self._run_gate(
+            "gate_minus_1",
+            prompt_text,
+            [reference_strip, base_reference],
+            context=animation.name,
         )
-        verdict = parse_verdict_response(response_text, "gate_minus_1")
-        if verdict.passed:
-            logger.info("Gate -1 PASSED for %s", animation.name)
-        else:
-            logger.warning(
-                "Gate -1 FAILED for %s: %s", animation.name, verdict.feedback
-            )
-        return verdict
 
     async def gate_0(
         self,
@@ -487,30 +531,11 @@ class LLMGateChecker:
             frame_description_section=desc_section,
             verdict_schema=GATE_VERDICT_SCHEMA,
         )
-
-        content: list[dict[str, Any]] = [
-            {"type": "text", "text": prompt_text},
-            {
-                "type": "image_url",
-                "image_url": {"url": image_to_data_url(rendered_frame)},
-            },
-            {
-                "type": "image_url",
-                "image_url": {"url": image_to_data_url(reference_frame)},
-            },
-        ]
-
-        response_text = await self._chat.chat(
-            [{"role": "user", "content": content}],
-            temperature=0.0,
-            response_format="json_object",
+        return await self._run_gate(
+            "gate_0",
+            prompt_text,
+            [rendered_frame, reference_frame],
         )
-        verdict = parse_verdict_response(response_text, "gate_0")
-        if verdict.passed:
-            logger.info("Gate 0 PASSED")
-        else:
-            logger.warning("Gate 0 FAILED: %s", verdict.feedback)
-        return verdict
 
     async def gate_1(
         self,
@@ -531,30 +556,11 @@ class LLMGateChecker:
         prompt_text = GATE_1_PROMPT.format(
             verdict_schema=GATE_VERDICT_SCHEMA,
         )
-
-        content: list[dict[str, Any]] = [
-            {"type": "text", "text": prompt_text},
-            {
-                "type": "image_url",
-                "image_url": {"url": image_to_data_url(rendered_frame)},
-            },
-            {
-                "type": "image_url",
-                "image_url": {"url": image_to_data_url(anchor_frame)},
-            },
-        ]
-
-        response_text = await self._chat.chat(
-            [{"role": "user", "content": content}],
-            temperature=0.0,
-            response_format="json_object",
+        return await self._run_gate(
+            "gate_1",
+            prompt_text,
+            [rendered_frame, anchor_frame],
         )
-        verdict = parse_verdict_response(response_text, "gate_1")
-        if verdict.passed:
-            logger.info("Gate 1 PASSED")
-        else:
-            logger.warning("Gate 1 FAILED: %s", verdict.feedback)
-        return verdict
 
     async def gate_2(
         self,
@@ -575,30 +581,11 @@ class LLMGateChecker:
         prompt_text = GATE_2_PROMPT.format(
             verdict_schema=GATE_VERDICT_SCHEMA,
         )
-
-        content: list[dict[str, Any]] = [
-            {"type": "text", "text": prompt_text},
-            {
-                "type": "image_url",
-                "image_url": {"url": image_to_data_url(rendered_frame)},
-            },
-            {
-                "type": "image_url",
-                "image_url": {"url": image_to_data_url(prev_frame)},
-            },
-        ]
-
-        response_text = await self._chat.chat(
-            [{"role": "user", "content": content}],
-            temperature=0.0,
-            response_format="json_object",
+        return await self._run_gate(
+            "gate_2",
+            prompt_text,
+            [rendered_frame, prev_frame],
         )
-        verdict = parse_verdict_response(response_text, "gate_2")
-        if verdict.passed:
-            logger.info("Gate 2 PASSED")
-        else:
-            logger.warning("Gate 2 FAILED: %s", verdict.feedback)
-        return verdict
 
     async def gate_3a(
         self,
@@ -623,29 +610,9 @@ class LLMGateChecker:
             animation_context=animation.prompt_context or animation.name,
             verdict_schema=GATE_VERDICT_SCHEMA,
         )
-
-        content: list[dict[str, Any]] = [
-            {"type": "text", "text": prompt_text},
-            {
-                "type": "image_url",
-                "image_url": {"url": image_to_data_url(rendered_row_strip)},
-            },
-            {
-                "type": "image_url",
-                "image_url": {"url": image_to_data_url(reference_strip)},
-            },
-        ]
-
-        response_text = await self._chat.chat(
-            [{"role": "user", "content": content}],
-            temperature=0.0,
-            response_format="json_object",
+        return await self._run_gate(
+            "gate_3a",
+            prompt_text,
+            [rendered_row_strip, reference_strip],
+            context=animation.name,
         )
-        verdict = parse_verdict_response(response_text, "gate_3a")
-        if verdict.passed:
-            logger.info("Gate 3A PASSED for %s", animation.name)
-        else:
-            logger.warning(
-                "Gate 3A FAILED for %s: %s", animation.name, verdict.feedback
-            )
-        return verdict

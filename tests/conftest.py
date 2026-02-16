@@ -25,13 +25,13 @@ from spriteforge.models import (
 
 
 def _azure_credentials_available() -> bool:
-    """Check whether Azure AI Foundry credentials are available.
+    """Check whether Azure credentials are available.
 
     Returns True when:
     0. Integration tests are explicitly enabled, AND
     1. The AZURE_AI_PROJECT_ENDPOINT env var is set, AND
-    2. DefaultAzureCredential can obtain a token, AND
-    3. The AZURE_OPENAI_GPT_IMAGE_API_KEY and AZURE_OPENAI_GPT_IMAGE_ENDPOINT env vars are set.
+    2. The AZURE_OPENAI_GPT_IMAGE_ENDPOINT env var is set, AND
+    3. DefaultAzureCredential can obtain a token.
     """
     if os.environ.get("SPRITEFORGE_RUN_INTEGRATION", "").strip().lower() not in (
         "1",
@@ -42,9 +42,6 @@ def _azure_credentials_available() -> bool:
         return False
     endpoint = os.environ.get("AZURE_AI_PROJECT_ENDPOINT", "")
     if not endpoint:
-        return False
-    gpt_image_api_key = os.environ.get("AZURE_OPENAI_GPT_IMAGE_API_KEY", "")
-    if not gpt_image_api_key:
         return False
     gpt_image_endpoint = os.environ.get("AZURE_OPENAI_GPT_IMAGE_ENDPOINT", "")
     if not gpt_image_endpoint:
@@ -80,8 +77,8 @@ def pytest_collection_modifyitems(
     skip_marker = pytest.mark.skip(
         reason=(
             "Integration test skipped: set SPRITEFORGE_RUN_INTEGRATION=1 and "
-            "ensure AZURE_AI_PROJECT_ENDPOINT, AZURE_OPENAI_GPT_IMAGE_API_KEY, "
-            "and AZURE_OPENAI_GPT_IMAGE_ENDPOINT are set and DefaultAzureCredential can authenticate."
+            "ensure AZURE_AI_PROJECT_ENDPOINT and AZURE_OPENAI_GPT_IMAGE_ENDPOINT "
+            "are set and DefaultAzureCredential can authenticate."
         )
     )
     for item in items:
@@ -121,15 +118,6 @@ def gpt_image_endpoint() -> str:
     if not endpoint:
         pytest.skip("AZURE_OPENAI_GPT_IMAGE_ENDPOINT not set")
     return endpoint
-
-
-@pytest.fixture(scope="session")
-def gpt_image_api_key() -> str:
-    """Return the Azure OpenAI GPT-Image API key from the environment."""
-    api_key = os.environ.get("AZURE_OPENAI_GPT_IMAGE_API_KEY", "")
-    if not api_key:
-        pytest.skip("AZURE_OPENAI_GPT_IMAGE_API_KEY not set")
-    return api_key
 
 
 # ---------------------------------------------------------------------------
