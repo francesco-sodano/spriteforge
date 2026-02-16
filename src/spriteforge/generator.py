@@ -367,12 +367,15 @@ class GridGenerator:
                 )
                 content.append({"type": "text", "text": prev_text})
 
-            logger.info(
-                "Generating frame: %s F%d (temp=%.1f)",
-                animation.name,
-                frame_index,
-                temperature,
-            )
+        # Log frame generation
+        frame_type = "anchor" if is_anchor else "frame"
+        logger.info(
+            "Generating %s: %s F%d (temp=%.1f)",
+            frame_type,
+            animation.name,
+            frame_index,
+            temperature,
+        )
 
         messages: list[dict[str, Any]] = [
             {"role": "system", "content": system_prompt},

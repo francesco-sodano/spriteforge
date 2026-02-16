@@ -599,8 +599,8 @@ class TestPrevFramePassedToGenerator:
         assert second_call.kwargs.get("prev_frame_rendered") is not None
 
         # Third call (frame 2) should also have prev_frame_grid set
-        second_call = gen.generate_frame.call_args_list[1]
-        assert second_call.kwargs.get("prev_frame_grid") is not None
+        third_call = gen.generate_frame.call_args_list[2]
+        assert third_call.kwargs.get("prev_frame_grid") is not None
 
 
 class TestAnchorPassedToAllFrames:
