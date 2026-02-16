@@ -1564,8 +1564,8 @@ async def test_workflow_single_row_integration(
             "SPRITEFORGE_TEST_GATE_MODEL", config.generation.gate_model
         ),
     )
-    # GPTImageProvider now reads AZURE_OPENAI_GPT_IMAGE_API_KEY and
-    # AZURE_OPENAI_GPT_IMAGE_ENDPOINT from environment
+    # GPTImageProvider now reads AZURE_OPENAI_GPT_IMAGE_ENDPOINT from environment
+    # and uses DefaultAzureCredential for bearer token auth
     ref_provider = GPTImageProvider(
         model_deployment=os.environ.get(
             "SPRITEFORGE_TEST_REFERENCE_MODEL", config.generation.reference_model
@@ -1718,7 +1718,7 @@ async def test_create_workflow_uses_grid_model(
         # First call should be for grid model
         grid_call = calls[0]
         assert grid_call.kwargs["model_deployment_name"] == "custom-grid-model"
-        assert grid_call.kwargs["project_endpoint"] == "https://test.azure.com"
+        assert grid_call.kwargs["azure_endpoint"] == "https://test.azure.com"
         assert grid_call.kwargs["credential"] == mock_credential
 
         await workflow.close()
@@ -1762,7 +1762,7 @@ async def test_create_workflow_uses_gate_model(
         # Second call should be for gate model
         gate_call = calls[1]
         assert gate_call.kwargs["model_deployment_name"] == "custom-gate-model"
-        assert gate_call.kwargs["project_endpoint"] == "https://test.azure.com"
+        assert gate_call.kwargs["azure_endpoint"] == "https://test.azure.com"
         assert gate_call.kwargs["credential"] == mock_credential
 
         await workflow.close()
@@ -1787,6 +1787,7 @@ async def test_create_workflow_uses_reference_model(
     with (
         patch("spriteforge.providers.azure_chat.AzureChatProvider") as MockChatProvider,
         patch("spriteforge.providers.gpt_image.GPTImageProvider") as MockImageProvider,
+        patch.dict(os.environ, {"AZURE_OPENAI_GPT_IMAGE_ENDPOINT": ""}),
     ):
         mock_grid_provider = AsyncMock()
         mock_gate_provider = AsyncMock()
@@ -1800,9 +1801,10 @@ async def test_create_workflow_uses_reference_model(
             credential=mock_credential,
         )
 
-        # Verify GPTImageProvider was called with reference_model only
-        # (it reads API key and endpoint from environment)
+        # Verify GPTImageProvider was called with reference_model and credential
         MockImageProvider.assert_called_once_with(
+            azure_endpoint=None,
+            credential=mock_credential,
             model_deployment="custom-ref-model",
         )
 
@@ -1841,8 +1843,8 @@ async def test_create_workflow_shared_credential(
             assert call.kwargs["credential"] == mock_credential
 
         MockImageProvider.assert_called_once()
-        # GPTImageProvider no longer uses credential - it uses API key auth
-        assert "credential" not in MockImageProvider.call_args.kwargs
+        # GPTImageProvider now also receives the shared credential
+        assert MockImageProvider.call_args.kwargs["credential"] == mock_credential
 
         # When user-provided credential, it should not be closed
         await workflow.close()
@@ -1881,12 +1883,12 @@ async def test_create_workflow_fallback_env(
 
         # All chat providers should use the env var endpoint
         for call in MockChatProvider.call_args_list:
-            assert call.kwargs["project_endpoint"] == "https://env-endpoint.azure.com"
+            assert call.kwargs["azure_endpoint"] == "https://env-endpoint.azure.com"
 
         MockImageProvider.assert_called_once()
-        # GPTImageProvider no longer uses project_endpoint - it uses
-        # AZURE_OPENAI_GPT_IMAGE_ENDPOINT from environment
-        assert "project_endpoint" not in MockImageProvider.call_args.kwargs
+        # GPTImageProvider receives credential and reads its own endpoint
+        # from AZURE_OPENAI_GPT_IMAGE_ENDPOINT env var
+        assert "credential" in MockImageProvider.call_args.kwargs
 
         await workflow.close()
 

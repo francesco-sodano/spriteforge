@@ -874,17 +874,24 @@ async def create_workflow(
     from spriteforge.providers.azure_chat import AzureChatProvider
     from spriteforge.providers.gpt_image import GPTImageProvider
 
-    # Resolve endpoint
-    endpoint = project_endpoint or os.environ.get("AZURE_AI_PROJECT_ENDPOINT", "")
+    # Resolve endpoint — prefer AZURE_OPENAI_ENDPOINT, fall back to
+    # AZURE_AI_PROJECT_ENDPOINT (legacy) or AZURE_OPENAI_GPT_IMAGE_ENDPOINT
+    endpoint = (
+        project_endpoint
+        or os.environ.get("AZURE_OPENAI_ENDPOINT", "")
+        or os.environ.get("AZURE_AI_PROJECT_ENDPOINT", "")
+        or os.environ.get("AZURE_OPENAI_GPT_IMAGE_ENDPOINT", "")
+    )
     if not endpoint:
         raise ProviderError(
-            "No Azure AI Foundry endpoint configured. "
-            "Set AZURE_AI_PROJECT_ENDPOINT or pass project_endpoint."
+            "No Azure OpenAI endpoint configured. "
+            "Set AZURE_OPENAI_ENDPOINT or pass project_endpoint."
         )
 
     # Create or reuse credential
     # If user provided a credential, we don't own it and won't close it
     # If we create one, we'll store it and close it in workflow.close()
+    shared_credential: Any
     if credential is None:
         from azure.identity.aio import DefaultAzureCredential  # type: ignore[import-untyped,import-not-found]
 
@@ -896,21 +903,22 @@ async def create_workflow(
 
     # Create tiered chat providers
     grid_provider = AzureChatProvider(
-        project_endpoint=endpoint,
+        azure_endpoint=endpoint,
         model_deployment_name=config.generation.grid_model,
         credential=shared_credential,
     )
     gate_provider = AzureChatProvider(
-        project_endpoint=endpoint,
+        azure_endpoint=endpoint,
         model_deployment_name=config.generation.gate_model,
         credential=shared_credential,
     )
 
-    # Create reference provider (uses API key authentication)
+    # Create reference provider (uses Entra ID bearer token authentication)
+    gpt_image_endpoint = os.environ.get("AZURE_OPENAI_GPT_IMAGE_ENDPOINT", "")
     reference_provider = GPTImageProvider(
+        azure_endpoint=gpt_image_endpoint or None,
+        credential=shared_credential,
         model_deployment=config.generation.reference_model,
-        # GPTImageProvider reads AZURE_OPENAI_GPT_IMAGE_API_KEY and
-        # AZURE_OPENAI_GPT_IMAGE_ENDPOINT from environment by default
     )
 
     # Create components

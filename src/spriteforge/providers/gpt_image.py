@@ -1,7 +1,8 @@
 """GPT-Image-1.5 reference image provider via Azure OpenAI.
 
 Uses ``AsyncAzureOpenAI`` from the ``openai`` package to call
-GPT-Image-1.5 with API key authentication.
+GPT-Image-1.5 with Entra ID (``DefaultAzureCredential``) bearer token
+authentication.
 """
 
 from __future__ import annotations
@@ -24,7 +25,8 @@ class GPTImageProvider(ReferenceProvider):
     """Reference generation using Azure-hosted GPT-Image-1.5 model.
 
     Uses ``AsyncAzureOpenAI`` from the ``openai`` package to call
-    GPT-Image-1.5 with API key authentication.
+    GPT-Image-1.5 with Entra ID bearer token authentication via
+    ``DefaultAzureCredential``.
 
     Implements the :class:`~spriteforge.providers.ReferenceProvider`
     interface.
@@ -32,33 +34,29 @@ class GPTImageProvider(ReferenceProvider):
 
     def __init__(
         self,
-        api_key: str | None = None,
         azure_endpoint: str | None = None,
+        credential: Any | None = None,
         model_deployment: str = "gpt-image-1.5",
         api_version: str = "2025-04-01-preview",
     ) -> None:
         """Initialize GPT-Image provider.
 
         Args:
-            api_key: Azure OpenAI API key. If ``None``, reads from
-                ``AZURE_OPENAI_GPT_IMAGE_API_KEY`` environment variable.
-            azure_endpoint: Azure OpenAI endpoint URL.
+            azure_endpoint: Azure OpenAI resource endpoint URL (base URL,
+                e.g. ``https://myresource.openai.azure.com/``).
                 If ``None``, reads from ``AZURE_OPENAI_GPT_IMAGE_ENDPOINT``
                 environment variable.
+            credential: Azure credential instance (e.g.
+                ``DefaultAzureCredential``). If ``None``, a new
+                ``DefaultAzureCredential`` is created and owned by this
+                provider.
             model_deployment: Model deployment name in Azure OpenAI.
             api_version: Azure OpenAI API version.
 
         Raises:
-            ProviderError: If API key or endpoint is missing.
+            ProviderError: If endpoint is missing.
         """
-        self._api_key = api_key or os.environ.get("AZURE_OPENAI_GPT_IMAGE_API_KEY", "")
-        if not self._api_key:
-            raise ProviderError(
-                "Azure OpenAI API key is required. "
-                "Pass api_key or set AZURE_OPENAI_GPT_IMAGE_API_KEY."
-            )
-
-        self._endpoint = azure_endpoint or os.environ.get(
+        self._endpoint: str = azure_endpoint or os.environ.get(
             "AZURE_OPENAI_GPT_IMAGE_ENDPOINT", ""
         )
         if not self._endpoint:
@@ -67,12 +65,19 @@ class GPTImageProvider(ReferenceProvider):
                 "Pass azure_endpoint or set AZURE_OPENAI_GPT_IMAGE_ENDPOINT."
             )
 
+        self._user_credential = credential
+        self._owns_credential = credential is None
+        self._credential: Any | None = None
+
         self._model = model_deployment
         self._api_version = api_version
         self._client: Any | None = None
 
     def _get_client(self) -> Any:
         """Lazily create and return the Azure OpenAI client.
+
+        Uses ``get_bearer_token_provider`` from ``azure.identity.aio`` to
+        obtain Entra ID tokens for the Azure Cognitive Services scope.
 
         Returns:
             An ``AsyncAzureOpenAI`` instance.
@@ -86,9 +91,31 @@ class GPTImageProvider(ReferenceProvider):
                     "Install with: pip install openai"
                 ) from exc
 
+            try:
+                from azure.identity.aio import (  # type: ignore[import-untyped,import-not-found]
+                    DefaultAzureCredential,
+                    get_bearer_token_provider,
+                )
+            except ImportError as exc:
+                raise ImportError(
+                    "Azure Identity package is required for GPTImageProvider. "
+                    "Install with: pip install azure-identity"
+                ) from exc
+
+            # Create or reuse credential
+            if self._user_credential is not None:
+                self._credential = self._user_credential
+            else:
+                self._credential = DefaultAzureCredential()
+
+            token_provider = get_bearer_token_provider(
+                self._credential,
+                "https://cognitiveservices.azure.com/.default",
+            )
+
             self._client = AsyncAzureOpenAI(
-                api_key=self._api_key,
-                azure_endpoint=self._endpoint,
+                azure_ad_token_provider=token_provider,
+                azure_endpoint=str(self._endpoint),
                 api_version=self._api_version,
             )
         return self._client
@@ -135,12 +162,15 @@ class GPTImageProvider(ReferenceProvider):
         try:
             client = self._get_client()
 
-            # images.edit accepts `image` as raw file bytes (FileTypes),
-            # NOT a dict/JSON structure.  The SDK sends it as multipart/form-data.
+            # images.edit accepts `image` as FileTypes.  Raw bytes are sent
+            # as application/octet-stream which the API rejects — wrap in a
+            # (filename, bytes, content_type) tuple so the SDK sends the
+            # correct multipart MIME type.
+            image_file = ("reference.png", base_reference, "image/png")
             response = await client.images.edit(
                 model=self._model,
                 prompt=prompt,
-                image=base_reference,
+                image=image_file,
                 size=api_size,
                 n=1,
                 background="transparent",
@@ -176,7 +206,8 @@ class GPTImageProvider(ReferenceProvider):
     async def close(self) -> None:
         """Clean up provider resources.
 
-        Closes the Azure OpenAI client.
+        Closes the Azure OpenAI client and any owned credential.
+        User-supplied credentials are NOT closed.
         """
         if self._client is not None:
             try:
@@ -184,3 +215,10 @@ class GPTImageProvider(ReferenceProvider):
             except Exception:
                 pass
             self._client = None
+
+        if self._owns_credential and self._credential is not None:
+            try:
+                await self._credential.close()
+            except Exception:
+                pass
+            self._credential = None

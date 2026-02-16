@@ -67,9 +67,10 @@ uv sync --group dev
 
 | Variable | Description |
 |---|---|
-| `AZURE_AI_PROJECT_ENDPOINT` | Azure AI Foundry project endpoint for all model deployments |
+| `AZURE_AI_PROJECT_ENDPOINT` | Azure AI Foundry project endpoint for chat/vision model deployments |
+| `AZURE_OPENAI_GPT_IMAGE_ENDPOINT` | Azure OpenAI resource base URL for GPT-Image-1.5 (e.g. `https://myresource.openai.azure.com/`) |
 
-Authentication uses `DefaultAzureCredential` — no API keys needed.
+Authentication uses `DefaultAzureCredential` everywhere — **no API keys needed**. Both the chat/vision providers (via Azure AI Foundry) and the image generation provider (via Azure OpenAI) use Entra ID bearer token authentication.
 
 ### YAML Config File
 

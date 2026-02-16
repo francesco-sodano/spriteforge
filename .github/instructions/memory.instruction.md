@@ -25,8 +25,10 @@ High-signal decisions + invariants for working on SpriteForge.
 
 ## Azure Access
 
-- Auth: `DefaultAzureCredential` (no API keys).
-- Env var: `AZURE_AI_PROJECT_ENDPOINT`.
+- Auth: `DefaultAzureCredential` for **all** providers — no API keys.
+- Env vars: `AZURE_AI_PROJECT_ENDPOINT` (chat/vision via AI Foundry), `AZURE_OPENAI_GPT_IMAGE_ENDPOINT` (image generation base URL).
+- GPT-Image-1.5 uses Entra ID bearer tokens via `get_bearer_token_provider` from `azure.identity.aio` (scope: `https://cognitiveservices.azure.com/.default`).
+- Corporate policy (`MCAPSGov`) enforces `disableLocalAuth=true` on all Cognitive Services resources — API key auth is blocked at the tenant level.
 - Model deployment names are configurable in YAML under `generation.*_model`.
 
 ## Errors (Semantics)

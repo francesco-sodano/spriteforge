@@ -61,10 +61,15 @@ def _expected_edit_kwargs(
     adds/removes a parameter the test suite surfaces the change in ONE
     place rather than many.
     """
+    # image is sent as a (filename, bytes, content_type) tuple so that
+    # the OpenAI SDK sets the correct MIME type (image/png).
+    image_value: Any = image
+    if image is not None:
+        image_value = ("reference.png", image, "image/png")
     return {
         "model": model,
         "prompt": prompt,
-        "image": image,
+        "image": image_value,
         "size": size,
         "n": 1,
         "background": "transparent",
@@ -90,9 +95,10 @@ def _make_mocked_provider(
     Returns the provider **and** the ``mock_images`` object so callers
     can inspect ``mock_images.edit`` assertions.
     """
+    mock_credential = MagicMock()
     provider = GPTImageProvider(
-        api_key="test-api-key",
         azure_endpoint="https://example.openai.azure.com",
+        credential=mock_credential,
         model_deployment=model,
     )
 
@@ -145,52 +151,58 @@ class TestGPTImageProviderInit:
     """Tests for GPTImageProvider.__init__."""
 
     def test_init_explicit_credentials(self) -> None:
-        """Provider accepts explicit API key and endpoint."""
+        """Provider accepts explicit credential and endpoint."""
+        mock_credential = MagicMock()
         provider = GPTImageProvider(
-            api_key="test-key",
             azure_endpoint="https://example.openai.azure.com",
+            credential=mock_credential,
         )
-        assert provider._api_key == "test-key"
         assert provider._endpoint == "https://example.openai.azure.com"
+        assert provider._user_credential is mock_credential
+        assert provider._owns_credential is False
 
     def test_init_from_env(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        """Provider reads credentials from environment variables."""
-        monkeypatch.setenv("AZURE_OPENAI_GPT_IMAGE_API_KEY", "env-key")
+        """Provider reads endpoint from environment variable."""
         monkeypatch.setenv(
             "AZURE_OPENAI_GPT_IMAGE_ENDPOINT", "https://env.openai.azure.com"
         )
-        provider = GPTImageProvider()
-        assert provider._api_key == "env-key"
+        mock_credential = MagicMock()
+        provider = GPTImageProvider(credential=mock_credential)
         assert provider._endpoint == "https://env.openai.azure.com"
 
-    def test_init_missing_api_key_raises(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        """Provider raises ProviderError when API key is missing."""
-        monkeypatch.delenv("AZURE_OPENAI_GPT_IMAGE_API_KEY", raising=False)
-        with pytest.raises(ProviderError, match="API key is required"):
-            GPTImageProvider(azure_endpoint="https://example.openai.azure.com")
+    def test_init_no_credential_creates_own(self) -> None:
+        """Provider creates its own credential when none is provided."""
+        provider = GPTImageProvider(
+            azure_endpoint="https://example.openai.azure.com",
+        )
+        assert provider._user_credential is None
+        assert provider._owns_credential is True
 
     def test_init_missing_endpoint_raises(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """Provider raises ProviderError when endpoint is missing."""
         monkeypatch.delenv("AZURE_OPENAI_GPT_IMAGE_ENDPOINT", raising=False)
+        mock_credential = MagicMock()
         with pytest.raises(ProviderError, match="endpoint is required"):
-            GPTImageProvider(api_key="test-key")
+            GPTImageProvider(credential=mock_credential)
 
     def test_init_custom_model(self) -> None:
         """Provider stores a custom model deployment name."""
+        mock_credential = MagicMock()
         provider = GPTImageProvider(
-            api_key="test-key",
             azure_endpoint="https://example.openai.azure.com",
+            credential=mock_credential,
             model_deployment="my-custom-model",
         )
         assert provider._model == "my-custom-model"
 
     def test_init_custom_api_version(self) -> None:
         """Provider stores a custom API version."""
+        mock_credential = MagicMock()
         provider = GPTImageProvider(
-            api_key="test-key",
             azure_endpoint="https://example.openai.azure.com",
+            credential=mock_credential,
             api_version="2024-12-01-preview",
         )
         assert provider._api_version == "2024-12-01-preview"
@@ -301,18 +313,20 @@ class TestGPTImageProviderClose:
     @pytest.mark.asyncio
     async def test_close_no_client(self) -> None:
         """close() does not raise when no client was created."""
+        mock_credential = MagicMock()
         provider = GPTImageProvider(
-            api_key="test-key",
             azure_endpoint="https://example.openai.azure.com",
+            credential=mock_credential,
         )
         await provider.close()  # should not raise
 
     @pytest.mark.asyncio
     async def test_close_with_client(self) -> None:
         """close() calls close on the underlying client."""
+        mock_credential = MagicMock()
         provider = GPTImageProvider(
-            api_key="test-key",
             azure_endpoint="https://example.openai.azure.com",
+            credential=mock_credential,
         )
         mock_client = AsyncMock()
         provider._client = mock_client
@@ -321,6 +335,34 @@ class TestGPTImageProviderClose:
 
         mock_client.close.assert_awaited_once()
         assert provider._client is None
+
+    @pytest.mark.asyncio
+    async def test_close_owned_credential(self) -> None:
+        """close() closes owned credential but not user-supplied one."""
+        # Owned credential (no credential passed)
+        provider = GPTImageProvider(
+            azure_endpoint="https://example.openai.azure.com",
+        )
+        mock_cred = AsyncMock()
+        provider._credential = mock_cred
+        provider._owns_credential = True
+
+        await provider.close()
+        mock_cred.close.assert_awaited_once()
+        assert provider._credential is None
+
+    @pytest.mark.asyncio
+    async def test_close_does_not_close_user_credential(self) -> None:
+        """close() does NOT close user-supplied credential."""
+        user_cred = AsyncMock()
+        provider = GPTImageProvider(
+            azure_endpoint="https://example.openai.azure.com",
+            credential=user_cred,
+        )
+        provider._credential = user_cred
+
+        await provider.close()
+        user_cred.close.assert_not_awaited()
 
 
 # ---------------------------------------------------------------------------
@@ -456,8 +498,8 @@ class TestGPTImageProviderAPIContract:
         )
 
     @pytest.mark.asyncio
-    async def test_image_sent_as_raw_bytes(self) -> None:
-        """The base_reference image is sent as raw bytes, not a dict/JSON."""
+    async def test_image_sent_as_png_tuple(self) -> None:
+        """The base_reference image is sent as a (name, bytes, mime) tuple."""
         api_image = Image.new("RGBA", (64, 64), (0, 0, 0, 0))
         buf = io.BytesIO()
         api_image.save(buf, format="PNG")
@@ -477,11 +519,15 @@ class TestGPTImageProviderAPIContract:
             num_frames=1,
         )
 
-        # Inspect the actual `image` kwarg
+        # Inspect the actual `image` kwarg — must be a tuple for correct MIME type
         actual_kwargs = mock_images.edit.call_args.kwargs
+        img_arg = actual_kwargs["image"]
         assert isinstance(
-            actual_kwargs["image"], bytes
-        ), f"Expected 'image' to be raw bytes, got {type(actual_kwargs['image'])}"
+            img_arg, tuple
+        ), f"Expected 'image' to be a tuple, got {type(img_arg)}"
+        assert img_arg[0] == "reference.png"
+        assert isinstance(img_arg[1], bytes)
+        assert img_arg[2] == "image/png"
 
     @pytest.mark.asyncio
     async def test_payload_has_required_keys(self) -> None:
@@ -546,7 +592,8 @@ class TestGPTImageProviderAPIContract:
         kw = mock_images.edit.call_args.kwargs
         assert isinstance(kw["model"], str)
         assert isinstance(kw["prompt"], str)
-        assert isinstance(kw["image"], bytes)
+        assert isinstance(kw["image"], tuple)
+        assert kw["image"][2] == "image/png"
         assert isinstance(kw["size"], str)
         assert isinstance(kw["n"], int) and kw["n"] >= 1
         assert kw["background"] in {"transparent", "opaque", "auto"}
@@ -668,12 +715,11 @@ class TestAzureChatProviderClientReuse:
 
     @pytest.mark.asyncio
     async def test_azure_chat_reuses_client(self) -> None:
-        """Call chat() twice → verify AIProjectClient is created only once."""
+        """Call chat() twice → verify client is created only once."""
         from unittest.mock import MagicMock, patch
 
         # Create mocks that will be injected
         mock_credential = AsyncMock()
-        mock_project_client = AsyncMock()
         mock_openai_client = AsyncMock()
 
         # Mock the response
@@ -687,37 +733,33 @@ class TestAzureChatProviderClientReuse:
         mock_openai_client.chat.completions.create = AsyncMock(
             return_value=mock_response
         )
-        mock_project_client.get_openai_client.return_value = mock_openai_client
 
         # Create provider with user credential
         provider = AzureChatProvider(
-            project_endpoint="https://example.azure.com",
+            azure_endpoint="https://example.openai.azure.com",
             model_deployment_name="test-model",
             credential=mock_credential,
         )
 
-        # Manually inject the clients to simulate lazy initialization
+        # Manually inject the client to simulate lazy initialization
         provider._credential = mock_credential
-        provider._project_client = mock_project_client
-        provider._openai_client = mock_openai_client
+        provider._client = mock_openai_client
 
-        # First chat call - clients already initialized
+        # First chat call - client already initialized
         result1 = await provider.chat(messages=[{"role": "user", "content": "test1"}])
         assert result1 == "response text"
 
         # Capture current client references
         first_credential = provider._credential
-        first_project = provider._project_client
-        first_openai = provider._openai_client
+        first_client = provider._client
 
-        # Second chat call - should reuse same clients
+        # Second chat call - should reuse same client
         result2 = await provider.chat(messages=[{"role": "user", "content": "test2"}])
         assert result2 == "response text"
 
         # Verify same client instances are reused
         assert provider._credential is first_credential
-        assert provider._project_client is first_project
-        assert provider._openai_client is first_openai
+        assert provider._client is first_client
 
         # Verify chat was called TWICE (once per call)
         assert mock_openai_client.chat.completions.create.call_count == 2
@@ -728,38 +770,33 @@ class TestAzureChatProviderClientReuse:
     async def test_azure_chat_close_cleanup(self) -> None:
         """Call close() → verify all resources are released."""
         provider = AzureChatProvider(
-            project_endpoint="https://example.azure.com",
+            azure_endpoint="https://example.openai.azure.com",
             model_deployment_name="test-model",
         )
 
         # Mock clients
         mock_credential = AsyncMock()
-        mock_project_client = AsyncMock()
         mock_openai_client = AsyncMock()
 
         # Manually inject mocked clients
         provider._credential = mock_credential
-        provider._project_client = mock_project_client
-        provider._openai_client = mock_openai_client
+        provider._client = mock_openai_client
         provider._owns_credential = True
 
         await provider.close()
 
         # Verify all close methods were called
         mock_openai_client.close.assert_awaited_once()
-        mock_project_client.close.assert_awaited_once()
         mock_credential.close.assert_awaited_once()
 
         # Verify all references are cleared
-        assert provider._openai_client is None
-        assert provider._project_client is None
+        assert provider._client is None
         assert provider._credential is None
 
     @pytest.mark.asyncio
     async def test_azure_chat_context_manager(self) -> None:
         """Use async with AzureChatProvider(...) as provider → auto-cleanup."""
         mock_credential = AsyncMock()
-        mock_project_client = AsyncMock()
         mock_openai_client = AsyncMock()
 
         # Mock response
@@ -772,18 +809,16 @@ class TestAzureChatProviderClientReuse:
         mock_openai_client.chat.completions.create = AsyncMock(
             return_value=mock_response
         )
-        mock_project_client.get_openai_client.return_value = mock_openai_client
 
         # Create provider
         provider = AzureChatProvider(
-            project_endpoint="https://example.azure.com",
+            azure_endpoint="https://example.openai.azure.com",
             model_deployment_name="test-model",
         )
 
-        # Manually inject the clients
+        # Manually inject the client
         provider._credential = mock_credential
-        provider._project_client = mock_project_client
-        provider._openai_client = mock_openai_client
+        provider._client = mock_openai_client
         provider._owns_credential = True
 
         # Use as context manager
@@ -793,7 +828,6 @@ class TestAzureChatProviderClientReuse:
 
         # After exiting context, all clients should be closed
         mock_openai_client.close.assert_awaited_once()
-        mock_project_client.close.assert_awaited_once()
         mock_credential.close.assert_awaited_once()
 
     @pytest.mark.asyncio
@@ -802,25 +836,22 @@ class TestAzureChatProviderClientReuse:
         user_credential = AsyncMock()
 
         provider = AzureChatProvider(
-            project_endpoint="https://example.azure.com",
+            azure_endpoint="https://example.openai.azure.com",
             model_deployment_name="test-model",
             credential=user_credential,
         )
 
-        # Mock other clients
-        mock_project_client = AsyncMock()
+        # Mock client
         mock_openai_client = AsyncMock()
 
-        # Manually inject mocked clients
+        # Manually inject mocked client
         provider._credential = user_credential  # Same as user_credential
-        provider._project_client = mock_project_client
-        provider._openai_client = mock_openai_client
+        provider._client = mock_openai_client
 
         await provider.close()
 
-        # Verify openai and project clients were closed
+        # Verify openai client was closed
         mock_openai_client.close.assert_awaited_once()
-        mock_project_client.close.assert_awaited_once()
 
         # Verify user credential was NOT closed
         user_credential.close.assert_not_awaited()
@@ -841,7 +872,6 @@ class TestAzureChatProviderResponseFormat:
 
         # Create mocks
         mock_credential = AsyncMock()
-        mock_project_client = AsyncMock()
         mock_openai_client = AsyncMock()
 
         # Mock the response
@@ -855,19 +885,17 @@ class TestAzureChatProviderResponseFormat:
         mock_openai_client.chat.completions.create = AsyncMock(
             return_value=mock_response
         )
-        mock_project_client.get_openai_client.return_value = mock_openai_client
 
         # Create provider with user credential
         provider = AzureChatProvider(
-            project_endpoint="https://example.azure.com",
+            azure_endpoint="https://example.openai.azure.com",
             model_deployment_name="test-model",
             credential=mock_credential,
         )
 
-        # Manually inject mocked clients
+        # Manually inject mocked client
         provider._credential = mock_credential
-        provider._project_client = mock_project_client
-        provider._openai_client = mock_openai_client
+        provider._client = mock_openai_client
 
         # Call chat with response_format
         messages = [{"role": "user", "content": "test"}]
@@ -889,7 +917,6 @@ class TestAzureChatProviderResponseFormat:
 
         # Create mocks
         mock_credential = AsyncMock()
-        mock_project_client = AsyncMock()
         mock_openai_client = AsyncMock()
 
         # Mock the response
@@ -903,19 +930,17 @@ class TestAzureChatProviderResponseFormat:
         mock_openai_client.chat.completions.create = AsyncMock(
             return_value=mock_response
         )
-        mock_project_client.get_openai_client.return_value = mock_openai_client
 
         # Create provider
         provider = AzureChatProvider(
-            project_endpoint="https://example.azure.com",
+            azure_endpoint="https://example.openai.azure.com",
             model_deployment_name="test-model",
             credential=mock_credential,
         )
 
-        # Manually inject mocked clients
+        # Manually inject mocked client
         provider._credential = mock_credential
-        provider._project_client = mock_project_client
-        provider._openai_client = mock_openai_client
+        provider._client = mock_openai_client
 
         # Call chat without response_format
         messages = [{"role": "user", "content": "test"}]
@@ -1020,7 +1045,7 @@ class TestAzureSDKErrorMessages:
         # Mock the import to fail for Azure SDK packages only
         original_import = builtins.__import__
 
-        def mock_import(name, *args, **kwargs):
+        def mock_import(name: str, *args: Any, **kwargs: Any) -> Any:
             if name.startswith("azure.ai.") or name.startswith("azure.identity"):
                 raise ImportError(f"No module named '{name}'")
             return original_import(name, *args, **kwargs)
@@ -1040,9 +1065,7 @@ class TestAzureSDKErrorMessages:
             await provider.chat([{"role": "user", "content": "test"}])
 
         error_msg = str(exc_info.value)
-        assert "Azure SDK packages are required" in error_msg
-        assert "pip install spriteforge[azure]" in error_msg
-        assert "azure-ai-projects" in error_msg
+        assert "AzureChatProvider" in error_msg
         assert "azure-identity" in error_msg
 
     def test_gpt_image_provider_missing_sdk_error(
@@ -1060,7 +1083,7 @@ class TestAzureSDKErrorMessages:
         # Mock the import to fail for OpenAI SDK only
         original_import = builtins.__import__
 
-        def mock_import(name, *args, **kwargs):
+        def mock_import(name: str, *args: Any, **kwargs: Any) -> Any:
             if name == "openai" or name.startswith("openai."):
                 raise ImportError(f"No module named '{name}'")
             return original_import(name, *args, **kwargs)
@@ -1070,9 +1093,10 @@ class TestAzureSDKErrorMessages:
         # Import and create provider (doesn't fail yet)
         from spriteforge.providers.gpt_image import GPTImageProvider
 
+        mock_credential = MagicMock()
         provider = GPTImageProvider(
-            api_key="test-key",
             azure_endpoint="https://test.openai.azure.com",
+            credential=mock_credential,
         )
 
         # Using the provider should fail with clear error message
