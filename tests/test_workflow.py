@@ -304,15 +304,14 @@ class TestRunAnchorFirst:
 
         gen = AsyncMock(spec=GridGenerator)
 
-        async def mock_anchor(*args: Any, **kwargs: Any) -> list[str]:
-            call_order.append("anchor")
-            return _make_sprite_grid()
-
         async def mock_frame(*args: Any, **kwargs: Any) -> list[str]:
-            call_order.append("frame")
+            is_anchor = kwargs.get("is_anchor", False)
+            if is_anchor:
+                call_order.append("anchor")
+            else:
+                call_order.append("frame")
             return _make_sprite_grid()
 
-        gen.generate_anchor_frame = mock_anchor
         gen.generate_frame = mock_frame
 
         wf = _build_workflow(multi_row_config, sample_palette, grid_generator=gen)
@@ -577,7 +576,6 @@ class TestPrevFramePassedToGenerator:
         tmp_path: Path,
     ) -> None:
         gen = AsyncMock(spec=GridGenerator)
-        gen.generate_anchor_frame = AsyncMock(return_value=_make_sprite_grid())
         gen.generate_frame = AsyncMock(return_value=_make_sprite_grid())
 
         wf = _build_workflow(single_row_config, sample_palette, grid_generator=gen)
@@ -588,16 +586,19 @@ class TestPrevFramePassedToGenerator:
 
         await wf.run(ref_path, out_path)
 
-        # generate_frame is called for frames 1 and 2 (after anchor)
-        # 3 frames total, anchor is frame 0 via generate_anchor_frame
-        assert gen.generate_frame.call_count == 2
+        # generate_frame is called for all 3 frames (anchor + frames 1 and 2)
+        assert gen.generate_frame.call_count == 3
 
-        # First call (frame 1) should have prev_frame_grid set (from anchor)
+        # First call (frame 0, anchor) should have is_anchor=True
         first_call = gen.generate_frame.call_args_list[0]
-        assert first_call.kwargs.get("prev_frame_grid") is not None
-        assert first_call.kwargs.get("prev_frame_rendered") is not None
+        assert first_call.kwargs.get("is_anchor") is True
 
-        # Second call (frame 2) should also have prev_frame_grid set
+        # Second call (frame 1) should have prev_frame_grid set (from anchor)
+        second_call = gen.generate_frame.call_args_list[1]
+        assert second_call.kwargs.get("prev_frame_grid") is not None
+        assert second_call.kwargs.get("prev_frame_rendered") is not None
+
+        # Third call (frame 2) should also have prev_frame_grid set
         second_call = gen.generate_frame.call_args_list[1]
         assert second_call.kwargs.get("prev_frame_grid") is not None
 
@@ -614,8 +615,7 @@ class TestAnchorPassedToAllFrames:
     ) -> None:
         gen = AsyncMock(spec=GridGenerator)
         anchor_grid = _make_sprite_grid()
-        gen.generate_anchor_frame = AsyncMock(return_value=anchor_grid)
-        gen.generate_frame = AsyncMock(return_value=_make_sprite_grid())
+        gen.generate_frame = AsyncMock(return_value=anchor_grid)
 
         wf = _build_workflow(multi_row_config, sample_palette, grid_generator=gen)
         ref_img = Image.new("RGBA", (64, 64), (100, 100, 100, 255))
@@ -625,14 +625,19 @@ class TestAnchorPassedToAllFrames:
 
         await wf.run(ref_path, out_path)
 
-        # All generate_frame calls should have context with anchor_grid set
+        # All non-anchor generate_frame calls should have context with anchor_grid set
         for call in gen.generate_frame.call_args_list:
+            is_anchor = call.kwargs.get("is_anchor", False)
             context = call.kwargs.get("context")
             assert context is not None, "context parameter must be present"
-            assert context.anchor_grid is not None, "context.anchor_grid must be set"
-            assert (
-                context.anchor_rendered is not None
-            ), "context.anchor_rendered must be set"
+            # Non-anchor frames should have anchor_grid and anchor_rendered in context
+            if not is_anchor:
+                assert (
+                    context.anchor_grid is not None
+                ), "context.anchor_grid must be set for non-anchor frames"
+                assert (
+                    context.anchor_rendered is not None
+                ), "context.anchor_rendered must be set for non-anchor frames"
 
 
 # ---------------------------------------------------------------------------
@@ -769,7 +774,6 @@ class TestQuantizedReferencePassedToAnchor:
         tmp_path: Path,
     ) -> None:
         gen = AsyncMock(spec=GridGenerator)
-        gen.generate_anchor_frame = AsyncMock(return_value=_make_sprite_grid())
         gen.generate_frame = AsyncMock(return_value=_make_sprite_grid())
 
         mock_preprocessor = MagicMock()
@@ -794,8 +798,16 @@ class TestQuantizedReferencePassedToAnchor:
 
         await wf.run(ref_path, out_path)
 
-        # Check that generate_anchor_frame was called with quantized_reference in context
-        call_kwargs = gen.generate_anchor_frame.call_args.kwargs
+        # Check that the anchor frame generation (first call with is_anchor=True)
+        # was called with quantized_reference in context
+        anchor_call = None
+        for call in gen.generate_frame.call_args_list:
+            if call.kwargs.get("is_anchor"):
+                anchor_call = call
+                break
+
+        assert anchor_call is not None, "Anchor frame call not found"
+        call_kwargs = anchor_call.kwargs
         context = call_kwargs.get("context")
         assert context is not None, "context parameter must be present"
         assert context.quantized_reference == b"quantized_bytes_here"
@@ -916,7 +928,6 @@ class TestFrameDimensionsPassedToGenerator:
         small_grid = _make_valid_grid(".", rows=32, cols=32)
 
         gen = AsyncMock(spec=GridGenerator)
-        gen.generate_anchor_frame = AsyncMock(return_value=small_grid)
         gen.generate_frame = AsyncMock(return_value=small_grid)
 
         wf = _build_workflow(config_32, sample_palette, grid_generator=gen)
@@ -928,7 +939,15 @@ class TestFrameDimensionsPassedToGenerator:
 
         await wf.run(ref_path, out_path)
 
-        call_kwargs = gen.generate_anchor_frame.call_args.kwargs
+        # Find the anchor frame call (is_anchor=True)
+        anchor_call = None
+        for call in gen.generate_frame.call_args_list:
+            if call.kwargs.get("is_anchor"):
+                anchor_call = call
+                break
+
+        assert anchor_call is not None, "Anchor frame call not found"
+        call_kwargs = anchor_call.kwargs
         context = call_kwargs["context"]
         assert context is not None
         assert context.frame_width == 32
@@ -1166,16 +1185,16 @@ class TestAnchorRetryEscalatesTemperature:
             generation=GenerationConfig(),
         )
 
-        # Track calls to generate_anchor_frame to inspect temperature
+        # Track calls to generate_frame to inspect temperature for anchor calls
         anchor_calls: list[dict[str, Any]] = []
 
-        async def mock_anchor(*args: Any, **kwargs: Any) -> list[str]:
-            anchor_calls.append(kwargs)
+        async def mock_frame(*args: Any, **kwargs: Any) -> list[str]:
+            if kwargs.get("is_anchor"):
+                anchor_calls.append(kwargs)
             return _make_sprite_grid()
 
         gen = AsyncMock(spec=GridGenerator)
-        gen.generate_anchor_frame = mock_anchor
-        gen.generate_frame = AsyncMock(return_value=_make_sprite_grid())
+        gen.generate_frame = mock_frame
 
         # Programmatic checker fails first 4 times, then passes
         prog_checker = MagicMock(spec=ProgrammaticChecker)
@@ -1261,13 +1280,13 @@ class TestAnchorRetryPassesGuidance:
 
         anchor_calls: list[dict[str, Any]] = []
 
-        async def mock_anchor(*args: Any, **kwargs: Any) -> list[str]:
-            anchor_calls.append(kwargs)
+        async def mock_frame(*args: Any, **kwargs: Any) -> list[str]:
+            if kwargs.get("is_anchor"):
+                anchor_calls.append(kwargs)
             return _make_sprite_grid()
 
         gen = AsyncMock(spec=GridGenerator)
-        gen.generate_anchor_frame = mock_anchor
-        gen.generate_frame = AsyncMock(return_value=_make_sprite_grid())
+        gen.generate_frame = mock_frame
 
         # Programmatic checker fails first, then passes
         prog_checker = MagicMock(spec=ProgrammaticChecker)
