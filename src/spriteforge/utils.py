@@ -66,6 +66,39 @@ def strip_code_fences(text: str) -> str:
     return text
 
 
+def compress_grid_rle(grid: list[str]) -> str:
+    """Compress a grid using run-length encoding to reduce token usage.
+
+    Each row is encoded as a series of ``<count><symbol>`` pairs.
+    For example, ``"....OOHH...."`` becomes ``"4.2O2H4."``.
+    Runs of length 1 omit the count (e.g., ``"O"`` stays ``"O"``).
+
+    Args:
+        grid: List of strings representing the grid rows.
+
+    Returns:
+        Newline-joined RLE-encoded rows.
+    """
+    lines: list[str] = []
+    for row in grid:
+        if not row:
+            lines.append("")
+            continue
+        parts: list[str] = []
+        current_char = row[0]
+        count = 1
+        for ch in row[1:]:
+            if ch == current_char:
+                count += 1
+            else:
+                parts.append(f"{count}{current_char}" if count > 1 else current_char)
+                current_char = ch
+                count = 1
+        parts.append(f"{count}{current_char}" if count > 1 else current_char)
+        lines.append("".join(parts))
+    return "\n".join(lines)
+
+
 def parse_json_from_llm(text: str) -> dict[str, Any]:
     """Parse JSON from LLM output, handling common formatting quirks.
 

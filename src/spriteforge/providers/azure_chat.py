@@ -200,6 +200,15 @@ class AzureChatProvider(ChatProvider):
         ):
             raise GenerationError("LLM returned no content")
 
+        # Capture token usage for callers that track budgets
+        if response.usage:
+            self.last_usage = {
+                "prompt_tokens": response.usage.prompt_tokens or 0,
+                "completion_tokens": response.usage.completion_tokens or 0,
+            }
+        else:
+            self.last_usage = None
+
         return str(response.choices[0].message.content)
 
     async def close(self) -> None:

@@ -175,11 +175,14 @@ class BudgetConfig(BaseModel):
             when set). When 0 (default), RetryConfig.max_retries is used.
         warn_at_percentage: Emit warning when budget consumption reaches this
             percentage (0.0–1.0). Default 0.8 (80%).
+        track_tokens: When True, accumulate prompt/completion token counts
+            reported by the API alongside call counts. Default False.
     """
 
     max_llm_calls: int = Field(default=0, ge=0)
     max_retries_per_row: int = Field(default=0, ge=0)
     warn_at_percentage: float = Field(default=0.8, ge=0.0, le=1.0)
+    track_tokens: bool = Field(default=False)
 
 
 class GenerationConfig(BaseModel):
@@ -211,6 +214,11 @@ class GenerationConfig(BaseModel):
             (row coherence) failures. When Gate 3A fails, the workflow
             will regenerate problematic frames and re-check up to this
             many times before raising GateError.
+        fallback_regen_frames: Number of trailing frames to regenerate when
+            Gate 3A feedback doesn't reference specific frames. Default 2.
+        compact_grid_context: When True, grid text passed as LLM context
+            (anchor grid, previous-frame grid) is RLE-compressed to reduce
+            token usage. Default False (full grid text).
         budget: Optional budget constraints for LLM call tracking and limits.
     """
 
@@ -227,6 +235,8 @@ class GenerationConfig(BaseModel):
     labeling_model: str = "gpt-5-nano"
     reference_model: str = "gpt-image-1.5"
     gate_3a_max_retries: int = Field(default=2, ge=0)
+    fallback_regen_frames: int = Field(default=2, ge=1)
+    compact_grid_context: bool = False
     budget: BudgetConfig | None = None
 
     @field_validator("facing")

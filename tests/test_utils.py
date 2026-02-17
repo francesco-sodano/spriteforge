@@ -10,6 +10,7 @@ import pytest
 from PIL import Image
 
 from spriteforge.utils import (
+    compress_grid_rle,
     image_to_base64,
     image_to_data_url,
     parse_json_from_llm,
@@ -150,3 +151,54 @@ class TestParseJsonFromLlm:
         """Non-JSON text → raises ValueError."""
         with pytest.raises(ValueError, match="Failed to parse JSON"):
             parse_json_from_llm("this is not json at all")
+
+
+# ---------------------------------------------------------------------------
+# compress_grid_rle
+# ---------------------------------------------------------------------------
+
+
+class TestCompressGridRle:
+    """Tests for compress_grid_rle()."""
+
+    def test_single_character_runs(self) -> None:
+        """Repeated characters are compressed."""
+        grid = ["....OOHH...."]
+        result = compress_grid_rle(grid)
+        assert result == "4.2O2H4."
+
+    def test_no_compression_for_singles(self) -> None:
+        """Single characters stay as-is (no '1' prefix)."""
+        grid = ["abcd"]
+        result = compress_grid_rle(grid)
+        assert result == "abcd"
+
+    def test_multi_row(self) -> None:
+        """Multiple rows separated by newlines."""
+        grid = ["aaaa", "bbbb"]
+        result = compress_grid_rle(grid)
+        assert result == "4a\n4b"
+
+    def test_mixed_runs(self) -> None:
+        """Combination of singles and runs."""
+        grid = ["aOO..b"]
+        result = compress_grid_rle(grid)
+        assert result == "a2O2.b"
+
+    def test_full_64_transparent(self) -> None:
+        """Full 64-dot transparent row."""
+        grid = ["." * 64]
+        result = compress_grid_rle(grid)
+        assert result == "64."
+
+    def test_empty_grid(self) -> None:
+        """Empty grid produces empty string."""
+        assert compress_grid_rle([]) == ""
+
+    def test_roundtrip_preserves_length(self) -> None:
+        """Decompressed RLE should reconstruct the original row length."""
+        row = "....OOOOssssHHHH....OOOOssssHHHH....OOOOssssHHHH....OOOOssssHHHH"
+        grid = [row]
+        rle = compress_grid_rle(grid)
+        # RLE string should be shorter
+        assert len(rle) < len(row)

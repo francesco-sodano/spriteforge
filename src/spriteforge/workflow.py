@@ -764,8 +764,9 @@ class SpriteForgeWorkflow:
                 )
                 return sorted(set(indices))
 
-        # Fallback: regenerate last 2 frames (common source of animation issues)
-        fallback = list(range(max(0, num_frames - 2), num_frames))
+        # Fallback: regenerate trailing frames (common source of animation issues)
+        n = self.config.generation.fallback_regen_frames
+        fallback = list(range(max(0, num_frames - n), num_frames))
         logger.info(
             "No specific frames identified in feedback; "
             "regenerating last %d frames as fallback: %s",

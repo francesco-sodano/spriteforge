@@ -27,7 +27,7 @@ from spriteforge.prompts.generator import (
     build_frame_prompt,
 )
 from spriteforge.providers.chat import ChatProvider
-from spriteforge.utils import image_to_data_url
+from spriteforge.utils import compress_grid_rle, image_to_data_url
 
 logger = get_logger("generator")
 
@@ -354,17 +354,30 @@ class GridGenerator:
                 )
 
             # Add anchor grid and previous frame grid as text context
-            anchor_text = (
-                "The anchor frame (IDLE F0) grid for identity reference:\n"
-                + "\n".join(context.anchor_grid)
-            )
+            compact = context.generation.compact_grid_context
+            if compact:
+                anchor_grid_text = compress_grid_rle(context.anchor_grid)
+                label = "The anchor frame (IDLE F0) grid (RLE-compressed) for identity reference:\n"
+            else:
+                anchor_grid_text = "\n".join(context.anchor_grid)
+                label = "The anchor frame (IDLE F0) grid for identity reference:\n"
+            anchor_text = label + anchor_grid_text
             content.append({"type": "text", "text": anchor_text})
 
             if prev_frame_grid is not None:
-                prev_text = (
-                    f"Previous frame (frame {frame_index - 1}) grid "
-                    "for animation continuity:\n" + "\n".join(prev_frame_grid)
-                )
+                if compact:
+                    prev_grid_text = compress_grid_rle(prev_frame_grid)
+                    prev_label = (
+                        f"Previous frame (frame {frame_index - 1}) grid "
+                        "(RLE-compressed) for animation continuity:\n"
+                    )
+                else:
+                    prev_grid_text = "\n".join(prev_frame_grid)
+                    prev_label = (
+                        f"Previous frame (frame {frame_index - 1}) grid "
+                        "for animation continuity:\n"
+                    )
+                prev_text = prev_label + prev_grid_text
                 content.append({"type": "text", "text": prev_text})
 
         # Log frame generation
