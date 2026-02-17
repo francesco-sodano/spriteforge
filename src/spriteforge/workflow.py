@@ -1194,9 +1194,10 @@ async def create_workflow(
     )
 
     # Create reference provider (uses Entra ID bearer token authentication)
+    # Prefer specific GPT image endpoint, fallback to general endpoint
     gpt_image_endpoint = os.environ.get("AZURE_OPENAI_GPT_IMAGE_ENDPOINT", "")
     reference_provider = GPTImageProvider(
-        azure_endpoint=gpt_image_endpoint or None,
+        azure_endpoint=gpt_image_endpoint or endpoint,
         credential=shared_credential,
         model_deployment=config.generation.reference_model,
     )

@@ -2120,7 +2120,7 @@ async def test_create_workflow_uses_reference_model(
 
         # Verify GPTImageProvider was called with reference_model and credential
         MockImageProvider.assert_called_once_with(
-            azure_endpoint=None,
+            azure_endpoint="https://test.azure.com",
             credential=mock_credential,
             model_deployment="custom-ref-model",
         )

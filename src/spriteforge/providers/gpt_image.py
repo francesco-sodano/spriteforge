@@ -174,7 +174,7 @@ class GPTImageProvider(ReferenceProvider):
                 size=api_size,
                 n=1,
                 background="transparent",
-                output_format="png",
+                response_format="b64_json",
                 quality="high",
                 input_fidelity="high",
             )
@@ -183,8 +183,6 @@ class GPTImageProvider(ReferenceProvider):
             raise ProviderError(f"Image generation failed: {exc}") from exc
 
         try:
-            # GPT Image models always return base64-encoded images
-            # (response_format is a DALL-E-only parameter).
             image_b64: str = response.data[0].b64_json  # type: ignore[union-attr]
             image_bytes = base64.b64decode(image_b64)
             image = Image.open(io.BytesIO(image_bytes))

@@ -73,7 +73,7 @@ def _expected_edit_kwargs(
         "size": size,
         "n": 1,
         "background": "transparent",
-        "output_format": "png",
+        "response_format": "b64_json",
         "quality": "high",
         "input_fidelity": "high",
     }
@@ -559,7 +559,7 @@ class TestGPTImageProviderAPIContract:
             "size",
             "n",
             "background",
-            "output_format",
+            "response_format",
             "quality",
             "input_fidelity",
         }
@@ -597,7 +597,7 @@ class TestGPTImageProviderAPIContract:
         assert isinstance(kw["size"], str)
         assert isinstance(kw["n"], int) and kw["n"] >= 1
         assert kw["background"] in {"transparent", "opaque", "auto"}
-        assert kw["output_format"] in {"png", "jpeg", "webp"}
+        assert kw["response_format"] in {"b64_json", "url"}
         assert kw["quality"] in {"low", "medium", "high", "auto"}
         # input_fidelity is a string hint
         assert isinstance(kw["input_fidelity"], str)
