@@ -73,6 +73,7 @@ class SpriteForgeWorkflow:
         preprocessor: Callable[..., PreprocessResult] | None = None,
         max_concurrent_rows: int = 0,
         checkpoint_dir: str | Path | None = None,
+        call_tracker: Any | None = None,
     ) -> None:
         """Initialize the workflow with all required components.
 
@@ -95,6 +96,7 @@ class SpriteForgeWorkflow:
                 If provided, enables checkpoint/resume support. After each
                 row completes Gate 3A, its strip PNG and frame grids are
                 saved. On resume, completed rows are skipped.
+            call_tracker: Optional CallTracker for budget enforcement.
         """
         self.config = config
         self.reference_provider = reference_provider
@@ -108,6 +110,7 @@ class SpriteForgeWorkflow:
         self.checkpoint_manager: CheckpointManager | None = None
         if checkpoint_dir is not None:
             self.checkpoint_manager = CheckpointManager(Path(checkpoint_dir))
+        self.call_tracker = call_tracker
 
     async def close(self) -> None:
         """Clean up all provider resources.
@@ -311,10 +314,12 @@ class SpriteForgeWorkflow:
                 semaphore = asyncio.Semaphore(self.max_concurrent_rows)
 
             completed_count = 0
+            failed_rows: list[tuple[int, str, Exception]] = []
 
-            async def _process_one(row_idx_seq: int, animation: AnimationDef) -> None:
-                nonlocal completed_count
-
+            async def _process_one(
+                row_idx_seq: int, animation: AnimationDef
+            ) -> tuple[int, AnimationDef, list[list[str]] | Exception]:
+                """Process one row and return result or exception."""
                 if semaphore is not None:
                     await semaphore.acquire()
                 try:
@@ -364,6 +369,54 @@ class SpriteForgeWorkflow:
                             anchor_rendered=anchor_rendered,
                         )
 
+                        logger.info(
+                            "Row %d (%s) complete: %d/%d frames generated",
+                            row_idx_seq,
+                            animation.name,
+                            animation.frames,
+                            animation.frames,
+                        )
+
+                    return (row_idx_seq, animation, row_grids)
+                except Exception as e:
+                    logger.error(
+                        "Row %d (%s) failed: %s",
+                        row_idx_seq,
+                        animation.name,
+                        str(e),
+                    )
+                    return (row_idx_seq, animation, e)
+                finally:
+                    if semaphore is not None:
+                        semaphore.release()
+
+            # Gather all results with exception isolation
+            results = await asyncio.gather(
+                *(_process_one(idx, anim) for idx, anim in remaining_animations),
+                return_exceptions=True,
+            )
+
+            # Process results: separate successes from failures
+            for result in results:
+                # Handle gather-level exceptions (shouldn't happen with our wrapper)
+                if isinstance(result, Exception):
+                    logger.error("Unexpected gather exception: %s", result)
+                    failed_rows.append((-1, "unknown", result))
+                    continue
+
+                # Type narrowing: result is now tuple[int, AnimationDef, list[list[str]] | Exception]
+                assert not isinstance(result, BaseException)
+                row_idx_seq, animation, outcome = result
+
+                if isinstance(outcome, Exception):
+                    # Row processing failed
+                    failed_rows.append((row_idx_seq, animation.name, outcome))
+                else:
+                    # Row processing succeeded
+                    row_grids = outcome
+
+                    # Only render if not already loaded from checkpoint
+                    if animation.row not in row_images:
                         # Create context for rendering this row
                         row_render_context = self._build_frame_context(
                             palette=palette,
@@ -385,26 +438,33 @@ class SpriteForgeWorkflow:
                                 grids=row_grids,
                             )
 
-                        logger.info(
-                            "Row %d (%s) complete: %d/%d frames generated",
-                            row_idx_seq,
-                            animation.name,
-                            animation.frames,
-                            animation.frames,
-                        )
-
+                    completed_count += 1
                     if progress_callback:
-                        # No lock needed: asyncio is single-threaded and
-                        # the increment + sync callback have no await
-                        # between them, so they are already atomic.
-                        completed_count += 1
                         progress_callback("row", 1 + completed_count, total_rows)
-                finally:
-                    if semaphore is not None:
-                        semaphore.release()
 
-            await asyncio.gather(
-                *(_process_one(idx, anim) for idx, anim in remaining_animations)
+            # Report failures if any
+            if failed_rows:
+                failed_summary = "\n".join(
+                    f"  - Row {idx} ({name}): {exc}" for idx, name, exc in failed_rows
+                )
+                logger.error(
+                    "Failed to generate %d/%d rows:\n%s",
+                    len(failed_rows),
+                    len(remaining_animations),
+                    failed_summary,
+                )
+
+                # Raise an error that includes information about partial success
+                raise GateError(
+                    f"Failed to generate {len(failed_rows)} of "
+                    f"{len(remaining_animations)} non-anchor rows. "
+                    f"Successfully generated rows: {completed_count}. "
+                    f"See logs for details."
+                )
+
+            logger.info(
+                "All %d non-anchor rows completed successfully",
+                len(remaining_animations),
             )
 
         # ---- Assemble final spritesheet ----
@@ -421,8 +481,6 @@ class SpriteForgeWorkflow:
 
         if progress_callback:
             progress_callback("assembly", 1, 1)
-
-        return out
 
         return out
 
@@ -572,22 +630,86 @@ class SpriteForgeWorkflow:
             prev_grid = grid
             prev_rendered = frame_to_png_bytes(render_frame(grid, frame_context))
 
-        # Gate 3A: Validate assembled row
-        row_strip = render_row_strip(frame_grids, frame_context)
-        row_strip_bytes = frame_to_png_bytes(row_strip)
+        # Gate 3A: Validate assembled row (with retry logic)
         ref_strip_bytes = frame_to_png_bytes(reference_strip.convert("RGBA"))
+        max_retries = self.config.generation.gate_3a_max_retries
 
-        verdict = await self.gate_checker.gate_3a(
-            row_strip_bytes, ref_strip_bytes, animation
-        )
-        if not verdict.passed:
+        for retry_attempt in range(max_retries + 1):
+            row_strip = render_row_strip(frame_grids, frame_context)
+            row_strip_bytes = frame_to_png_bytes(row_strip)
+
+            if self.call_tracker:
+                self.call_tracker.increment("gate_3a")
+            verdict = await self.gate_checker.gate_3a(
+                row_strip_bytes, ref_strip_bytes, animation
+            )
+
+            if verdict.passed:
+                break
+
+            # Gate 3A failed
             logger.warning(
-                "Gate 3A failed for %s: %s", animation.name, verdict.feedback
+                "Gate 3A failed for %s (attempt %d/%d): %s",
+                animation.name,
+                retry_attempt + 1,
+                max_retries + 1,
+                verdict.feedback,
             )
-            raise GateError(
-                f"Gate 3A (row coherence) failed for '{animation.name}': "
-                f"{verdict.feedback}"
+
+            # If this was the last attempt, raise error
+            if retry_attempt >= max_retries:
+                raise GateError(
+                    f"Gate 3A (row coherence) failed for '{animation.name}' "
+                    f"after {max_retries + 1} attempts: {verdict.feedback}"
+                )
+
+            # Otherwise, regenerate problematic frames
+            logger.info(
+                "Retrying Gate 3A for %s: regenerating problematic frames",
+                animation.name,
             )
+
+            # Identify frames to regenerate based on feedback
+            frames_to_regenerate = self._identify_problematic_frames(
+                verdict.feedback, animation.frames
+            )
+
+            # Regenerate identified frames
+            for fi in frames_to_regenerate:
+                ref_frame = self._extract_reference_frame(
+                    reference_strip,
+                    fi,
+                    self.config.character.frame_width,
+                    self.config.character.frame_height,
+                )
+
+                # Determine prev frame context
+                if fi == 0:
+                    prev_frame_grid = None
+                    prev_frame_rendered = None
+                else:
+                    prev_frame_grid = frame_grids[fi - 1]
+                    prev_frame_rendered = frame_to_png_bytes(
+                        render_frame(prev_frame_grid, frame_context)
+                    )
+
+                logger.info(
+                    "Regenerating frame %d/%d for %s",
+                    fi,
+                    animation.frames - 1,
+                    animation.name,
+                )
+
+                grid = await self._generate_and_verify_frame(
+                    reference_frame=ref_frame,
+                    context=frame_context,
+                    frame_index=fi,
+                    is_anchor=(is_anchor and fi == 0),
+                    prev_frame_grid=prev_frame_grid,
+                    prev_frame_rendered=prev_frame_rendered,
+                    base_reference=base_reference,
+                )
+                frame_grids[fi] = grid
 
         if is_anchor:
             return generated_anchor_grid, frame_grids
@@ -597,6 +719,55 @@ class SpriteForgeWorkflow:
     # ------------------------------------------------------------------
     # Frame generation with retry loop
     # ------------------------------------------------------------------
+
+    def _identify_problematic_frames(self, feedback: str, num_frames: int) -> list[int]:
+        """Identify frame indices that may be problematic based on Gate 3A feedback.
+
+        Parses the feedback string to extract frame numbers. If no specific
+        frames are mentioned, returns the last 2 frames as a conservative
+        fallback (since animation issues often appear in transitions).
+
+        Args:
+            feedback: The feedback string from Gate 3A failure.
+            num_frames: Total number of frames in the row.
+
+        Returns:
+            List of frame indices (0-based) to regenerate.
+        """
+        import re
+
+        # Try to extract frame numbers from feedback
+        # Look for patterns like "frame 3", "Frame 5", "frames 2-4", etc.
+        frame_pattern = r"[Ff]rame[s]?\s+(\d+)"
+        matches = re.findall(frame_pattern, feedback)
+
+        if matches:
+            # Convert to 0-based indices and ensure they're valid
+            indices = []
+            for match in matches:
+                idx = int(match)
+                # Handle both 0-based and 1-based frame numbering in feedback
+                if idx >= num_frames:
+                    idx = idx - 1  # Assume 1-based
+                if 0 <= idx < num_frames:
+                    indices.append(idx)
+
+            if indices:
+                logger.info(
+                    "Identified frames to regenerate from feedback: %s",
+                    sorted(set(indices)),
+                )
+                return sorted(set(indices))
+
+        # Fallback: regenerate last 2 frames (common source of animation issues)
+        fallback = list(range(max(0, num_frames - 2), num_frames))
+        logger.info(
+            "No specific frames identified in feedback; "
+            "regenerating last %d frames as fallback: %s",
+            len(fallback),
+            fallback,
+        )
+        return fallback
 
     def _build_frame_context(
         self,
@@ -667,7 +838,18 @@ class SpriteForgeWorkflow:
         """
         animation = context.animation
         frame_id = f"row{animation.row}_frame{frame_index}"
-        retry_ctx = self.retry_manager.create_context(frame_id)
+
+        # Use per-row retry budget if configured
+        max_attempts = None
+        if (
+            self.config.generation.budget
+            and self.config.generation.budget.max_retries_per_row > 0
+        ):
+            max_attempts = self.config.generation.budget.max_retries_per_row
+
+        retry_ctx = self.retry_manager.create_context(
+            frame_id, max_attempts=max_attempts
+        )
 
         while self.retry_manager.should_retry(retry_ctx):
             attempt = retry_ctx.current_attempt + 1
@@ -677,6 +859,8 @@ class SpriteForgeWorkflow:
                 guidance = self.retry_manager.build_escalated_guidance(retry_ctx)
 
             # Generate the grid
+            if self.call_tracker:
+                self.call_tracker.increment("grid_generation")
             grid = await self.grid_generator.generate_frame(
                 reference_frame=reference_frame,
                 context=context,
@@ -763,6 +947,8 @@ class SpriteForgeWorkflow:
         )
 
         for attempt in range(max_ref_retries):
+            if self.call_tracker:
+                self.call_tracker.increment("reference_generation")
             strip = await self.reference_provider.generate_row_strip(
                 base_reference=base_reference,
                 prompt=prompt,
@@ -772,6 +958,8 @@ class SpriteForgeWorkflow:
 
             # Gate -1: Validate reference quality
             strip_bytes = frame_to_png_bytes(strip.convert("RGBA"))
+            if self.call_tracker:
+                self.call_tracker.increment("gate_minus_1")
             verdict = await self.gate_checker.gate_minus_1(
                 strip_bytes, base_reference, animation
             )
@@ -868,16 +1056,24 @@ class SpriteForgeWorkflow:
         gates: list[Any] = [
             self.gate_checker.gate_0(frame_rendered, reference_frame, frame_desc),
         ]
+        gate_count = 1
 
         if anchor_rendered is not None and not is_anchor:
             gates.append(
                 self.gate_checker.gate_1(frame_rendered, anchor_rendered),
             )
+            gate_count += 1
 
         if prev_frame_rendered is not None:
             gates.append(
                 self.gate_checker.gate_2(frame_rendered, prev_frame_rendered),
             )
+            gate_count += 1
+
+        # Track gate calls
+        if self.call_tracker:
+            for _ in range(gate_count):
+                self.call_tracker.increment("gate_check")
 
         return list(await asyncio.gather(*gates))
 
@@ -1021,6 +1217,13 @@ async def create_workflow(
     programmatic_checker = ProgrammaticChecker()
     retry_manager = RetryManager()
 
+    # Create call tracker if budget is configured
+    call_tracker = None
+    if config.generation.budget is not None:
+        from spriteforge.budget import CallTracker
+
+        call_tracker = CallTracker(config.generation.budget)
+
     # Build palette map (use first palette, or will be replaced by preprocessor if auto_palette)
     palette_map: dict[str, tuple[int, int, int, int]]
     if config.palettes:
@@ -1042,6 +1245,7 @@ async def create_workflow(
         preprocessor=preprocessor,
         max_concurrent_rows=max_concurrent_rows,
         checkpoint_dir=checkpoint_dir,
+        call_tracker=call_tracker,
     )
 
     # Store credential ownership info for cleanup

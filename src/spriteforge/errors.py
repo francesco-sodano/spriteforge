@@ -36,3 +36,7 @@ class RetryExhaustedError(SpriteForgeError):
 
 class ProviderError(SpriteForgeError):
     """Raised when a reference image provider fails."""
+
+
+class BudgetExhaustedError(SpriteForgeError):
+    """Raised when LLM call budget is exhausted."""

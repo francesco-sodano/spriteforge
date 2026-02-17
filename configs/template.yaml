@@ -174,6 +174,24 @@ generation:
   # Default: "gpt-image-1.5"
   # reference_model: "gpt-image-1.5"
 
+  # --- Budget & Cost Control ---
+  # OPTIONAL: Set limits on LLM calls to control costs.
+  # Uncomment and configure to enable budget enforcement.
+  # budget:
+  #   # Hard cap on total LLM calls (across all providers).
+  #   # When 0 (default), no limit is enforced.
+  #   # Tip: Use estimate_calls() to predict usage before generation.
+  #   max_llm_calls: 500
+  #
+  #   # Per-row retry budget (overrides default 10 retries per frame).
+  #   # When 0 (default), uses RetryConfig.max_retries.
+  #   # Lower values reduce costs but may impact quality on complex rows.
+  #   max_retries_per_row: 30
+  #
+  #   # Emit warning when budget consumption reaches this percentage (0.0–1.0).
+  #   # Default: 0.8 (warns at 80% budget consumed).
+  #   warn_at_percentage: 0.8
+
 # --- Paths ---
 # OPTIONAL: Base reference image (relative to repo root or absolute)
 base_image_path: "assets/my_character_reference.png"

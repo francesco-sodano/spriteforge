@@ -5,6 +5,7 @@ from __future__ import annotations
 import pytest
 
 from spriteforge.errors import (
+    BudgetExhaustedError,
     ConfigError,
     GateError,
     GenerationError,
@@ -33,6 +34,7 @@ class TestErrorHierarchy:
             GateError,
             RetryExhaustedError,
             ProviderError,
+            BudgetExhaustedError,
         ):
             assert issubclass(cls, SpriteForgeError), f"{cls.__name__} missing base"
 
@@ -46,6 +48,7 @@ class TestErrorHierarchy:
             GateError,
             RetryExhaustedError,
             ProviderError,
+            BudgetExhaustedError,
         ):
             with pytest.raises(SpriteForgeError):
                 raise cls("test")
