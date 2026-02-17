@@ -152,7 +152,9 @@ class CheckpointManager:
                 file_path.unlink()
                 file_count += 1
 
-        logger.info("Cleaned up %d checkpoint files from %s", file_count, self.checkpoint_dir)
+        logger.info(
+            "Cleaned up %d checkpoint files from %s", file_count, self.checkpoint_dir
+        )
 
         # Remove the checkpoint directory if empty
         try:

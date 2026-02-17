@@ -25,7 +25,6 @@ from spriteforge.providers._base import ReferenceProvider
 from spriteforge.retry import RetryManager
 from spriteforge.workflow import SpriteForgeWorkflow
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -55,13 +54,17 @@ def _passing_verdict(gate_name: str = "gate_0") -> GateVerdict:
     )
 
 
-def _create_mock_strip_image(num_frames: int = 2, frame_width: int = 64, frame_height: int = 64) -> Image.Image:
+def _create_mock_strip_image(
+    num_frames: int = 2, frame_width: int = 64, frame_height: int = 64
+) -> Image.Image:
     """Create a mock strip image for testing."""
     width = num_frames * frame_width
     return Image.new("RGBA", (width, frame_height), (0, 0, 0, 0))
 
 
-def _create_mock_strip_bytes(num_frames: int = 2, frame_width: int = 64, frame_height: int = 64) -> bytes:
+def _create_mock_strip_bytes(
+    num_frames: int = 2, frame_width: int = 64, frame_height: int = 64
+) -> bytes:
     """Create PNG bytes for a mock strip image."""
     img = _create_mock_strip_image(num_frames, frame_width, frame_height)
     buf = io.BytesIO()
@@ -129,7 +132,9 @@ class TestWorkflowCheckpointIntegration:
 
         # Mock providers
         mock_ref_provider = MagicMock(spec=ReferenceProvider)
-        mock_ref_provider.generate_row_strip = AsyncMock(return_value=_create_mock_strip_image())
+        mock_ref_provider.generate_row_strip = AsyncMock(
+            return_value=_create_mock_strip_image()
+        )
 
         mock_chat = MagicMock()
         mock_chat.close = AsyncMock()
@@ -140,7 +145,9 @@ class TestWorkflowCheckpointIntegration:
 
         mock_gate_checker = MagicMock(spec=LLMGateChecker)
         mock_gate_checker._chat = mock_chat
-        mock_gate_checker.gate_minus_1 = AsyncMock(return_value=_passing_verdict("gate_-1"))
+        mock_gate_checker.gate_minus_1 = AsyncMock(
+            return_value=_passing_verdict("gate_-1")
+        )
         mock_gate_checker.gate_0 = AsyncMock(return_value=_passing_verdict("gate_0"))
         mock_gate_checker.gate_1 = AsyncMock(return_value=_passing_verdict("gate_1"))
         mock_gate_checker.gate_2 = AsyncMock(return_value=_passing_verdict("gate_2"))
@@ -189,6 +196,7 @@ class TestWorkflowCheckpointIntegration:
 
         # Pre-populate checkpoint for row 0 (simulate previous incomplete run)
         from spriteforge.checkpoint import CheckpointManager
+
         checkpoint_mgr = CheckpointManager(checkpoint_dir)
         checkpoint_mgr.save_row(
             row=0,
@@ -199,7 +207,9 @@ class TestWorkflowCheckpointIntegration:
 
         # Mock providers
         mock_ref_provider = MagicMock(spec=ReferenceProvider)
-        mock_ref_provider.generate_row_strip = AsyncMock(return_value=_create_mock_strip_image())
+        mock_ref_provider.generate_row_strip = AsyncMock(
+            return_value=_create_mock_strip_image()
+        )
 
         mock_chat = MagicMock()
         mock_chat.close = AsyncMock()
@@ -210,7 +220,9 @@ class TestWorkflowCheckpointIntegration:
 
         mock_gate_checker = MagicMock(spec=LLMGateChecker)
         mock_gate_checker._chat = mock_chat
-        mock_gate_checker.gate_minus_1 = AsyncMock(return_value=_passing_verdict("gate_-1"))
+        mock_gate_checker.gate_minus_1 = AsyncMock(
+            return_value=_passing_verdict("gate_-1")
+        )
         mock_gate_checker.gate_0 = AsyncMock(return_value=_passing_verdict("gate_0"))
         mock_gate_checker.gate_1 = AsyncMock(return_value=_passing_verdict("gate_1"))
         mock_gate_checker.gate_2 = AsyncMock(return_value=_passing_verdict("gate_2"))
@@ -237,7 +249,9 @@ class TestWorkflowCheckpointIntegration:
         # Verify that row 0 was NOT regenerated (should have been loaded from checkpoint)
         # Count how many times gate_3a was called - should be 2 (for rows 1 and 2, not row 0)
         gate_3a_calls = mock_gate_checker.gate_3a.call_count
-        assert gate_3a_calls == 2, f"Expected 2 gate_3a calls (rows 1 and 2), got {gate_3a_calls}"
+        assert (
+            gate_3a_calls == 2
+        ), f"Expected 2 gate_3a calls (rows 1 and 2), got {gate_3a_calls}"
 
         # Verify final output was created
         assert output_path.exists()
@@ -260,6 +274,7 @@ class TestWorkflowCheckpointIntegration:
 
         # Pre-populate checkpoints for rows 0 and 1
         from spriteforge.checkpoint import CheckpointManager
+
         checkpoint_mgr = CheckpointManager(checkpoint_dir)
         checkpoint_mgr.save_row(
             row=0,
@@ -276,7 +291,9 @@ class TestWorkflowCheckpointIntegration:
 
         # Mock providers
         mock_ref_provider = MagicMock(spec=ReferenceProvider)
-        mock_ref_provider.generate_row_strip = AsyncMock(return_value=_create_mock_strip_image())
+        mock_ref_provider.generate_row_strip = AsyncMock(
+            return_value=_create_mock_strip_image()
+        )
 
         mock_chat = MagicMock()
         mock_chat.close = AsyncMock()
@@ -287,7 +304,9 @@ class TestWorkflowCheckpointIntegration:
 
         mock_gate_checker = MagicMock(spec=LLMGateChecker)
         mock_gate_checker._chat = mock_chat
-        mock_gate_checker.gate_minus_1 = AsyncMock(return_value=_passing_verdict("gate_-1"))
+        mock_gate_checker.gate_minus_1 = AsyncMock(
+            return_value=_passing_verdict("gate_-1")
+        )
         mock_gate_checker.gate_0 = AsyncMock(return_value=_passing_verdict("gate_0"))
         mock_gate_checker.gate_1 = AsyncMock(return_value=_passing_verdict("gate_1"))
         mock_gate_checker.gate_2 = AsyncMock(return_value=_passing_verdict("gate_2"))
@@ -313,7 +332,9 @@ class TestWorkflowCheckpointIntegration:
 
         # Verify that only row 2 was regenerated (gate_3a called once)
         gate_3a_calls = mock_gate_checker.gate_3a.call_count
-        assert gate_3a_calls == 1, f"Expected 1 gate_3a call (row 2 only), got {gate_3a_calls}"
+        assert (
+            gate_3a_calls == 1
+        ), f"Expected 1 gate_3a call (row 2 only), got {gate_3a_calls}"
 
         # Verify final output was created
         assert output_path.exists()
@@ -334,7 +355,9 @@ class TestWorkflowCheckpointIntegration:
 
         # Mock providers
         mock_ref_provider = MagicMock(spec=ReferenceProvider)
-        mock_ref_provider.generate_row_strip = AsyncMock(return_value=_create_mock_strip_image())
+        mock_ref_provider.generate_row_strip = AsyncMock(
+            return_value=_create_mock_strip_image()
+        )
 
         mock_chat = MagicMock()
         mock_chat.close = AsyncMock()
@@ -345,7 +368,9 @@ class TestWorkflowCheckpointIntegration:
 
         mock_gate_checker = MagicMock(spec=LLMGateChecker)
         mock_gate_checker._chat = mock_chat
-        mock_gate_checker.gate_minus_1 = AsyncMock(return_value=_passing_verdict("gate_-1"))
+        mock_gate_checker.gate_minus_1 = AsyncMock(
+            return_value=_passing_verdict("gate_-1")
+        )
         mock_gate_checker.gate_0 = AsyncMock(return_value=_passing_verdict("gate_0"))
         mock_gate_checker.gate_1 = AsyncMock(return_value=_passing_verdict("gate_1"))
         mock_gate_checker.gate_2 = AsyncMock(return_value=_passing_verdict("gate_2"))

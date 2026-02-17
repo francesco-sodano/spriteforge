@@ -215,9 +215,13 @@ class SpriteForgeWorkflow:
             progress_callback("row", 0, total_rows)
 
         anchor_animation = self.config.animations[0]
-        
+        row_images: dict[int, bytes] = {}
+
         # Check if row 0 is already checkpointed
-        if anchor_animation.row in completed_rows and self.checkpoint_manager is not None:
+        if (
+            anchor_animation.row in completed_rows
+            and self.checkpoint_manager is not None
+        ):
             logger.info(
                 "Loading row 0/%d from checkpoint: %s (%d frames)",
                 total_rows,
@@ -245,7 +249,7 @@ class SpriteForgeWorkflow:
             anchor_rendered = frame_to_png_bytes(
                 render_frame(anchor_grid, anchor_render_context)
             )
-            row_images: dict[int, bytes] = {anchor_animation.row: row0_strip_bytes}
+            row_images[anchor_animation.row] = row0_strip_bytes
             logger.info("Row 0 (%s) loaded from checkpoint", anchor_animation.name)
         else:
             logger.info(
@@ -276,7 +280,6 @@ class SpriteForgeWorkflow:
             anchor_rendered = frame_to_png_bytes(
                 render_frame(anchor_grid, anchor_render_context)
             )
-            row_images: dict[int, bytes] = {}
             row0_strip = render_row_strip(row0_grids, anchor_render_context)
             row_images[anchor_animation.row] = frame_to_png_bytes(row0_strip)
 
@@ -316,7 +319,10 @@ class SpriteForgeWorkflow:
                     await semaphore.acquire()
                 try:
                     # Check if this row is already checkpointed
-                    if animation.row in completed_rows and self.checkpoint_manager is not None:
+                    if (
+                        animation.row in completed_rows
+                        and self.checkpoint_manager is not None
+                    ):
                         logger.info(
                             "Loading row %d/%d from checkpoint: %s (%d frames)",
                             row_idx_seq,
@@ -324,7 +330,9 @@ class SpriteForgeWorkflow:
                             animation.name,
                             animation.frames,
                         )
-                        checkpoint_data = self.checkpoint_manager.load_row(animation.row)
+                        checkpoint_data = self.checkpoint_manager.load_row(
+                            animation.row
+                        )
                         if checkpoint_data is None:
                             raise RuntimeError(
                                 f"Checkpoint for row {animation.row} was reported as "
