@@ -115,7 +115,7 @@ class SpriteForgeWorkflow:
         if checkpoint_dir is not None:
             self.checkpoint_manager = CheckpointManager(Path(checkpoint_dir))
         self.call_tracker = call_tracker
-        
+
         # Create or use provided FrameGenerator
         if frame_generator is None:
             self.frame_generator = FrameGenerator(

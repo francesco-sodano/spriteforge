@@ -439,7 +439,8 @@ class TestCallTracking:
 
         # Should increment gate_check three times (Gate 0, Gate 1, Gate 2)
         gate_check_calls = [
-            call for call in call_tracker.increment.call_args_list
+            call
+            for call in call_tracker.increment.call_args_list
             if call[0][0] == "gate_check"
         ]
         assert len(gate_check_calls) == 3
