@@ -175,7 +175,7 @@ def load_config(path: str | Path) -> SpritesheetSpec:
     # --- Build PaletteConfig from YAML palette section ---
     if "palette" in data:
         palette = _parse_palette(data["palette"])
-        spec_kwargs["palettes"] = {"P1": palette}
+        spec_kwargs["palette"] = palette
 
     # --- Build GenerationConfig from YAML generation section ---
     if "generation" in data:
@@ -198,9 +198,7 @@ def load_config(path: str | Path) -> SpritesheetSpec:
 
     spec = SpritesheetSpec(**spec_kwargs)
 
-    num_colors = (
-        len(spec.palettes.get("P1", PaletteConfig()).colors) if spec.palettes else 0
-    )
+    num_colors = len(spec.palette.colors) if spec.palette else 0
     logger.info(
         "Loaded config: %s (%d animations, %d palette colors)",
         spec.character.name,
@@ -304,22 +302,20 @@ def validate_config(
                 )
 
     # --- Check 6: Outline symbol is "O" (conventional) ---
-    if spec.palettes:
-        for palette_name, palette in spec.palettes.items():
-            if palette.outline.symbol != "O":
-                warnings.append(
-                    f"Palette '{palette_name}' uses non-standard outline symbol "
-                    f"'{palette.outline.symbol}' (convention is 'O')"
-                )
+    if spec.palette:
+        if spec.palette.outline.symbol != "O":
+            warnings.append(
+                f"Palette uses non-standard outline symbol "
+                f"'{spec.palette.outline.symbol}' (convention is 'O')"
+            )
 
     # --- Check 7: Excessive palette size ---
-    if spec.palettes:
-        for palette_name, palette in spec.palettes.items():
-            color_count = len(palette.colors)
-            if color_count > 20:
-                warnings.append(
-                    f"Palette '{palette_name}' has {color_count} colors (>20), "
-                    f"which may degrade grid generation quality"
-                )
+    if spec.palette:
+        color_count = len(spec.palette.colors)
+        if color_count > 20:
+            warnings.append(
+                f"Palette has {color_count} colors (>20), "
+                f"which may degrade grid generation quality"
+            )
 
     return warnings

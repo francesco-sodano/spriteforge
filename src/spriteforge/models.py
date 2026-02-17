@@ -276,7 +276,7 @@ class SpritesheetSpec(BaseModel):
     Attributes:
         character: The character this spritesheet belongs to.
         animations: Ordered list of animation definitions.
-        palettes: Named palette configurations (e.g. "P1", "P2").
+        palette: Color palette configuration for the spritesheet.
         generation: Generation settings for AI pipeline behavior.
         base_image_path: Optional path to the base reference image.
         output_path: Optional path for the generated spritesheet.
@@ -284,7 +284,7 @@ class SpritesheetSpec(BaseModel):
 
     character: CharacterConfig
     animations: list[AnimationDef] = []
-    palettes: dict[str, PaletteConfig] = {}
+    palette: PaletteConfig | None = None
     generation: GenerationConfig = GenerationConfig()
     base_image_path: str = ""
     output_path: str = ""

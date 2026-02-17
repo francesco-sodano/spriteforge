@@ -265,11 +265,11 @@ class TestSpritesheetSpec:
         )
         assert spec.total_frames == 14
 
-    def test_spritesheet_spec_palettes_default_empty(self) -> None:
+    def test_spritesheet_spec_palette_default_none(self) -> None:
         spec = SpritesheetSpec(character=CharacterConfig(name="Hero"))
-        assert spec.palettes == {}
+        assert spec.palette is None
 
-    def test_spritesheet_spec_palettes_with_entries(self) -> None:
+    def test_spritesheet_spec_palette_with_value(self) -> None:
         p1 = PaletteConfig(
             name="P1",
             colors=[
@@ -278,10 +278,10 @@ class TestSpritesheetSpec:
         )
         spec = SpritesheetSpec(
             character=CharacterConfig(name="Hero"),
-            palettes={"P1": p1},
+            palette=p1,
         )
-        assert "P1" in spec.palettes
-        assert spec.palettes["P1"].name == "P1"
+        assert spec.palette is not None
+        assert spec.palette.name == "P1"
 
     def test_spritesheet_spec_generation_default(self) -> None:
         spec = SpritesheetSpec(character=CharacterConfig(name="Hero"))

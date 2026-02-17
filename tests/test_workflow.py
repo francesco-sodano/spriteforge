@@ -119,7 +119,7 @@ def single_row_config(sample_palette: PaletteConfig) -> SpritesheetSpec:
                 prompt_context="Standing idle",
             ),
         ],
-        palettes={"P1": sample_palette},
+        palette=sample_palette,
         generation=GenerationConfig(),
     )
 
@@ -152,7 +152,7 @@ def multi_row_config(sample_palette: PaletteConfig) -> SpritesheetSpec:
                 prompt_context="Walking forward",
             ),
         ],
-        palettes={"P1": sample_palette},
+        palette=sample_palette,
         generation=GenerationConfig(),
     )
 
@@ -671,7 +671,7 @@ class TestRunWithPreprocessorAutoPalette:
                     prompt_context="Idle",
                 ),
             ],
-            palettes={"P1": sample_palette},
+            palette=sample_palette,
             generation=GenerationConfig(auto_palette=True),
         )
 
@@ -705,7 +705,7 @@ class TestRunWithPreprocessorAutoPalette:
 
         mock_preprocessor.assert_called_once()
         # Config should NOT have been mutated — palette stays original
-        assert wf.config.palettes["P1"].name == "P1"
+        assert wf.config.palette.name == "P1"
 
 
 class TestRunWithPreprocessorManualPalette:
@@ -738,7 +738,7 @@ class TestRunWithPreprocessorManualPalette:
         await wf.run(ref_path, out_path)
 
         # Original palette should remain (auto_palette=False by default)
-        assert wf.config.palettes["P1"].name == "P1"
+        assert wf.config.palette.name == "P1"
 
 
 class TestRunWithoutPreprocessor:
@@ -839,7 +839,7 @@ class TestPreprocessorResultReplacesPalette:
                     prompt_context="Idle",
                 ),
             ],
-            palettes={"P1": sample_palette},
+            palette=sample_palette,
             generation=GenerationConfig(auto_palette=True),
         )
 
@@ -922,7 +922,7 @@ class TestFrameDimensionsPassedToGenerator:
                     prompt_context="Standing",
                 ),
             ],
-            palettes={"P1": sample_palette},
+            palette=sample_palette,
             generation=GenerationConfig(),
         )
 
@@ -977,7 +977,7 @@ class TestFrameDimensionsPassedToGenerator:
                     prompt_context="Standing",
                 ),
             ],
-            palettes={"P1": sample_palette},
+            palette=sample_palette,
             generation=GenerationConfig(),
         )
 
@@ -1188,7 +1188,7 @@ class TestAnchorRetryEscalatesTemperature:
                     prompt_context="Standing idle",
                 ),
             ],
-            palettes={"P1": sample_palette},
+            palette=sample_palette,
             generation=GenerationConfig(),
         )
 
@@ -1281,7 +1281,7 @@ class TestAnchorRetryPassesGuidance:
                     prompt_context="Standing idle",
                 ),
             ],
-            palettes={"P1": sample_palette},
+            palette=sample_palette,
             generation=GenerationConfig(),
         )
 
@@ -1358,7 +1358,7 @@ class TestRunDoesNotMutateConfig:
         wf = _build_workflow(single_row_config, sample_palette)
 
         # Snapshot original config state
-        original_palettes = dict(wf.config.palettes)
+        original_palette = wf.config.palette
         original_palette_map = dict(wf.palette_map)
 
         ref_img = Image.new("RGBA", (64, 64), (100, 100, 100, 255))
@@ -1369,7 +1369,7 @@ class TestRunDoesNotMutateConfig:
         await wf.run(ref_path, out_path)
 
         # Config must not have been mutated
-        assert wf.config.palettes == original_palettes
+        assert wf.config.palette == original_palette
         assert wf.palette_map == original_palette_map
 
 
@@ -1398,7 +1398,7 @@ class TestAutoPaletteUsesLocalState:
                     prompt_context="Idle",
                 ),
             ],
-            palettes={"P1": sample_palette},
+            palette=sample_palette,
             generation=GenerationConfig(auto_palette=True),
         )
 
@@ -1425,7 +1425,7 @@ class TestAutoPaletteUsesLocalState:
         )
 
         # Snapshot original state
-        original_palette_name = wf.config.palettes["P1"].name
+        original_palette_name = wf.config.palette.name
         original_palette_map = dict(wf.palette_map)
 
         ref_img = Image.new("RGBA", (64, 64), (100, 100, 100, 255))
@@ -1436,7 +1436,7 @@ class TestAutoPaletteUsesLocalState:
         await wf.run(ref_path, out_path)
 
         # Config must NOT have been mutated
-        assert wf.config.palettes["P1"].name == original_palette_name
+        assert wf.config.palette.name == original_palette_name
         assert wf.palette_map == original_palette_map
 
 
@@ -1465,7 +1465,7 @@ class TestMultipleRunsIndependent:
                     prompt_context="Idle",
                 ),
             ],
-            palettes={"P1": sample_palette},
+            palette=sample_palette,
             generation=GenerationConfig(auto_palette=True),
         )
 
@@ -1492,7 +1492,7 @@ class TestMultipleRunsIndependent:
         )
 
         # Snapshot original config state
-        original_palettes = dict(wf.config.palettes)
+        original_palette = wf.config.palette
         original_palette_map = dict(wf.palette_map)
 
         ref_img = Image.new("RGBA", (64, 64), (100, 100, 100, 255))
@@ -1511,7 +1511,7 @@ class TestMultipleRunsIndependent:
         assert out2.exists()
 
         # Config and palette_map should still be identical to originals
-        assert wf.config.palettes == original_palettes
+        assert wf.config.palette == original_palette
         assert wf.palette_map == original_palette_map
 
 
@@ -1760,7 +1760,7 @@ class TestParallelRowGracefulFailure:
                     prompt_context="Running fast",
                 ),
             ],
-            palettes={"P1": sample_palette},
+            palette=sample_palette,
             generation=GenerationConfig(gate_3a_max_retries=0),  # Disable retries
         )
 
@@ -1854,7 +1854,7 @@ async def test_workflow_single_row_integration(
                 ),
             ),
         ],
-        palettes={"P1": test_palette},
+        palette=test_palette,
         generation=GenerationConfig(
             style="Modern HD pixel art",
             facing="right",
@@ -1979,7 +1979,7 @@ async def test_workflow_integration_invalid_config(
                     prompt_context="Standing pose",
                 ),
             ],
-            palettes={"P1": bad_palette},
+            palette=bad_palette,
             generation=GenerationConfig(
                 style="Pixel art",
                 facing="right",
@@ -2238,7 +2238,7 @@ async def test_workflow_close_cleans_all(single_row_config: SpritesheetSpec) -> 
         gate_checker=mock_gate_checker,
         programmatic_checker=ProgrammaticChecker(),
         retry_manager=RetryManager(),
-        palette_map=build_palette_map(single_row_config.palettes["P1"]),
+        palette_map=build_palette_map(single_row_config.palette),
     )
 
     # Close workflow
@@ -2352,7 +2352,7 @@ async def test_create_workflow_real_azure(
                 prompt_context="Standing pose with slight movement.",
             ),
         ],
-        palettes={"P1": test_palette},
+        palette=test_palette,
         generation=GenerationConfig(
             style="Modern HD pixel art",
             facing="right",
