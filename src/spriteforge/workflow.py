@@ -17,7 +17,7 @@ import asyncio
 import io
 from collections.abc import Callable
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal, overload
 
 from PIL import Image
 
@@ -201,11 +201,12 @@ class SpriteForgeWorkflow:
             anchor_animation.name,
             anchor_animation.frames,
         )
-        anchor_grid, row0_grids = await self._process_anchor_row(
+        anchor_grid, row0_grids = await self._process_row(
             base_reference,
             anchor_animation,
             palette,
             palette_map,
+            is_anchor=True,
             quantized_reference=quantized_reference,
         )
 
@@ -263,10 +264,11 @@ class SpriteForgeWorkflow:
                     row_grids = await self._process_row(
                         base_reference,
                         animation,
-                        anchor_grid,
-                        anchor_rendered,
                         palette,
                         palette_map,
+                        is_anchor=False,
+                        anchor_grid=anchor_grid,
+                        anchor_rendered=anchor_rendered,
                     )
 
                     # Create context for rendering this row
@@ -320,154 +322,130 @@ class SpriteForgeWorkflow:
     # Row processing
     # ------------------------------------------------------------------
 
-    async def _process_anchor_row(
+    @overload
+    async def _process_row(
         self,
         base_reference: bytes,
         animation: AnimationDef,
         palette: PaletteConfig,
         palette_map: dict[str, tuple[int, int, int, int]],
+        is_anchor: Literal[True],
+        anchor_grid: list[str] | None = None,
+        anchor_rendered: bytes | None = None,
         quantized_reference: bytes | None = None,
-    ) -> tuple[list[str], list[list[str]]]:
-        """Process Row 0 — generates the anchor frame first.
+    ) -> tuple[list[str], list[list[str]]]: ...
 
-        Args:
-            base_reference: Raw bytes of the base character reference image.
-            animation: Animation definition for this row.
-            palette: The palette to use for this run.
-            palette_map: Symbol → RGBA mapping for rendering.
-            quantized_reference: Optional quantized reference image bytes.
-
-        Returns:
-            Tuple of (anchor_grid, list_of_all_frame_grids_for_this_row).
-        """
-        # Stage 1: Generate reference strip
-        reference_strip = await self._generate_reference_strip(
-            base_reference, animation
-        )
-
-        # Generate anchor frame (Frame 0)
-        ref_frame = self._extract_reference_frame(
-            reference_strip,
-            0,
-            self.config.character.frame_width,
-            self.config.character.frame_height,
-        )
-
-        # Build context for anchor frame
-        anchor_context = self._build_frame_context(
-            palette=palette,
-            palette_map=palette_map,
-            animation=animation,
-            anchor_grid=None,
-            anchor_rendered=None,
-            quantized_reference=quantized_reference,
-        )
-
-        anchor_grid = await self._generate_and_verify_frame(
-            reference_frame=ref_frame,
-            context=anchor_context,
-            frame_index=0,
-            is_anchor=True,
-            base_reference=base_reference,
-        )
-
-        anchor_rendered = frame_to_png_bytes(render_frame(anchor_grid, anchor_context))
-
-        frame_grids: list[list[str]] = [anchor_grid]
-
-        # Build context for remaining frames (with anchor references)
-        frame_context = self._build_frame_context(
-            palette=palette,
-            palette_map=palette_map,
-            animation=animation,
-            anchor_grid=anchor_grid,
-            anchor_rendered=anchor_rendered,
-            quantized_reference=None,
-        )
-
-        # Generate remaining frames with anchor + prev frame context
-        prev_grid = anchor_grid
-        prev_rendered = anchor_rendered
-        for fi in range(1, animation.frames):
-            ref_frame = self._extract_reference_frame(
-                reference_strip,
-                fi,
-                self.config.character.frame_width,
-                self.config.character.frame_height,
-            )
-            grid = await self._generate_and_verify_frame(
-                reference_frame=ref_frame,
-                context=frame_context,
-                frame_index=fi,
-                prev_frame_grid=prev_grid,
-                prev_frame_rendered=prev_rendered,
-                base_reference=base_reference,
-            )
-            frame_grids.append(grid)
-            prev_grid = grid
-            prev_rendered = frame_to_png_bytes(render_frame(grid, frame_context))
-
-        # Gate 3A: Validate assembled row
-        row_strip = render_row_strip(frame_grids, frame_context)
-        row_strip_bytes = frame_to_png_bytes(row_strip)
-        ref_strip_bytes = frame_to_png_bytes(reference_strip.convert("RGBA"))
-
-        verdict = await self.gate_checker.gate_3a(
-            row_strip_bytes, ref_strip_bytes, animation
-        )
-        if not verdict.passed:
-            logger.warning(
-                "Gate 3A failed for %s: %s", animation.name, verdict.feedback
-            )
-            raise GateError(
-                f"Gate 3A (row coherence) failed for '{animation.name}': "
-                f"{verdict.feedback}"
-            )
-
-        return anchor_grid, frame_grids
+    @overload
+    async def _process_row(
+        self,
+        base_reference: bytes,
+        animation: AnimationDef,
+        palette: PaletteConfig,
+        palette_map: dict[str, tuple[int, int, int, int]],
+        is_anchor: Literal[False] = False,
+        anchor_grid: list[str] | None = None,
+        anchor_rendered: bytes | None = None,
+        quantized_reference: bytes | None = None,
+    ) -> list[list[str]]: ...
 
     async def _process_row(
         self,
         base_reference: bytes,
         animation: AnimationDef,
-        anchor_grid: list[str],
-        anchor_rendered: bytes,
         palette: PaletteConfig,
         palette_map: dict[str, tuple[int, int, int, int]],
-    ) -> list[list[str]]:
-        """Process a single animation row (rows after Row 0).
+        is_anchor: bool = False,
+        anchor_grid: list[str] | None = None,
+        anchor_rendered: bytes | None = None,
+        quantized_reference: bytes | None = None,
+    ) -> tuple[list[str], list[list[str]]] | list[list[str]]:
+        """Process a single animation row.
 
         Args:
             base_reference: Raw bytes of the base character reference image.
             animation: Animation definition for this row.
-            anchor_grid: The anchor frame grid (Row 0, Frame 0).
-            anchor_rendered: Rendered PNG bytes of the anchor frame.
             palette: The palette to use for this run.
             palette_map: Symbol → RGBA mapping for rendering.
+            is_anchor: If True, processes Row 0 and generates the anchor frame.
+            anchor_grid: The anchor frame grid (Row 0, Frame 0). Required if is_anchor=False.
+            anchor_rendered: Rendered PNG bytes of the anchor frame. Required if is_anchor=False.
+            quantized_reference: Optional quantized reference image bytes. Only used if is_anchor=True.
 
         Returns:
-            List of frame grids for this row.
+            If is_anchor=True: Tuple of (anchor_grid, list_of_all_frame_grids_for_this_row).
+            If is_anchor=False: List of frame grids for this row.
         """
         # Stage 1: Generate reference strip
         reference_strip = await self._generate_reference_strip(
             base_reference, animation
         )
 
-        # Build context for this row
-        frame_context = self._build_frame_context(
-            palette=palette,
-            palette_map=palette_map,
-            animation=animation,
-            anchor_grid=anchor_grid,
-            anchor_rendered=anchor_rendered,
-            quantized_reference=None,
-        )
+        # Handle anchor row: generate Frame 0 with special context
+        if is_anchor:
+            # Generate anchor frame (Frame 0)
+            ref_frame = self._extract_reference_frame(
+                reference_strip,
+                0,
+                self.config.character.frame_width,
+                self.config.character.frame_height,
+            )
 
-        frame_grids: list[list[str]] = []
-        prev_grid: list[str] | None = None
-        prev_rendered: bytes | None = None
+            # Build context for anchor frame
+            anchor_context = self._build_frame_context(
+                palette=palette,
+                palette_map=palette_map,
+                animation=animation,
+                anchor_grid=None,
+                anchor_rendered=None,
+                quantized_reference=quantized_reference,
+            )
 
-        for fi in range(animation.frames):
+            generated_anchor_grid = await self._generate_and_verify_frame(
+                reference_frame=ref_frame,
+                context=anchor_context,
+                frame_index=0,
+                is_anchor=True,
+                base_reference=base_reference,
+            )
+
+            generated_anchor_rendered = frame_to_png_bytes(
+                render_frame(generated_anchor_grid, anchor_context)
+            )
+
+            frame_grids: list[list[str]] = [generated_anchor_grid]
+
+            # Build context for remaining frames (with anchor references)
+            frame_context = self._build_frame_context(
+                palette=palette,
+                palette_map=palette_map,
+                animation=animation,
+                anchor_grid=generated_anchor_grid,
+                anchor_rendered=generated_anchor_rendered,
+                quantized_reference=None,
+            )
+
+            # Generate remaining frames with anchor + prev frame context
+            prev_grid = generated_anchor_grid
+            prev_rendered = generated_anchor_rendered
+            start_frame = 1
+        else:
+            # Build context for this row
+            frame_context = self._build_frame_context(
+                palette=palette,
+                palette_map=palette_map,
+                animation=animation,
+                anchor_grid=anchor_grid,
+                anchor_rendered=anchor_rendered,
+                quantized_reference=None,
+            )
+
+            frame_grids = []
+            prev_grid = None
+            prev_rendered = None
+            start_frame = 0
+
+        # Generate remaining frames
+        for fi in range(start_frame, animation.frames):
             ref_frame = self._extract_reference_frame(
                 reference_strip,
                 fi,
@@ -503,7 +481,10 @@ class SpriteForgeWorkflow:
                 f"{verdict.feedback}"
             )
 
-        return frame_grids
+        if is_anchor:
+            return generated_anchor_grid, frame_grids
+        else:
+            return frame_grids
 
     # ------------------------------------------------------------------
     # Frame generation with retry loop
