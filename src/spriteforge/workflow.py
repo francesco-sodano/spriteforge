@@ -25,6 +25,7 @@ from PIL import Image
 from spriteforge.assembler import assemble_spritesheet
 from spriteforge.checkpoint import CheckpointManager
 from spriteforge.errors import GateError, RetryExhaustedError
+from spriteforge.frame_generator import FrameGenerator
 from spriteforge.gates import GateVerdict, LLMGateChecker, ProgrammaticChecker
 from spriteforge.generator import GenerationError, GridGenerator
 from spriteforge.logging import get_logger
@@ -75,6 +76,7 @@ class SpriteForgeWorkflow:
         max_concurrent_rows: int = 0,
         checkpoint_dir: str | Path | None = None,
         call_tracker: Any | None = None,
+        frame_generator: FrameGenerator | None = None,
     ) -> None:
         """Initialize the workflow with all required components.
 
@@ -98,6 +100,8 @@ class SpriteForgeWorkflow:
                 row completes Gate 3A, its strip PNG and frame grids are
                 saved. On resume, completed rows are skipped.
             call_tracker: Optional CallTracker for budget enforcement.
+            frame_generator: Optional FrameGenerator instance. If not provided,
+                one will be created from the other components.
         """
         self.config = config
         self.reference_provider = reference_provider
@@ -112,6 +116,19 @@ class SpriteForgeWorkflow:
         if checkpoint_dir is not None:
             self.checkpoint_manager = CheckpointManager(Path(checkpoint_dir))
         self.call_tracker = call_tracker
+
+        # Create or use provided FrameGenerator
+        if frame_generator is None:
+            self.frame_generator = FrameGenerator(
+                grid_generator=grid_generator,
+                gate_checker=gate_checker,
+                programmatic_checker=programmatic_checker,
+                retry_manager=retry_manager,
+                generation_config=config.generation,
+                call_tracker=call_tracker,
+            )
+        else:
+            self.frame_generator = frame_generator
 
     async def close(self) -> None:
         """Clean up all provider resources.
@@ -822,12 +839,7 @@ class SpriteForgeWorkflow:
     ) -> list[str]:
         """Generate a single frame with full verification and retry loop.
 
-        1. Generate frame via GridGenerator (Claude Opus 4.6)
-        2. Run programmatic checks (fast-fail)
-        3. Render grid to PNG
-        4. Run LLM gates (Gate 0, Gate 1, optionally Gate 2) in parallel
-        5. If any gate fails: record failure, escalate, retry
-        6. After max failures: raise GenerationError
+        Delegates to FrameGenerator.generate_verified_frame().
 
         Args:
             reference_frame: PNG bytes of the rough reference for this frame.
@@ -842,88 +854,14 @@ class SpriteForgeWorkflow:
         Returns:
             Verified frame grid (list of frame_height strings).
         """
-        animation = context.animation
-        frame_id = f"row{animation.row}_frame{frame_index}"
-
-        # Use per-row retry budget if configured
-        max_attempts = None
-        if (
-            self.config.generation.budget
-            and self.config.generation.budget.max_retries_per_row > 0
-        ):
-            max_attempts = self.config.generation.budget.max_retries_per_row
-
-        retry_ctx = self.retry_manager.create_context(
-            frame_id, max_attempts=max_attempts
-        )
-
-        while self.retry_manager.should_retry(retry_ctx):
-            attempt = retry_ctx.current_attempt + 1
-            temperature = self.retry_manager.get_temperature(attempt)
-            guidance = ""
-            if retry_ctx.current_attempt > 0:
-                guidance = self.retry_manager.build_escalated_guidance(retry_ctx)
-
-            # Generate the grid
-            if self.call_tracker:
-                self.call_tracker.increment("grid_generation")
-            grid = await self.grid_generator.generate_frame(
-                reference_frame=reference_frame,
-                context=context,
-                frame_index=frame_index,
-                is_anchor=is_anchor,
-                base_reference=base_reference,
-                prev_frame_grid=prev_frame_grid if not is_anchor else None,
-                prev_frame_rendered=prev_frame_rendered if not is_anchor else None,
-                temperature=temperature,
-                additional_guidance=guidance,
-            )
-
-            # Programmatic checks (fast-fail)
-            prog_verdicts = self.programmatic_checker.run_all(grid, context)
-            prog_failures = [v for v in prog_verdicts if not v.passed]
-            if prog_failures:
-                retry_ctx = self.retry_manager.record_failure(
-                    retry_ctx, prog_failures, grid=grid
-                )
-                continue
-
-            # Render grid to PNG
-            frame_img = render_frame(grid, context)
-            frame_bytes = frame_to_png_bytes(frame_img)
-
-            # Run LLM gates in parallel
-            llm_verdicts = await self._run_gates_parallel(
-                frame_rendered=frame_bytes,
-                anchor_rendered=context.anchor_rendered,
-                reference_frame=reference_frame,
-                prev_frame_rendered=prev_frame_rendered,
-                frame_index=frame_index,
-                animation=animation,
-                is_anchor=is_anchor,
-            )
-
-            llm_failures = [v for v in llm_verdicts if not v.passed]
-            if llm_failures:
-                retry_ctx = self.retry_manager.record_failure(
-                    retry_ctx, llm_failures, grid=grid
-                )
-                continue
-
-            # All checks passed
-            return grid
-
-        # Exhausted all retries
-        # Get the tier for the last attempt to include in error message
-        last_attempt = retry_ctx.current_attempt
-        last_tier = self.retry_manager.get_tier(
-            min(last_attempt, self.retry_manager._config.constrained_range[1])
-        )
-        raise RetryExhaustedError(
-            f"Frame {frame_id} failed verification after "
-            f"{retry_ctx.max_attempts} attempts. "
-            f"Last tier: {last_tier.value}, "
-            f"failures: {len(retry_ctx.failure_history)}"
+        return await self.frame_generator.generate_verified_frame(
+            reference_frame=reference_frame,
+            context=context,
+            frame_index=frame_index,
+            prev_frame_grid=prev_frame_grid,
+            prev_frame_rendered=prev_frame_rendered,
+            is_anchor=is_anchor,
+            base_reference=base_reference,
         )
 
     # ------------------------------------------------------------------
@@ -1032,56 +970,6 @@ class SpriteForgeWorkflow:
     # ------------------------------------------------------------------
     # Parallel gate execution
     # ------------------------------------------------------------------
-
-    async def _run_gates_parallel(
-        self,
-        frame_rendered: bytes,
-        anchor_rendered: bytes | None,
-        reference_frame: bytes,
-        prev_frame_rendered: bytes | None,
-        frame_index: int,
-        animation: AnimationDef,
-        is_anchor: bool = False,
-    ) -> list[GateVerdict]:
-        """Run independent LLM gates in parallel using asyncio.gather().
-
-        Gate 0 (reference fidelity) always runs.
-        Gate 1 (anchor consistency) runs only when an anchor exists
-        (i.e. not for the anchor frame itself).
-        Gate 2 (temporal continuity) runs only when a previous frame exists.
-
-        Returns:
-            List of GateResult objects from all gates.
-        """
-        frame_desc = ""
-        if animation.frame_descriptions and frame_index < len(
-            animation.frame_descriptions
-        ):
-            frame_desc = animation.frame_descriptions[frame_index]
-
-        gates: list[Any] = [
-            self.gate_checker.gate_0(frame_rendered, reference_frame, frame_desc),
-        ]
-        gate_count = 1
-
-        if anchor_rendered is not None and not is_anchor:
-            gates.append(
-                self.gate_checker.gate_1(frame_rendered, anchor_rendered),
-            )
-            gate_count += 1
-
-        if prev_frame_rendered is not None:
-            gates.append(
-                self.gate_checker.gate_2(frame_rendered, prev_frame_rendered),
-            )
-            gate_count += 1
-
-        # Track gate calls
-        if self.call_tracker:
-            for _ in range(gate_count):
-                self.call_tracker.increment("gate_check")
-
-        return list(await asyncio.gather(*gates))
 
     # ------------------------------------------------------------------
     # Helpers
