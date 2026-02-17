@@ -145,7 +145,7 @@ def estimate_calls(config: SpritesheetSpec) -> CallEstimate:
         max_retries_per_frame = budget.max_retries_per_row
 
     # Count animations and total frames
-    animations = list(config.animations.values())
+    animations = config.animations
     total_rows = len(animations)
     total_frames = sum(anim.frames for anim in animations)
 
