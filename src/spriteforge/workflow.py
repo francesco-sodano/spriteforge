@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import asyncio
 import io
+import re
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any, Literal, overload
@@ -37,7 +38,7 @@ from spriteforge.models import (
 from spriteforge.palette import build_palette_map
 from spriteforge.preprocessor import PreprocessResult, preprocess_reference
 from spriteforge.providers._base import ProviderError, ReferenceProvider
-from spriteforge.providers.gpt_image import build_reference_prompt
+from spriteforge.prompts.providers import build_reference_prompt
 from spriteforge.renderer import (
     frame_to_png_bytes,
     render_frame,
@@ -734,7 +735,8 @@ class SpriteForgeWorkflow:
                 frame_grids[fi] = grid
 
         if is_anchor:
-            return generated_anchor_grid, frame_grids
+            # Use frame_grids[0] in case Gate 3A regenerated the anchor frame
+            return frame_grids[0], frame_grids
         else:
             return frame_grids
 
@@ -756,8 +758,6 @@ class SpriteForgeWorkflow:
         Returns:
             List of frame indices (0-based) to regenerate.
         """
-        import re
-
         # Try to extract frame numbers from feedback
         # Look for patterns like "frame 3", "Frame 5", "frames 2-4", etc.
         frame_pattern = r"[Ff]rame[s]?\s+(\d+)"

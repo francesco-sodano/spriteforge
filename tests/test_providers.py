@@ -19,7 +19,7 @@ from spriteforge.providers import (
     ReferenceProvider,
 )
 from spriteforge.providers.chat import ChatProvider as ChatProviderDirect
-from spriteforge.providers.gpt_image import build_reference_prompt
+from spriteforge.prompts.providers import build_reference_prompt
 
 from mock_chat_provider import MockChatProvider
 
