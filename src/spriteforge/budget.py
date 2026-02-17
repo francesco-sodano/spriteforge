@@ -17,6 +17,20 @@ logger = get_logger("budget")
 
 
 # ---------------------------------------------------------------------------
+# Cost estimation retry rate assumptions
+# ---------------------------------------------------------------------------
+
+# Expected fraction of reference strips that fail Gate -1 on first attempt
+_REF_RETRY_RATE: float = 0.30
+
+# Expected fraction of frames that fail gates on first attempt
+_FRAME_RETRY_RATE: float = 0.20
+
+# Expected fraction of rows that fail Gate 3A on first attempt
+_ROW_RETRY_RATE: float = 0.05
+
+
+# ---------------------------------------------------------------------------
 # Call tracker
 # ---------------------------------------------------------------------------
 
@@ -214,9 +228,9 @@ def estimate_calls(config: SpritesheetSpec) -> CallEstimate:
     # Assume 20% of frames retry once (2x grid gen, 2x gates)
     # Assume 5% of rows fail Gate 3A (causes row regeneration)
 
-    ref_retry_rate = 0.30
-    frame_retry_rate = 0.20
-    row_retry_rate = 0.05
+    ref_retry_rate = _REF_RETRY_RATE
+    frame_retry_rate = _FRAME_RETRY_RATE
+    row_retry_rate = _ROW_RETRY_RATE
 
     expected_ref_calls = int(total_rows * (1 + ref_retry_rate * 1))
     expected_gate_minus_1 = int(total_rows * (1 + ref_retry_rate * 1))

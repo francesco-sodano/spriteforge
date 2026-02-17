@@ -19,6 +19,43 @@ from spriteforge.utils import image_to_data_url
 
 logger = get_logger(__name__)
 
+# ---------------------------------------------------------------------------
+# Color description thresholds (internal color-science constants)
+# These are HSL lightness/saturation/hue boundaries used by _describe_color().
+# They are implementation internals — NOT exposed in YAML config.
+# ---------------------------------------------------------------------------
+
+# Lightness thresholds (HLS 'l' value, range 0–1)
+_NEAR_BLACK_L: float = 0.1      # Below this → "Near Black"
+_NEAR_WHITE_L: float = 0.9      # Above this → "Near White"
+_DARK_L: float = 0.3            # Below this → "Dark" qualifier
+_MID_L: float = 0.6             # Below this → no qualifier; above → "Light"
+_DARK_GRAY_L: float = 0.3       # Dark gray boundary (low saturation)
+_GRAY_L: float = 0.6            # Gray/Light Gray boundary (low saturation)
+
+# Saturation thresholds
+_LOW_SATURATION: float = 0.15   # Below this → grayscale naming
+_BROWN_MIN_S: float = 0.3       # Minimum saturation to call something brown
+_GOLDEN_MIN_S: float = 0.5      # Minimum saturation for "Golden Yellow"
+
+# Hue bucket boundaries (in degrees, hue ∈ [0, 360))
+_HUE_RED_MAX: float = 15.0      # 0–15° → Red
+_HUE_ORANGE_MAX: float = 45.0   # 15–45° → Orange
+_HUE_YELLOW_MAX: float = 70.0   # 45–70° → Yellow
+_HUE_GREEN_MAX: float = 150.0   # 70–150° → Green
+_HUE_CYAN_MAX: float = 190.0    # 150–190° → Cyan
+_HUE_BLUE_MAX: float = 260.0    # 190–260° → Blue
+_HUE_PURPLE_MAX: float = 320.0  # 260–320° → Purple
+_HUE_RED_MIN: float = 345.0     # 320–360° → Pink; ≥345° wraps back to Red
+
+# Brown special-case thresholds (Yellow/Orange + low luminance)
+_BROWN_MAX_L: float = 0.5       # l < 0.5 for brown check
+_DARK_BROWN_L: float = 0.35     # l < 0.35 → "Brown"; else → "Dark Brown"
+
+# Golden Yellow special-case luminance range
+_GOLDEN_L_MIN: float = 0.45
+_GOLDEN_L_MAX: float = 0.75
+
 # Symbol priority list for auto-assignment (after O for outline).
 # Skips '.' (transparent) and 'O' (outline). Starts with common pixel-art
 # mnemonics: s=skin, h=hair, e=eyes, a=armor, v=vest, etc.
@@ -46,15 +83,15 @@ def _describe_color(rgb: tuple[int, int, int]) -> str:
     h, l, s = colorsys.rgb_to_hls(r, g, b)
 
     # Special cases: near-black, near-white, low saturation
-    if l < 0.1:
+    if l < _NEAR_BLACK_L:
         return "Near Black"
-    if l > 0.9:
+    if l > _NEAR_WHITE_L:
         return "Near White"
-    if s < 0.15:
+    if s < _LOW_SATURATION:
         # Low saturation → grayscale
-        if l < 0.3:
+        if l < _DARK_GRAY_L:
             return "Dark Gray"
-        elif l < 0.6:
+        elif l < _GRAY_L:
             return "Gray"
         else:
             return "Light Gray"
@@ -63,37 +100,37 @@ def _describe_color(rgb: tuple[int, int, int]) -> str:
     hue_deg = h * 360
 
     # Hue buckets
-    if hue_deg < 15 or hue_deg >= 345:
+    if hue_deg < _HUE_RED_MAX or hue_deg >= _HUE_RED_MIN:
         hue_name = "Red"
-    elif hue_deg < 45:
+    elif hue_deg < _HUE_ORANGE_MAX:
         hue_name = "Orange"
-    elif hue_deg < 70:
+    elif hue_deg < _HUE_YELLOW_MAX:
         hue_name = "Yellow"
-    elif hue_deg < 150:
+    elif hue_deg < _HUE_GREEN_MAX:
         hue_name = "Green"
-    elif hue_deg < 190:
+    elif hue_deg < _HUE_CYAN_MAX:
         hue_name = "Cyan"
-    elif hue_deg < 260:
+    elif hue_deg < _HUE_BLUE_MAX:
         hue_name = "Blue"
-    elif hue_deg < 320:
+    elif hue_deg < _HUE_PURPLE_MAX:
         hue_name = "Purple"
     else:
         hue_name = "Pink"
 
     # Special case for brown (low luminance yellow/orange with moderate saturation)
-    if hue_name in ("Yellow", "Orange") and l < 0.5 and s > 0.3:
-        return "Brown" if l < 0.35 else "Dark Brown"
+    if hue_name in ("Yellow", "Orange") and l < _BROWN_MAX_L and s > _BROWN_MIN_S:
+        return "Brown" if l < _DARK_BROWN_L else "Dark Brown"
 
     # Lightness qualifiers
-    if l < 0.3:
+    if l < _DARK_L:
         qualifier = "Dark"
-    elif l < 0.6:
+    elif l < _MID_L:
         qualifier = ""  # No qualifier for medium
     else:
         qualifier = "Light"
 
     # Special case: golden yellow
-    if hue_name == "Yellow" and s > 0.5 and 0.45 < l < 0.75:
+    if hue_name == "Yellow" and s > _GOLDEN_MIN_S and _GOLDEN_L_MIN < l < _GOLDEN_L_MAX:
         return "Golden Yellow"
 
     # Build final name
@@ -493,6 +530,7 @@ def extract_palette_from_image(
     else:
         # Use darkest color by luminance
         def _luminance(c: tuple[int, int, int]) -> float:
+            # ITU-R BT.601 luma coefficients (standard for SD/pixel-art content)
             return 0.299 * c[0] + 0.587 * c[1] + 0.114 * c[2]
 
         outline_index = min(range(len(colors)), key=lambda i: _luminance(colors[i]))
