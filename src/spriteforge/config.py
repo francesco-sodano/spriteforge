@@ -272,10 +272,16 @@ def validate_config(
     # --- Check 4: Base image path exists ---
     if check_base_image and spec.base_image_path:
         resolved_path = Path(spec.base_image_path)
-        # If path is relative, resolve it relative to the config file location
+        # If path is relative, try resolving relative to cwd first, then config file location
         if not resolved_path.is_absolute():
-            config_path = Path(path).resolve()
-            resolved_path = (config_path.parent / spec.base_image_path).resolve()
+            # Try relative to current working directory first
+            cwd_path = Path.cwd() / spec.base_image_path
+            if cwd_path.is_file():
+                resolved_path = cwd_path.resolve()
+            else:
+                # Fall back to relative to config file location
+                config_path = Path(path).resolve()
+                resolved_path = (config_path.parent / spec.base_image_path).resolve()
 
         if not resolved_path.is_file():
             raise ValueError(

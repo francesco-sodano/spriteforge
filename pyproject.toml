@@ -14,7 +14,12 @@ dependencies = [
     "azure-identity>=1.21.0",
     "aiohttp>=3.10.0",
     "openai>=2.0",
+    "click>=8.0",
+    "rich>=13.0",
 ]
+
+[project.scripts]
+spriteforge = "spriteforge.cli:main"
 
 [project.optional-dependencies]
 azure = [
