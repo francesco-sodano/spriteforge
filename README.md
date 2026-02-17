@@ -171,7 +171,34 @@ output_path: "output/goblin_scout_spritesheet.png"
 
 ## Usage
 
-There is no CLI entry point yet (see `tests/test_app.py`, pending issue #10). For now, use the programmatic workflow.
+### CLI (Recommended)
+
+SpriteForge provides a command-line interface for common operations:
+
+```bash
+# Generate a spritesheet
+spriteforge generate configs/theron.yaml
+
+# Generate with options
+spriteforge generate configs/theron.yaml \
+  --output output/theron.png \
+  --base-image docs_assets/theron_base_reference.png \
+  --max-concurrent-rows 4 \
+  --resume \
+  --verbose
+
+# Validate a config without generating
+spriteforge validate configs/theron.yaml
+
+# Estimate LLM call costs before generating
+spriteforge estimate configs/theron.yaml
+```
+
+Run `spriteforge --help` or `spriteforge <command> --help` for full options.
+
+### Programmatic API
+
+You can also use SpriteForge programmatically:
 
 ```python
 import asyncio
@@ -214,6 +241,7 @@ This project uses [uv](https://docs.astral.sh/uv/) as the package manager and a 
 ```
 src/spriteforge/        # Package source code
 ├── __init__.py         # Package exports
+├── cli.py              # CLI entry point (generate, validate, estimate)
 ├── config.py           # YAML config loading and validation (Pydantic models)
 ├── generator.py        # GPT-5.2 grid generation (Stage 2)
 ├── assembler.py        # Sprite row assembly into final spritesheet
@@ -276,9 +304,11 @@ black . && mypy src/ && pytest
 
 ```bash
 docker build -t spriteforge .
-```
 
-Note: the Docker image currently builds the library environment, but running it as a CLI is still pending (issue #10). The current `Dockerfile` uses `python -m spriteforge` as a placeholder.
+# Run CLI commands
+docker run spriteforge spriteforge validate configs/theron.yaml
+docker run spriteforge spriteforge estimate configs/theron.yaml
+```
 
 ## Creating New Characters
 
@@ -297,33 +327,15 @@ cp configs/template.yaml configs/my_enemy.yaml
 
 # 2. Edit with your character's details (description, palette, animations)
 # 3. Create or generate a base reference image (PNG)
-```
 
-Run SpriteForge using the programmatic workflow (CLI is pending issue #10):
+# 4. Validate your config
+spriteforge validate configs/my_enemy.yaml
 
-```python
-import asyncio
-from pathlib import Path
+# 5. Estimate costs (optional)
+spriteforge estimate configs/my_enemy.yaml
 
-from spriteforge import create_workflow, load_config
-
-
-async def main() -> None:
-  config = load_config("configs/my_enemy.yaml")
-  workflow = await create_workflow(config=config)
-
-  try:
-    output_path = Path("output") / f"{config.character.name}_spritesheet.png"
-    result_path = await workflow.run(
-      base_reference_path=config.base_image_path,
-      output_path=output_path,
-    )
-    print(f"Saved: {result_path}")
-  finally:
-    await workflow.close()
-
-
-asyncio.run(main())
+# 6. Generate the spritesheet
+spriteforge generate configs/my_enemy.yaml --verbose
 ```
 
 ## Character Reference Docs (Original Heroes)
