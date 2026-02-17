@@ -132,6 +132,23 @@ class CharacterConfig(BaseModel):
         return (self.frame_width, self.frame_height)
 
 
+class BudgetConfig(BaseModel):
+    """Budget constraints for LLM call tracking.
+
+    Attributes:
+        max_llm_calls: Hard cap on total LLM calls (across all providers).
+            When 0 (default), no limit is enforced.
+        max_retries_per_row: Per-row retry budget (overrides RetryConfig.max_retries
+            when set). When 0 (default), RetryConfig.max_retries is used.
+        warn_at_percentage: Emit warning when budget consumption reaches this
+            percentage (0.0–1.0). Default 0.8 (80%).
+    """
+
+    max_llm_calls: int = Field(default=0, ge=0)
+    max_retries_per_row: int = Field(default=0, ge=0)
+    warn_at_percentage: float = Field(default=0.8, ge=0.0, le=1.0)
+
+
 class GenerationConfig(BaseModel):
     """Generation settings that control Stage 1 and Stage 2 AI behavior.
 
@@ -161,6 +178,7 @@ class GenerationConfig(BaseModel):
             (row coherence) failures. When Gate 3A fails, the workflow
             will regenerate problematic frames and re-check up to this
             many times before raising GateError.
+        budget: Optional budget constraints for LLM call tracking and limits.
     """
 
     style: str = "Modern HD pixel art (Dead Cells / Owlboy style)"
@@ -176,6 +194,7 @@ class GenerationConfig(BaseModel):
     labeling_model: str = "gpt-5-nano"
     reference_model: str = "gpt-image-1.5"
     gate_3a_max_retries: int = Field(default=2, ge=0)
+    budget: BudgetConfig | None = None
 
     @field_validator("facing")
     @classmethod

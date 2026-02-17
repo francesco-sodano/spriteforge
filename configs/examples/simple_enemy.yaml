@@ -96,6 +96,12 @@ generation:
     64x64 pixel frames. Transparent PNG-32 background.
     No anti-aliasing to background. 1px dark outline.
     Character centered horizontally. Feet at y=56.
+  
+  # Budget example: limit LLM calls for cost control
+  budget:
+    max_llm_calls: 200
+    max_retries_per_row: 20
+    warn_at_percentage: 0.8
 
 base_image_path: "assets/grukk_reference.png"
 output_path: "output/grukk_spritesheet.png"
