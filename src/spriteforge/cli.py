@@ -255,25 +255,20 @@ async def _run_generation(
 
         # Create workflow
         with console.status("[bold blue]Creating workflow..."):
-            workflow = await create_workflow(
+            async with await create_workflow(
                 config=config,
                 max_concurrent_rows=max_concurrent_rows,
                 checkpoint_dir=checkpoint_dir,
-            )
+            ) as workflow:
+                # Run generation
+                result = await workflow.run(
+                    base_reference_path=base_reference_path,
+                    output_path=output_path,
+                    progress_callback=progress_callback,
+                )
 
-        try:
-            # Run generation
-            result = await workflow.run(
-                base_reference_path=base_reference_path,
-                output_path=output_path,
-                progress_callback=progress_callback,
-            )
-
-            console.print()
-            console.print(f"[bold green]✓[/] Spritesheet generated: [bold]{result}[/]")
-
-        finally:
-            await workflow.close()
+        console.print()
+        console.print(f"[bold green]✓[/] Spritesheet generated: [bold]{result}[/]")
 
 
 @main.command()

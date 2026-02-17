@@ -130,6 +130,14 @@ class SpriteForgeWorkflow:
         else:
             self.frame_generator = frame_generator
 
+    async def __aenter__(self) -> "SpriteForgeWorkflow":
+        """Enter the async context manager. Returns self."""
+        return self
+
+    async def __aexit__(self, *args: object) -> None:
+        """Exit the async context manager, closing all resources."""
+        await self.close()
+
     async def close(self) -> None:
         """Clean up all provider resources.
 
@@ -1029,14 +1037,11 @@ async def create_workflow(
     Example::
 
         config = load_config("configs/theron.yaml")
-        workflow = await create_workflow(config)
-        try:
+        async with await create_workflow(config) as workflow:
             await workflow.run(
                 base_reference_path="docs_assets/theron_base_reference.png",
                 output_path="output/theron_spritesheet.png",
             )
-        finally:
-            await workflow.close()
     """
     import os
 
