@@ -18,7 +18,6 @@ from spriteforge.models import (
     SpritesheetSpec,
 )
 
-
 # ---------------------------------------------------------------------------
 # BudgetConfig model tests
 # ---------------------------------------------------------------------------
@@ -28,7 +27,9 @@ class TestBudgetConfig:
     """Tests for the BudgetConfig model."""
 
     def test_valid_budget(self) -> None:
-        budget = BudgetConfig(max_llm_calls=500, max_retries_per_row=30, warn_at_percentage=0.8)
+        budget = BudgetConfig(
+            max_llm_calls=500, max_retries_per_row=30, warn_at_percentage=0.8
+        )
         assert budget.max_llm_calls == 500
         assert budget.max_retries_per_row == 30
         assert budget.warn_at_percentage == 0.8
@@ -90,20 +91,22 @@ class TestCallTracker:
         tracker = CallTracker(budget)
         for _ in range(5):
             tracker.increment()
-        
+
         with pytest.raises(BudgetExhaustedError, match="call budget exhausted"):
             tracker.increment()
 
-    def test_tracker_warning_at_threshold(self, caplog: pytest.LogCaptureFixture) -> None:
+    def test_tracker_warning_at_threshold(
+        self, caplog: pytest.LogCaptureFixture
+    ) -> None:
         """Tracker should log warning at configured threshold."""
         budget = BudgetConfig(max_llm_calls=10, warn_at_percentage=0.8)
         tracker = CallTracker(budget)
-        
+
         # Should not warn before threshold
         for _ in range(7):
             tracker.increment()
         assert "Budget warning" not in caplog.text
-        
+
         # Should warn at 80% (8/10)
         tracker.increment()
         assert "Budget warning" in caplog.text
@@ -113,10 +116,10 @@ class TestCallTracker:
         """Tracker should only log warning once."""
         budget = BudgetConfig(max_llm_calls=10, warn_at_percentage=0.8)
         tracker = CallTracker(budget)
-        
+
         for _ in range(10):
             tracker.increment()
-        
+
         # Count occurrences of warning message
         warning_count = caplog.text.count("Budget warning")
         assert warning_count == 1
@@ -125,13 +128,13 @@ class TestCallTracker:
         """Tracker reset should clear count and warning flag."""
         budget = BudgetConfig(max_llm_calls=10, warn_at_percentage=0.8)
         tracker = CallTracker(budget)
-        
+
         for _ in range(9):
             tracker.increment()
-        
+
         tracker.reset()
         assert tracker.count == 0
-        
+
         # Should be able to increment again without error
         for _ in range(10):
             tracker.increment()
@@ -141,24 +144,24 @@ class TestCallTracker:
         """Tracker should be thread-safe."""
         budget = BudgetConfig(max_llm_calls=1000)
         tracker = CallTracker(budget)
-        
+
         def worker() -> None:
             for _ in range(100):
                 tracker.increment()
-        
+
         threads = [threading.Thread(target=worker) for _ in range(10)]
         for t in threads:
             t.start()
         for t in threads:
             t.join()
-        
+
         assert tracker.count == 1000
 
     def test_tracker_call_type_param(self) -> None:
         """Tracker should accept call_type parameter (for logging)."""
         budget = BudgetConfig(max_llm_calls=2)
         tracker = CallTracker(budget)
-        
+
         tracker.increment("grid_generation")
         tracker.increment("gate_check")
         assert tracker.count == 2
@@ -204,9 +207,9 @@ class TestEstimateCalls:
                 AnimationDef(name="idle", row=0, frames=4, timing_ms=150),
             ],
         )
-        
+
         estimate = estimate_calls(config)
-        
+
         # Min case: 1 row × (1 ref + 1 gate_-1 + 4 frames + gates + 1 gate_3a)
         # Per frame: 1 grid gen + gates (0, 1 for non-anchor, 2 for non-first)
         # Frame 0 (anchor): gate_0 only = 1 gate
@@ -215,7 +218,7 @@ class TestEstimateCalls:
         assert estimate.min_calls > 0
         assert estimate.expected_calls >= estimate.min_calls
         assert estimate.max_calls >= estimate.expected_calls
-        
+
         # Verify breakdown structure
         assert "min" in estimate.breakdown
         assert "expected" in estimate.breakdown
@@ -247,14 +250,14 @@ class TestEstimateCalls:
                 AnimationDef(name="attack", row=2, frames=5, timing_ms=80),
             ],
         )
-        
+
         estimate = estimate_calls(config)
-        
+
         # Should have more calls than single row
         assert estimate.min_calls > 0
         assert estimate.expected_calls >= estimate.min_calls
         assert estimate.max_calls >= estimate.expected_calls
-        
+
         # Max should be significantly higher than min (due to retries)
         assert estimate.max_calls > estimate.min_calls * 5
 
@@ -284,9 +287,9 @@ class TestEstimateCalls:
                 AnimationDef(name="idle", row=0, frames=4, timing_ms=150),
             ],
         )
-        
+
         estimate = estimate_calls(config)
-        
+
         # Max should use 5 retries per frame, not 10
         # With 4 frames: max_grid_gen = 4 * 5 = 20
         assert estimate.breakdown["max"]["grid_generation"] == 20
@@ -315,9 +318,9 @@ class TestEstimateCalls:
                 AnimationDef(name="idle", row=0, frames=4, timing_ms=150),
             ],
         )
-        
+
         estimate = estimate_calls(config)
-        
+
         # Check min breakdown
         assert "reference_generation" in estimate.breakdown["min"]
         assert "gate_minus_1" in estimate.breakdown["min"]
@@ -326,12 +329,12 @@ class TestEstimateCalls:
         assert "gate_1" in estimate.breakdown["min"]
         assert "gate_2" in estimate.breakdown["min"]
         assert "gate_3a" in estimate.breakdown["min"]
-        
+
         # Check expected breakdown
         assert "reference_generation" in estimate.breakdown["expected"]
         assert "gate_minus_1" in estimate.breakdown["expected"]
         assert "grid_generation" in estimate.breakdown["expected"]
-        
+
         # Check max breakdown
         assert "reference_generation" in estimate.breakdown["max"]
         assert "gate_minus_1" in estimate.breakdown["max"]
@@ -359,9 +362,9 @@ class TestEstimateCalls:
             },
             animations=[],
         )
-        
+
         estimate = estimate_calls(config)
-        
+
         assert estimate.min_calls == 0
         assert estimate.expected_calls == 0
         assert estimate.max_calls == 0
@@ -373,7 +376,7 @@ class TestEstimateCalls:
             AnimationDef(name=f"anim{i}", row=i, frames=6, timing_ms=100)
             for i in range(16)
         ]
-        
+
         config = SpritesheetSpec(
             character=CharacterConfig(
                 name="hero",
@@ -394,9 +397,9 @@ class TestEstimateCalls:
             },
             animations=animations,
         )
-        
+
         estimate = estimate_calls(config)
-        
+
         # 16 rows × 6 frames = 96 frames total
         # Should be within reasonable bounds
         assert estimate.min_calls > 0
@@ -429,9 +432,9 @@ class TestEstimateCalls:
                 AnimationDef(name="idle", row=0, frames=4, timing_ms=150),
             ],
         )
-        
+
         estimate = estimate_calls(config)
-        
+
         assert isinstance(estimate, CallEstimate)
         assert hasattr(estimate, "min_calls")
         assert hasattr(estimate, "expected_calls")

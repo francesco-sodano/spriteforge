@@ -239,7 +239,9 @@ class RetryManager:
             }
         )
 
-    def create_context(self, frame_id: str, max_attempts: int | None = None) -> RetryContext:
+    def create_context(
+        self, frame_id: str, max_attempts: int | None = None
+    ) -> RetryContext:
         """Create a fresh retry context for a new frame.
 
         Args:

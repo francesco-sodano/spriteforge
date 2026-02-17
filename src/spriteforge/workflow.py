@@ -565,13 +565,18 @@ class SpriteForgeWorkflow:
         """
         animation = context.animation
         frame_id = f"row{animation.row}_frame{frame_index}"
-        
+
         # Use per-row retry budget if configured
         max_attempts = None
-        if self.config.generation.budget and self.config.generation.budget.max_retries_per_row > 0:
+        if (
+            self.config.generation.budget
+            and self.config.generation.budget.max_retries_per_row > 0
+        ):
             max_attempts = self.config.generation.budget.max_retries_per_row
-        
-        retry_ctx = self.retry_manager.create_context(frame_id, max_attempts=max_attempts)
+
+        retry_ctx = self.retry_manager.create_context(
+            frame_id, max_attempts=max_attempts
+        )
 
         while self.retry_manager.should_retry(retry_ctx):
             attempt = retry_ctx.current_attempt + 1

@@ -229,7 +229,11 @@ def estimate_calls(config: SpritesheetSpec) -> CallEstimate:
     max_gate_3a = total_rows * 2  # Initial + 1 retry per row
 
     max_calls = (
-        max_ref_calls + max_gate_minus_1 + max_grid_gen + max_gates_per_frame + max_gate_3a
+        max_ref_calls
+        + max_gate_minus_1
+        + max_grid_gen
+        + max_gates_per_frame
+        + max_gate_3a
     )
 
     # Build breakdown
