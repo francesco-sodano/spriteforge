@@ -72,32 +72,38 @@ class TestPaletteValidation:
     """Verify palette color counts and values match the instruction docs."""
 
     def test_sylara_palette_count(self, sylara_spec: SpritesheetSpec) -> None:
-        palette = sylara_spec.palettes["P1"]
+        assert sylara_spec.palette is not None
+        palette = sylara_spec.palette
         # 10 colors + transparent + outline = 12 symbols
         assert len(palette.colors) == 10
 
     def test_theron_palette_count(self, theron_spec: SpritesheetSpec) -> None:
-        palette = theron_spec.palettes["P1"]
+        assert theron_spec.palette is not None
+        palette = theron_spec.palette
         # 8 base colors + edge glow = 9 colors + transparent + outline = 11 symbols
         assert len(palette.colors) == 9
 
     def test_drunn_palette_count(self, drunn_spec: SpritesheetSpec) -> None:
-        palette = drunn_spec.palettes["P1"]
+        assert drunn_spec.palette is not None
+        palette = drunn_spec.palette
         # 10 colors + transparent + outline = 12 symbols
         assert len(palette.colors) == 10
 
     def test_sylara_outline_color(self, sylara_spec: SpritesheetSpec) -> None:
-        outline = sylara_spec.palettes["P1"].outline
+        assert sylara_spec.palette is not None
+        outline = sylara_spec.palette.outline
         assert outline.symbol == "O"
         assert outline.rgb == (0, 80, 80)
 
     def test_theron_outline_color(self, theron_spec: SpritesheetSpec) -> None:
-        outline = theron_spec.palettes["P1"].outline
+        assert theron_spec.palette is not None
+        outline = theron_spec.palette.outline
         assert outline.symbol == "O"
         assert outline.rgb == (20, 15, 10)
 
     def test_drunn_outline_color(self, drunn_spec: SpritesheetSpec) -> None:
-        outline = drunn_spec.palettes["P1"].outline
+        assert drunn_spec.palette is not None
+        outline = drunn_spec.palette.outline
         assert outline.symbol == "O"
         assert outline.rgb == (20, 15, 10)
 
@@ -397,8 +403,8 @@ class TestExampleConfigs:
         """Both examples must have a palette section."""
         for name in ("simple_enemy.yaml", "hero.yaml"):
             spec = load_config(EXAMPLES_DIR / name)
-            assert "P1" in spec.palettes, f"{name} has no palette"
-            assert len(spec.palettes["P1"].colors) > 0, f"{name} has no colors"
+            assert spec.palette is not None, f"{name} has no palette"
+            assert len(spec.palette.colors) > 0, f"{name} has no colors"
 
     def test_examples_have_description(self) -> None:
         """Both examples must have a character description."""

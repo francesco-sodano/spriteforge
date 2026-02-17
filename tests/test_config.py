@@ -207,9 +207,9 @@ class TestLoadConfig:
                       rgb: [80, 140, 60]
             """))
         spec = load_config(cfg)
-        assert "P1" in spec.palettes
-        assert spec.palettes["P1"].name == "P1"
-        assert len(spec.palettes["P1"].colors) == 1
+        assert spec.palette is not None
+        assert spec.palette.name == "P1"
+        assert len(spec.palette.colors) == 1
 
     def test_load_config_with_generation(self, config_dir: Path) -> None:
         cfg = config_dir / "gen.yaml"
@@ -247,7 +247,7 @@ class TestLoadConfig:
                     timing_ms: 150
             """))
         spec = load_config(cfg)
-        assert spec.palettes == {}
+        assert spec.palette is None
 
     def test_load_config_without_generation(self, config_dir: Path) -> None:
         cfg = config_dir / "no_gen.yaml"
@@ -297,7 +297,8 @@ class TestLoadConfig:
                   colors: []
             """))
         spec = load_config(cfg)
-        palette = spec.palettes["P1"]
+        assert spec.palette is not None
+        palette = spec.palette
         assert palette.outline.symbol == "O"
         assert palette.outline.rgb == (20, 15, 10)
 
@@ -325,7 +326,8 @@ class TestLoadConfig:
                       rgb: [200, 30, 30]
             """))
         spec = load_config(cfg)
-        palette = spec.palettes["P1"]
+        assert spec.palette is not None
+        palette = spec.palette
         assert len(palette.colors) == 2
         assert palette.colors[0].symbol == "s"
         assert palette.colors[0].element == "Skin"
@@ -437,8 +439,8 @@ class TestLoadConfig:
         assert spec.character.character_class == "Enemy"
         assert "goblin" in spec.character.description.lower()
         assert len(spec.animations) == 5
-        assert "P1" in spec.palettes
-        assert len(spec.palettes["P1"].colors) == 5
+        assert spec.palette is not None
+        assert len(spec.palette.colors) == 5
         assert spec.generation.facing == "right"
         assert spec.base_image_path == "assets/goblin_scout_reference.png"
         assert spec.output_path == "output/goblin_scout_spritesheet.png"
@@ -484,7 +486,8 @@ class TestLoadConfig:
         spec = load_config(cfg)
         assert spec.character.name == "Bat"
         assert len(spec.animations) == 3
-        assert len(spec.palettes["P1"].colors) == 4
+        assert spec.palette is not None
+        assert len(spec.palette.colors) == 4
 
     def test_load_config_with_auto_palette(self, config_dir: Path) -> None:
         cfg = config_dir / "auto_palette.yaml"
@@ -522,7 +525,7 @@ class TestLoadConfig:
             """))
         spec = load_config(cfg)
         assert spec.generation.auto_palette is True
-        assert spec.palettes == {}
+        assert spec.palette is None
 
     def test_load_config_auto_palette_with_palette_section(
         self, config_dir: Path
@@ -553,8 +556,8 @@ class TestLoadConfig:
         spec = load_config(cfg)
         assert spec.generation.auto_palette is True
         assert spec.generation.max_palette_colors == 8
-        assert "P1" in spec.palettes
-        assert len(spec.palettes["P1"].colors) == 1
+        assert spec.palette is not None
+        assert len(spec.palette.colors) == 1
 
     def test_load_config_generation_max_palette_colors_default(
         self, config_dir: Path

@@ -94,7 +94,7 @@ def sample_config(sample_palette: PaletteConfig) -> SpritesheetSpec:
             frame_height=64,
             spritesheet_columns=14,
         ),
-        palettes={"P1": sample_palette},
+        palette=sample_palette,
         animations=[
             AnimationDef(name="idle", row=0, frames=2, timing_ms=150),
             AnimationDef(name="walk", row=1, frames=2, timing_ms=100),

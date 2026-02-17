@@ -173,7 +173,12 @@ class SpriteForgeWorkflow:
         out.parent.mkdir(parents=True, exist_ok=True)
 
         total_rows = len(self.config.animations)
-        palette = self._get_palette()
+        if self.config.palette is None:
+            raise ValueError(
+                "No palette configured. Provide a palette in the YAML config "
+                "or enable auto_palette with a preprocessor."
+            )
+        palette = self.config.palette
         palette_map = dict(self.palette_map)
 
         logger.info(
@@ -1081,21 +1086,6 @@ class SpriteForgeWorkflow:
     # Helpers
     # ------------------------------------------------------------------
 
-    def _get_palette(self) -> PaletteConfig:
-        """Get the primary palette from the config.
-
-        Raises:
-            ValueError: If no palette is configured.
-        """
-        if "P1" in self.config.palettes:
-            return self.config.palettes["P1"]
-        if self.config.palettes:
-            return next(iter(self.config.palettes.values()))
-        raise ValueError(
-            "No palette configured. Provide a palette in the YAML config "
-            "or enable auto_palette with a preprocessor."
-        )
-
 
 # --------------------------------------------------------------------------
 # Factory function for tiered model architecture
@@ -1224,11 +1214,10 @@ async def create_workflow(
 
         call_tracker = CallTracker(config.generation.budget)
 
-    # Build palette map (use first palette, or will be replaced by preprocessor if auto_palette)
+    # Build palette map (use palette, or will be replaced by preprocessor if auto_palette)
     palette_map: dict[str, tuple[int, int, int, int]]
-    if config.palettes:
-        first_palette = next(iter(config.palettes.values()))
-        palette_map = build_palette_map(first_palette)
+    if config.palette is not None:
+        palette_map = build_palette_map(config.palette)
     else:
         # Empty palette map — will be filled by preprocessor if auto_palette enabled
         palette_map = {}
