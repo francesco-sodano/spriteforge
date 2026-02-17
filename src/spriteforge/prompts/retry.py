@@ -12,11 +12,15 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from spriteforge.gates import GateVerdict
 
+from spriteforge.constants import FEET_ROW_RATIO, HAIR_END_RATIO, TOP_PADDING_RATIO
+
 # Proportional constants for sprite anatomy positioning.
 # These ratios define where key body regions fall relative to frame height.
-_TOP_PADDING_RATIO = 0.075  # ~7.5% — transparent rows above the head
-_HAIR_END_RATIO = 0.234  # ~23.4% — approximate end of hair region
-_FEET_ROW_RATIO = 0.875  # ~87.5% — where feet should be placed
+# Imported from spriteforge.constants to stay in sync with the programmatic
+# gate checker in gates.py.
+_TOP_PADDING_RATIO = TOP_PADDING_RATIO
+_HAIR_END_RATIO = HAIR_END_RATIO
+_FEET_ROW_RATIO = FEET_ROW_RATIO
 
 
 def build_soft_guidance(

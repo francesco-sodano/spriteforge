@@ -15,6 +15,7 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
+from spriteforge.constants import FEET_ROW_RATIO, FEET_WINDOW_RATIO
 from spriteforge.logging import get_logger
 from spriteforge.models import AnimationDef, FrameContext, PaletteConfig
 from spriteforge.prompts.gates import (
@@ -253,8 +254,8 @@ class ProgrammaticChecker:
             A ``GateVerdict`` indicating pass/fail with feedback.
         """
         if expected_foot_row is None:
-            expected_foot_row = int(frame_height * 0.86)
-        window = max(3, int(frame_height * 0.08))
+            expected_foot_row = int(frame_height * FEET_ROW_RATIO)
+        window = max(3, int(frame_height * FEET_WINDOW_RATIO))
         foot_zone_start = max(0, expected_foot_row - window)
         foot_zone_end = min(len(grid), expected_foot_row + window)
 
