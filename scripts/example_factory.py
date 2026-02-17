@@ -34,36 +34,27 @@ async def main() -> None:
     print("Creating workflow with tiered model architecture...")
 
     try:
-        workflow = await create_workflow(
-            config=config,
-            # project_endpoint can be omitted - falls back to AZURE_AI_PROJECT_ENDPOINT env var
-            # credential can be omitted - factory creates DefaultAzureCredential
-        )
+        async with await create_workflow(config=config) as workflow:
+            print("✓ Workflow created successfully")
+            print(f"  Grid generator: {type(workflow.grid_generator).__name__}")
+            print(f"  Gate checker: {type(workflow.gate_checker).__name__}")
+            print(f"  Reference provider: {type(workflow.reference_provider).__name__}")
+
+            # To run the full pipeline (expensive - generates spritesheet):
+            # output_path = Path("output") / f"{config.character.name.lower()}_spritesheet.png"
+            # output_path.parent.mkdir(exist_ok=True)
+            # result = await workflow.run(
+            #     base_reference_path=config.base_image_path,
+            #     output_path=output_path,
+            # )
+            # print(f"\n✓ Spritesheet generated: {result}")
+
+        print("\n✓ Resources cleaned up")
     except Exception as e:
         print(f"✗ Could not create workflow: {e}")
         print("\nNote: This example requires Azure AI Foundry credentials.")
         print("Set AZURE_AI_PROJECT_ENDPOINT environment variable to run.")
         return
-
-    try:
-        print("✓ Workflow created successfully")
-        print(f"  Grid generator: {type(workflow.grid_generator).__name__}")
-        print(f"  Gate checker: {type(workflow.gate_checker).__name__}")
-        print(f"  Reference provider: {type(workflow.reference_provider).__name__}")
-
-        # To run the full pipeline (expensive - generates spritesheet):
-        # output_path = Path("output") / f"{config.character.name.lower()}_spritesheet.png"
-        # output_path.parent.mkdir(exist_ok=True)
-        # result = await workflow.run(
-        #     base_reference_path=config.base_image_path,
-        #     output_path=output_path,
-        # )
-        # print(f"\n✓ Spritesheet generated: {result}")
-
-    finally:
-        # Always clean up resources
-        await workflow.close()
-        print("\n✓ Resources cleaned up")
 
 
 if __name__ == "__main__":

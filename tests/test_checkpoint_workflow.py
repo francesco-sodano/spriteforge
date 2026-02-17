@@ -157,7 +157,7 @@ class TestWorkflowCheckpointIntegration:
         mock_prog_checker.check_grid = MagicMock(return_value=None)
 
         # Create workflow with checkpoint support
-        workflow = SpriteForgeWorkflow(
+        async with SpriteForgeWorkflow(
             config=sample_config,
             reference_provider=mock_ref_provider,
             grid_generator=mock_generator,
@@ -166,19 +166,16 @@ class TestWorkflowCheckpointIntegration:
             retry_manager=RetryManager(),
             palette_map=build_palette_map(sample_palette),
             checkpoint_dir=checkpoint_dir,
-        )
+        ) as workflow:
+            # Run workflow
+            await workflow.run(base_ref_path, output_path)
 
-        # Run workflow
-        await workflow.run(base_ref_path, output_path)
-
-        # After successful completion, checkpoints should be cleaned up
-        if checkpoint_dir.exists():
-            # Directory might be removed or empty
-            files = list(checkpoint_dir.iterdir())
-            assert len(files) == 0, f"Expected cleanup but found: {files}"
-        # If directory doesn't exist, that's also acceptable (cleanup succeeded)
-
-        await workflow.close()
+            # After successful completion, checkpoints should be cleaned up
+            if checkpoint_dir.exists():
+                # Directory might be removed or empty
+                files = list(checkpoint_dir.iterdir())
+                assert len(files) == 0, f"Expected cleanup but found: {files}"
+            # If directory doesn't exist, that's also acceptable (cleanup succeeded)
 
     @pytest.mark.asyncio
     async def test_resume_skips_completed_rows(
@@ -232,7 +229,7 @@ class TestWorkflowCheckpointIntegration:
         mock_prog_checker.check_grid = MagicMock(return_value=None)
 
         # Create workflow with checkpoint support
-        workflow = SpriteForgeWorkflow(
+        async with SpriteForgeWorkflow(
             config=sample_config,
             reference_provider=mock_ref_provider,
             grid_generator=mock_generator,
@@ -241,22 +238,19 @@ class TestWorkflowCheckpointIntegration:
             retry_manager=RetryManager(),
             palette_map=build_palette_map(sample_palette),
             checkpoint_dir=checkpoint_dir,
-        )
+        ) as workflow:
+            # Run workflow (should resume from checkpoint)
+            await workflow.run(base_ref_path, output_path)
 
-        # Run workflow (should resume from checkpoint)
-        await workflow.run(base_ref_path, output_path)
+            # Verify that row 0 was NOT regenerated (should have been loaded from checkpoint)
+            # Count how many times gate_3a was called - should be 2 (for rows 1 and 2, not row 0)
+            gate_3a_calls = mock_gate_checker.gate_3a.call_count
+            assert (
+                gate_3a_calls == 2
+            ), f"Expected 2 gate_3a calls (rows 1 and 2), got {gate_3a_calls}"
 
-        # Verify that row 0 was NOT regenerated (should have been loaded from checkpoint)
-        # Count how many times gate_3a was called - should be 2 (for rows 1 and 2, not row 0)
-        gate_3a_calls = mock_gate_checker.gate_3a.call_count
-        assert (
-            gate_3a_calls == 2
-        ), f"Expected 2 gate_3a calls (rows 1 and 2), got {gate_3a_calls}"
-
-        # Verify final output was created
-        assert output_path.exists()
-
-        await workflow.close()
+            # Verify final output was created
+            assert output_path.exists()
 
     @pytest.mark.asyncio
     async def test_resume_with_multiple_completed_rows(
@@ -316,7 +310,7 @@ class TestWorkflowCheckpointIntegration:
         mock_prog_checker.check_grid = MagicMock(return_value=None)
 
         # Create workflow with checkpoint support
-        workflow = SpriteForgeWorkflow(
+        async with SpriteForgeWorkflow(
             config=sample_config,
             reference_provider=mock_ref_provider,
             grid_generator=mock_generator,
@@ -325,21 +319,18 @@ class TestWorkflowCheckpointIntegration:
             retry_manager=RetryManager(),
             palette_map=build_palette_map(sample_palette),
             checkpoint_dir=checkpoint_dir,
-        )
+        ) as workflow:
+            # Run workflow (should resume and only process row 2)
+            await workflow.run(base_ref_path, output_path)
 
-        # Run workflow (should resume and only process row 2)
-        await workflow.run(base_ref_path, output_path)
+            # Verify that only row 2 was regenerated (gate_3a called once)
+            gate_3a_calls = mock_gate_checker.gate_3a.call_count
+            assert (
+                gate_3a_calls == 1
+            ), f"Expected 1 gate_3a call (row 2 only), got {gate_3a_calls}"
 
-        # Verify that only row 2 was regenerated (gate_3a called once)
-        gate_3a_calls = mock_gate_checker.gate_3a.call_count
-        assert (
-            gate_3a_calls == 1
-        ), f"Expected 1 gate_3a call (row 2 only), got {gate_3a_calls}"
-
-        # Verify final output was created
-        assert output_path.exists()
-
-        await workflow.close()
+            # Verify final output was created
+            assert output_path.exists()
 
     @pytest.mark.asyncio
     async def test_workflow_without_checkpoint_dir_works_normally(
@@ -380,7 +371,7 @@ class TestWorkflowCheckpointIntegration:
         mock_prog_checker.check_grid = MagicMock(return_value=None)
 
         # Create workflow WITHOUT checkpoint support
-        workflow = SpriteForgeWorkflow(
+        async with SpriteForgeWorkflow(
             config=sample_config,
             reference_provider=mock_ref_provider,
             grid_generator=mock_generator,
@@ -389,20 +380,17 @@ class TestWorkflowCheckpointIntegration:
             retry_manager=RetryManager(),
             palette_map=build_palette_map(sample_palette),
             checkpoint_dir=None,  # No checkpoints
-        )
+        ) as workflow:
+            # Run workflow
+            await workflow.run(base_ref_path, output_path)
 
-        # Run workflow
-        await workflow.run(base_ref_path, output_path)
+            # Verify all rows were processed (gate_3a called 3 times)
+            gate_3a_calls = mock_gate_checker.gate_3a.call_count
+            assert gate_3a_calls == 3, f"Expected 3 gate_3a calls, got {gate_3a_calls}"
 
-        # Verify all rows were processed (gate_3a called 3 times)
-        gate_3a_calls = mock_gate_checker.gate_3a.call_count
-        assert gate_3a_calls == 3, f"Expected 3 gate_3a calls, got {gate_3a_calls}"
+            # Verify final output was created
+            assert output_path.exists()
 
-        # Verify final output was created
-        assert output_path.exists()
-
-        # Verify no checkpoint directory was created
-        checkpoint_dir = tmp_path / ".spriteforge_checkpoint"
-        assert not checkpoint_dir.exists()
-
-        await workflow.close()
+            # Verify no checkpoint directory was created
+            checkpoint_dir = tmp_path / ".spriteforge_checkpoint"
+            assert not checkpoint_dir.exists()

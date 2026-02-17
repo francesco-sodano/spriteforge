@@ -2022,23 +2022,20 @@ async def test_create_workflow_uses_grid_model(
         MockChatProvider.side_effect = [mock_grid_provider, mock_gate_provider]
         MockImageProvider.return_value = AsyncMock()
 
-        workflow = await create_workflow(
+        async with await create_workflow(
             single_row_config,
             project_endpoint="https://test.azure.com",
             credential=mock_credential,
-        )
+        ) as workflow:
+            # Verify AzureChatProvider was called with grid_model for the first provider
+            calls = MockChatProvider.call_args_list
+            assert len(calls) == 2, "Should create two chat providers (grid + gate)"
 
-        # Verify AzureChatProvider was called with grid_model for the first provider
-        calls = MockChatProvider.call_args_list
-        assert len(calls) == 2, "Should create two chat providers (grid + gate)"
-
-        # First call should be for grid model
-        grid_call = calls[0]
-        assert grid_call.kwargs["model_deployment_name"] == "custom-grid-model"
-        assert grid_call.kwargs["azure_endpoint"] == "https://test.azure.com"
-        assert grid_call.kwargs["credential"] == mock_credential
-
-        await workflow.close()
+            # First call should be for grid model
+            grid_call = calls[0]
+            assert grid_call.kwargs["model_deployment_name"] == "custom-grid-model"
+            assert grid_call.kwargs["azure_endpoint"] == "https://test.azure.com"
+            assert grid_call.kwargs["credential"] == mock_credential
 
 
 @pytest.mark.asyncio
@@ -2066,23 +2063,20 @@ async def test_create_workflow_uses_gate_model(
         MockChatProvider.side_effect = [mock_grid_provider, mock_gate_provider]
         MockImageProvider.return_value = AsyncMock()
 
-        workflow = await create_workflow(
+        async with await create_workflow(
             single_row_config,
             project_endpoint="https://test.azure.com",
             credential=mock_credential,
-        )
+        ) as workflow:
+            # Verify AzureChatProvider was called with gate_model for the second provider
+            calls = MockChatProvider.call_args_list
+            assert len(calls) == 2, "Should create two chat providers (grid + gate)"
 
-        # Verify AzureChatProvider was called with gate_model for the second provider
-        calls = MockChatProvider.call_args_list
-        assert len(calls) == 2, "Should create two chat providers (grid + gate)"
-
-        # Second call should be for gate model
-        gate_call = calls[1]
-        assert gate_call.kwargs["model_deployment_name"] == "custom-gate-model"
-        assert gate_call.kwargs["azure_endpoint"] == "https://test.azure.com"
-        assert gate_call.kwargs["credential"] == mock_credential
-
-        await workflow.close()
+            # Second call should be for gate model
+            gate_call = calls[1]
+            assert gate_call.kwargs["model_deployment_name"] == "custom-gate-model"
+            assert gate_call.kwargs["azure_endpoint"] == "https://test.azure.com"
+            assert gate_call.kwargs["credential"] == mock_credential
 
 
 @pytest.mark.asyncio
@@ -2112,20 +2106,17 @@ async def test_create_workflow_uses_reference_model(
         mock_ref_provider = AsyncMock()
         MockImageProvider.return_value = mock_ref_provider
 
-        workflow = await create_workflow(
+        async with await create_workflow(
             single_row_config,
             project_endpoint="https://test.azure.com",
             credential=mock_credential,
-        )
-
-        # Verify GPTImageProvider was called with reference_model and credential
-        MockImageProvider.assert_called_once_with(
-            azure_endpoint=None,
-            credential=mock_credential,
-            model_deployment="custom-ref-model",
-        )
-
-        await workflow.close()
+        ) as workflow:
+            # Verify GPTImageProvider was called with reference_model and credential
+            MockImageProvider.assert_called_once_with(
+                azure_endpoint=None,
+                credential=mock_credential,
+                model_deployment="custom-ref-model",
+            )
 
 
 @pytest.mark.asyncio
@@ -2149,22 +2140,20 @@ async def test_create_workflow_shared_credential(
         MockChatProvider.side_effect = [mock_grid_provider, mock_gate_provider]
         MockImageProvider.return_value = AsyncMock()
 
-        workflow = await create_workflow(
+        async with await create_workflow(
             single_row_config,
             project_endpoint="https://test.azure.com",
             credential=mock_credential,
-        )
+        ) as workflow:
+            # All chat providers should receive the same credential
+            for call in MockChatProvider.call_args_list:
+                assert call.kwargs["credential"] == mock_credential
 
-        # All chat providers should receive the same credential
-        for call in MockChatProvider.call_args_list:
-            assert call.kwargs["credential"] == mock_credential
-
-        MockImageProvider.assert_called_once()
-        # GPTImageProvider now also receives the shared credential
-        assert MockImageProvider.call_args.kwargs["credential"] == mock_credential
+            MockImageProvider.assert_called_once()
+            # GPTImageProvider now also receives the shared credential
+            assert MockImageProvider.call_args.kwargs["credential"] == mock_credential
 
         # When user-provided credential, it should not be closed
-        await workflow.close()
         mock_credential.close.assert_not_called()
 
 
@@ -2193,21 +2182,18 @@ async def test_create_workflow_fallback_env(
         MockImageProvider.return_value = AsyncMock()
 
         # Don't pass endpoint — should fall back to env var
-        workflow = await create_workflow(
+        async with await create_workflow(
             single_row_config,
             credential=mock_credential,
-        )
+        ) as workflow:
+            # All chat providers should use the env var endpoint
+            for call in MockChatProvider.call_args_list:
+                assert call.kwargs["azure_endpoint"] == "https://env-endpoint.azure.com"
 
-        # All chat providers should use the env var endpoint
-        for call in MockChatProvider.call_args_list:
-            assert call.kwargs["azure_endpoint"] == "https://env-endpoint.azure.com"
-
-        MockImageProvider.assert_called_once()
-        # GPTImageProvider receives credential and reads its own endpoint
-        # from AZURE_OPENAI_GPT_IMAGE_ENDPOINT env var
-        assert "credential" in MockImageProvider.call_args.kwargs
-
-        await workflow.close()
+            MockImageProvider.assert_called_once()
+            # GPTImageProvider receives credential and reads its own endpoint
+            # from AZURE_OPENAI_GPT_IMAGE_ENDPOINT env var
+            assert "credential" in MockImageProvider.call_args.kwargs
 
 
 @pytest.mark.asyncio
@@ -2367,13 +2353,11 @@ async def test_create_workflow_real_azure(
     )
 
     # Create workflow using factory
-    workflow = await create_workflow(
+    async with await create_workflow(
         config=config,
         project_endpoint=azure_project_endpoint,
         credential=azure_credential,
-    )
-
-    try:
+    ) as workflow:
         # Verify workflow was created
         assert workflow is not None
         assert workflow.config == config
@@ -2388,7 +2372,3 @@ async def test_create_workflow_real_azure(
 
         # Could optionally run a minimal generation here, but that's expensive
         # and already covered by test_workflow_single_row_integration
-
-    finally:
-        # Clean up
-        await workflow.close()
