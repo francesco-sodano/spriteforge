@@ -157,6 +157,10 @@ class GenerationConfig(BaseModel):
             palette labeling (color naming).
         reference_model: Azure AI Foundry model deployment name for Stage 1
             reference image generation.
+        gate_3a_max_retries: Maximum number of retry attempts for Gate 3A
+            (row coherence) failures. When Gate 3A fails, the workflow
+            will regenerate problematic frames and re-check up to this
+            many times before raising GateError.
     """
 
     style: str = "Modern HD pixel art (Dead Cells / Owlboy style)"
@@ -171,6 +175,7 @@ class GenerationConfig(BaseModel):
     gate_model: str = "gpt-5-mini"
     labeling_model: str = "gpt-5-nano"
     reference_model: str = "gpt-image-1.5"
+    gate_3a_max_retries: int = Field(default=2, ge=0)
 
     @field_validator("facing")
     @classmethod

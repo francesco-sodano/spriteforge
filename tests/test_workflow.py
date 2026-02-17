@@ -1084,6 +1084,9 @@ class TestGate3aCheckedInAnchorRow:
         tmp_path: Path,
     ) -> None:
         """Single-row config only uses _process_anchor_row; Gate 3A failure raises."""
+        # Disable retries for this test to verify immediate failure
+        single_row_config.generation.gate_3a_max_retries = 0
+
         gate_checker = AsyncMock(spec=LLMGateChecker)
         gate_checker.gate_minus_1 = AsyncMock(
             return_value=_passing_verdict("gate_minus_1")
@@ -1104,7 +1107,7 @@ class TestGate3aCheckedInAnchorRow:
         with pytest.raises(GateError, match="Gate 3A"):
             await wf.run(ref_path, out_path)
 
-        # Gate 3A was called exactly once (for anchor row)
+        # Gate 3A was called exactly once (for anchor row, no retries)
         assert gate_checker.gate_3a.call_count == 1
 
 
@@ -1119,6 +1122,9 @@ class TestGate3aCheckedInProcessRow:
         tmp_path: Path,
     ) -> None:
         """Multi-row config: anchor row passes, second row Gate 3A fails."""
+        # Disable retries for this test
+        multi_row_config.generation.gate_3a_max_retries = 0
+
         gate_checker = AsyncMock(spec=LLMGateChecker)
         gate_checker.gate_minus_1 = AsyncMock(
             return_value=_passing_verdict("gate_minus_1")
@@ -1142,10 +1148,10 @@ class TestGate3aCheckedInProcessRow:
         ref_img.save(str(ref_path))
         out_path = tmp_path / "out.png"
 
-        with pytest.raises(GateError, match="Gate 3A"):
+        with pytest.raises(GateError, match="Failed to generate"):
             await wf.run(ref_path, out_path)
 
-        # Gate 3A was called twice (anchor row + second row)
+        # Gate 3A was called twice (anchor row + second row, no retries)
         assert gate_checker.gate_3a.call_count == 2
 
 
@@ -1507,6 +1513,287 @@ class TestMultipleRunsIndependent:
         # Config and palette_map should still be identical to originals
         assert wf.config.palettes == original_palettes
         assert wf.palette_map == original_palette_map
+
+
+# ---------------------------------------------------------------------------
+# Gate 3A row-level retry tests
+# ---------------------------------------------------------------------------
+
+
+class TestGate3ARowLevelRetry:
+    """Tests for Gate 3A retry mechanism at row level."""
+
+    @pytest.mark.asyncio
+    async def test_gate_3a_retry_succeeds_on_second_attempt(
+        self,
+        single_row_config: SpritesheetSpec,
+        sample_palette: PaletteConfig,
+        tmp_path: Path,
+    ) -> None:
+        """Gate 3A fails once, then succeeds on retry after frame regeneration."""
+        # Modify config to enable retries
+        single_row_config.generation.gate_3a_max_retries = 2
+
+        gate_checker = AsyncMock(spec=LLMGateChecker)
+        gate_checker.gate_minus_1 = AsyncMock(
+            return_value=_passing_verdict("gate_minus_1")
+        )
+        gate_checker.gate_0 = AsyncMock(return_value=_passing_verdict("gate_0"))
+        gate_checker.gate_1 = AsyncMock(return_value=_passing_verdict("gate_1"))
+        gate_checker.gate_2 = AsyncMock(return_value=_passing_verdict("gate_2"))
+
+        # Gate 3A fails first time with specific feedback, then passes
+        gate_checker.gate_3a = AsyncMock(
+            side_effect=[
+                _failing_verdict("gate_3a"),
+                _passing_verdict("gate_3a"),
+            ]
+        )
+
+        wf = _build_workflow(
+            single_row_config, sample_palette, gate_checker=gate_checker
+        )
+
+        ref_img = Image.new("RGBA", (64, 64), (100, 100, 100, 255))
+        ref_path = tmp_path / "ref.png"
+        ref_img.save(str(ref_path))
+        out_path = tmp_path / "out.png"
+
+        # Should succeed after retry
+        result = await wf.run(ref_path, out_path)
+        assert result == out_path
+        assert out_path.exists()
+
+        # Gate 3A should have been called twice
+        assert gate_checker.gate_3a.call_count == 2
+
+    @pytest.mark.asyncio
+    async def test_gate_3a_retry_exhaustion_raises_error(
+        self,
+        single_row_config: SpritesheetSpec,
+        sample_palette: PaletteConfig,
+        tmp_path: Path,
+    ) -> None:
+        """Gate 3A fails all retries and raises GateError."""
+        # Set max retries to 1 for faster test
+        single_row_config.generation.gate_3a_max_retries = 1
+
+        gate_checker = AsyncMock(spec=LLMGateChecker)
+        gate_checker.gate_minus_1 = AsyncMock(
+            return_value=_passing_verdict("gate_minus_1")
+        )
+        gate_checker.gate_0 = AsyncMock(return_value=_passing_verdict("gate_0"))
+        gate_checker.gate_1 = AsyncMock(return_value=_passing_verdict("gate_1"))
+        gate_checker.gate_2 = AsyncMock(return_value=_passing_verdict("gate_2"))
+
+        # Gate 3A always fails
+        gate_checker.gate_3a = AsyncMock(return_value=_failing_verdict("gate_3a"))
+
+        wf = _build_workflow(
+            single_row_config, sample_palette, gate_checker=gate_checker
+        )
+
+        ref_img = Image.new("RGBA", (64, 64), (100, 100, 100, 255))
+        ref_path = tmp_path / "ref.png"
+        ref_img.save(str(ref_path))
+        out_path = tmp_path / "out.png"
+
+        # Should raise GateError after exhausting retries
+        with pytest.raises(GateError, match="Gate 3A.*after 2 attempts"):
+            await wf.run(ref_path, out_path)
+
+        # Gate 3A should have been called 2 times (initial + 1 retry)
+        assert gate_checker.gate_3a.call_count == 2
+
+    @pytest.mark.asyncio
+    async def test_gate_3a_retry_identifies_problematic_frames(
+        self,
+        single_row_config: SpritesheetSpec,
+        sample_palette: PaletteConfig,
+        tmp_path: Path,
+    ) -> None:
+        """Gate 3A retry identifies and regenerates problematic frames."""
+        single_row_config.generation.gate_3a_max_retries = 2
+
+        # Track which frames are generated
+        generated_frames: list[int] = []
+
+        async def track_generation(*args: Any, **kwargs: Any) -> list[str]:
+            frame_index = kwargs.get("frame_index", -1)
+            generated_frames.append(frame_index)
+            return _make_sprite_grid()
+
+        grid_gen = AsyncMock(spec=GridGenerator)
+        grid_gen.generate_frame = track_generation
+
+        gate_checker = AsyncMock(spec=LLMGateChecker)
+        gate_checker.gate_minus_1 = AsyncMock(
+            return_value=_passing_verdict("gate_minus_1")
+        )
+        gate_checker.gate_0 = AsyncMock(return_value=_passing_verdict("gate_0"))
+        gate_checker.gate_1 = AsyncMock(return_value=_passing_verdict("gate_1"))
+        gate_checker.gate_2 = AsyncMock(return_value=_passing_verdict("gate_2"))
+
+        # Gate 3A fails first with feedback mentioning frame 2, then passes
+        failing_verdict = GateVerdict(
+            gate_name="gate_3a",
+            passed=False,
+            confidence=0.3,
+            feedback="Frame 2 has inconsistent character design",
+        )
+        gate_checker.gate_3a = AsyncMock(
+            side_effect=[
+                failing_verdict,
+                _passing_verdict("gate_3a"),
+            ]
+        )
+
+        wf = _build_workflow(
+            single_row_config,
+            sample_palette,
+            gate_checker=gate_checker,
+            grid_generator=grid_gen,
+        )
+
+        ref_img = Image.new("RGBA", (64, 64), (100, 100, 100, 255))
+        ref_path = tmp_path / "ref.png"
+        ref_img.save(str(ref_path))
+        out_path = tmp_path / "out.png"
+
+        result = await wf.run(ref_path, out_path)
+        assert result == out_path
+
+        # Should have generated frames 0, 1, 2 initially, then regenerated frame 2
+        # Note: single_row_config has 3 frames (0, 1, 2)
+        # The anchor frame (0) is generated first, then 1 and 2
+        # On retry, frame 2 should be regenerated
+        assert 0 in generated_frames  # anchor
+        assert 1 in generated_frames  # first pass
+        assert 2 in generated_frames  # first pass
+        # Frame 2 should appear at least twice (initial + retry)
+        assert generated_frames.count(2) >= 2
+
+
+class TestParallelRowGracefulFailure:
+    """Tests for graceful handling of parallel row failures."""
+
+    @pytest.mark.asyncio
+    async def test_one_row_failure_does_not_crash_other_rows(
+        self,
+        multi_row_config: SpritesheetSpec,
+        sample_palette: PaletteConfig,
+        tmp_path: Path,
+    ) -> None:
+        """One row failure doesn't prevent other rows from completing."""
+        # Disable retries to test immediate failure
+        multi_row_config.generation.gate_3a_max_retries = 0
+
+        gate_checker = AsyncMock(spec=LLMGateChecker)
+        gate_checker.gate_minus_1 = AsyncMock(
+            return_value=_passing_verdict("gate_minus_1")
+        )
+        gate_checker.gate_0 = AsyncMock(return_value=_passing_verdict("gate_0"))
+        gate_checker.gate_1 = AsyncMock(return_value=_passing_verdict("gate_1"))
+        gate_checker.gate_2 = AsyncMock(return_value=_passing_verdict("gate_2"))
+
+        # Gate 3A passes for anchor row, fails for second row
+        gate_checker.gate_3a = AsyncMock(
+            side_effect=[
+                _passing_verdict("gate_3a"),  # anchor row
+                _failing_verdict("gate_3a"),  # second row
+            ]
+        )
+
+        wf = _build_workflow(
+            multi_row_config, sample_palette, gate_checker=gate_checker
+        )
+
+        ref_img = Image.new("RGBA", (64, 64), (100, 100, 100, 255))
+        ref_path = tmp_path / "ref.png"
+        ref_img.save(str(ref_path))
+        out_path = tmp_path / "out.png"
+
+        # Should fail overall, but report partial success
+        with pytest.raises(GateError, match="Failed to generate 1 of 1.*rows"):
+            await wf.run(ref_path, out_path)
+
+        # Gate 3A should have been called for both rows
+        assert gate_checker.gate_3a.call_count == 2
+
+    @pytest.mark.asyncio
+    async def test_partial_results_preserved_on_failure(
+        self,
+        sample_palette: PaletteConfig,
+        tmp_path: Path,
+    ) -> None:
+        """Partial results are preserved when some rows fail."""
+        # Create a config with 3 rows
+        config = SpritesheetSpec(
+            character=CharacterConfig(
+                name="TestChar",
+                character_class="Warrior",
+                description="A test character",
+                frame_width=64,
+                frame_height=64,
+                spritesheet_columns=14,
+            ),
+            animations=[
+                AnimationDef(
+                    name="idle",
+                    row=0,
+                    frames=2,
+                    timing_ms=150,
+                    prompt_context="Standing idle",
+                ),
+                AnimationDef(
+                    name="walk",
+                    row=1,
+                    frames=2,
+                    timing_ms=100,
+                    prompt_context="Walking forward",
+                ),
+                AnimationDef(
+                    name="run",
+                    row=2,
+                    frames=2,
+                    timing_ms=80,
+                    prompt_context="Running fast",
+                ),
+            ],
+            palettes={"P1": sample_palette},
+            generation=GenerationConfig(gate_3a_max_retries=0),  # Disable retries
+        )
+
+        gate_checker = AsyncMock(spec=LLMGateChecker)
+        gate_checker.gate_minus_1 = AsyncMock(
+            return_value=_passing_verdict("gate_minus_1")
+        )
+        gate_checker.gate_0 = AsyncMock(return_value=_passing_verdict("gate_0"))
+        gate_checker.gate_1 = AsyncMock(return_value=_passing_verdict("gate_1"))
+        gate_checker.gate_2 = AsyncMock(return_value=_passing_verdict("gate_2"))
+
+        # Anchor passes, row 1 passes, row 2 fails
+        gate_checker.gate_3a = AsyncMock(
+            side_effect=[
+                _passing_verdict("gate_3a"),  # anchor (idle)
+                _passing_verdict("gate_3a"),  # walk
+                _failing_verdict("gate_3a"),  # run
+            ]
+        )
+
+        wf = _build_workflow(config, sample_palette, gate_checker=gate_checker)
+
+        ref_img = Image.new("RGBA", (64, 64), (100, 100, 100, 255))
+        ref_path = tmp_path / "ref.png"
+        ref_img.save(str(ref_path))
+        out_path = tmp_path / "out.png"
+
+        # Should fail but report 1 successful non-anchor row
+        with pytest.raises(GateError, match="Successfully generated rows: 1"):
+            await wf.run(ref_path, out_path)
+
+        # All three rows should have attempted Gate 3A
+        assert gate_checker.gate_3a.call_count == 3
 
 
 # ---------------------------------------------------------------------------
