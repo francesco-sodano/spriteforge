@@ -175,7 +175,10 @@ async def label_palette_colors_with_llm(
         # Validate label count
         if not isinstance(labels, list) or len(labels) != len(colors):
             logger.warning(
-                f"LLM returned wrong number of labels: {len(labels) if isinstance(labels, list) else 'non-list'} vs {len(colors)} colors. Falling back to descriptive names."
+                "LLM returned wrong number of labels: %s vs %d colors. "
+                "Falling back to descriptive names.",
+                len(labels) if isinstance(labels, list) else "non-list",
+                len(colors),
             )
             return [_describe_color(c) for c in colors]
 
@@ -184,7 +187,8 @@ async def label_palette_colors_with_llm(
 
     except Exception as exc:
         logger.warning(
-            f"LLM palette labeling failed: {exc}. Falling back to descriptive names."
+            "LLM palette labeling failed: %s. Falling back to descriptive names.",
+            exc,
         )
         return [_describe_color(c) for c in colors]
 
