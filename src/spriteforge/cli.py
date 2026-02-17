@@ -9,6 +9,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import sys
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -35,6 +36,14 @@ from spriteforge import (
 from spriteforge.errors import SpriteForgeError
 
 console = Console()
+
+
+@dataclass
+class _ProgressState:
+    """Track current progress stage and task."""
+
+    stage_name: str | None = None
+    task_id: TaskID | None = None
 
 
 def _setup_logging(verbose: bool) -> None:
@@ -226,22 +235,22 @@ async def _run_generation(
         )
 
         # Track current stage
-        current_stage: dict[str, str | TaskID | None] = {"name": None, "task": None}
+        state = _ProgressState()
 
         def progress_callback(stage_name: str, current: int, total: int) -> None:
             """Update progress based on stage."""
             if stage_name == "preprocessing":
-                if current_stage["name"] != "preprocessing":
+                if state.stage_name != "preprocessing":
                     progress.start_task(preprocess_task)
-                    current_stage["name"] = "preprocessing"
-                    current_stage["task"] = preprocess_task
+                    state.stage_name = "preprocessing"
+                    state.task_id = preprocess_task
                 progress.update(preprocess_task, completed=current)
 
             elif stage_name == "row":
-                if current_stage["name"] != "row":
+                if state.stage_name != "row":
                     progress.start_task(row_task)
-                    current_stage["name"] = "row"
-                    current_stage["task"] = row_task
+                    state.stage_name = "row"
+                    state.task_id = row_task
                 progress.update(row_task, completed=current)
 
         # Create workflow

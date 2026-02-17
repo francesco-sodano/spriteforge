@@ -78,6 +78,10 @@ def test_generate_missing_config(cli_runner: CliRunner) -> None:
     """Test that generate fails gracefully when config file doesn't exist."""
     result = cli_runner.invoke(main, ["generate", "nonexistent.yaml"])
     assert result.exit_code != 0
+    assert (
+        "nonexistent.yaml" in result.output.lower()
+        or "not found" in result.output.lower()
+    )
 
 
 def test_generate_requires_base_image(
@@ -122,6 +126,10 @@ def test_validate_missing_config(cli_runner: CliRunner) -> None:
     """Test that validate fails gracefully when config file doesn't exist."""
     result = cli_runner.invoke(main, ["validate", "nonexistent.yaml"])
     assert result.exit_code != 0
+    assert (
+        "nonexistent.yaml" in result.output.lower()
+        or "not found" in result.output.lower()
+    )
 
 
 def test_validate_valid_config_no_check_base(
@@ -194,6 +202,10 @@ def test_estimate_missing_config(cli_runner: CliRunner) -> None:
     """Test that estimate fails gracefully when config file doesn't exist."""
     result = cli_runner.invoke(main, ["estimate", "nonexistent.yaml"])
     assert result.exit_code != 0
+    assert (
+        "nonexistent.yaml" in result.output.lower()
+        or "not found" in result.output.lower()
+    )
 
 
 def test_estimate_valid_config(cli_runner: CliRunner, test_config_path: Path) -> None:
