@@ -198,9 +198,7 @@ def load_config(path: str | Path) -> SpritesheetSpec:
 
     spec = SpritesheetSpec(**spec_kwargs)
 
-    num_colors = (
-        len(spec.palette.colors) if spec.palette else 0
-    )
+    num_colors = len(spec.palette.colors) if spec.palette else 0
     logger.info(
         "Loaded config: %s (%d animations, %d palette colors)",
         spec.character.name,
