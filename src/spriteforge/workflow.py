@@ -569,24 +569,17 @@ class SpriteForgeWorkflow:
                 guidance = self.retry_manager.build_escalated_guidance(retry_ctx)
 
             # Generate the grid
-            if is_anchor:
-                grid = await self.grid_generator.generate_anchor_frame(
-                    base_reference=base_reference or b"",
-                    reference_frame=reference_frame,
-                    context=context,
-                    temperature=temperature,
-                    additional_guidance=guidance,
-                )
-            else:
-                grid = await self.grid_generator.generate_frame(
-                    reference_frame=reference_frame,
-                    context=context,
-                    frame_index=frame_index,
-                    prev_frame_grid=prev_frame_grid,
-                    prev_frame_rendered=prev_frame_rendered,
-                    temperature=temperature,
-                    additional_guidance=guidance,
-                )
+            grid = await self.grid_generator.generate_frame(
+                reference_frame=reference_frame,
+                context=context,
+                frame_index=frame_index,
+                is_anchor=is_anchor,
+                base_reference=base_reference,
+                prev_frame_grid=prev_frame_grid if not is_anchor else None,
+                prev_frame_rendered=prev_frame_rendered if not is_anchor else None,
+                temperature=temperature,
+                additional_guidance=guidance,
+            )
 
             # Programmatic checks (fast-fail)
             prog_verdicts = self.programmatic_checker.run_all(grid, context)

@@ -182,6 +182,9 @@ class GridGenerator:
         LLM uses it as a pixel-level guide — "trace and refine" rather than
         "imagine from scratch".
 
+        .. deprecated::
+            Use :meth:`generate_frame` with ``is_anchor=True`` instead.
+
         Args:
             base_reference: PNG bytes of the full base character reference image.
             reference_frame: PNG bytes of the rough reference for IDLE frame 0.
@@ -193,80 +196,24 @@ class GridGenerator:
         Returns:
             A list of *context.frame_height* strings, each *context.frame_width* characters.
         """
-        palette = context.palette
-        animation = context.animation
-        generation = context.generation
-        frame_width = context.frame_width
-        frame_height = context.frame_height
-        quantized_reference = context.quantized_reference
-
-        system_prompt = _build_system_prompt(
-            palette, generation, width=frame_width, height=frame_height
-        )
-
-        # Build quantized reference section
-        quantized_section = ""
-        if quantized_reference is not None:
-            quantized_section = QUANTIZED_REFERENCE_SECTION.format(
-                width=frame_width, height=frame_height
-            )
-
-        frame_desc = ""
-        if animation.frame_descriptions:
-            frame_desc = f"Frame description: {animation.frame_descriptions[0]}"
-
-        animation_context = ""
-        if animation.prompt_context:
-            animation_context = f"Animation context: {animation.prompt_context}"
-
-        user_text = build_anchor_frame_prompt(
-            animation_name=animation.name,
-            animation_context=animation_context,
-            frame_description=frame_desc,
-            quantized_section=quantized_section,
+        return await self.generate_frame(
+            reference_frame=reference_frame,
+            context=context,
+            frame_index=0,
+            temperature=temperature,
             additional_guidance=additional_guidance,
+            is_anchor=True,
+            base_reference=base_reference,
         )
-
-        # Build multimodal content parts
-        content: list[dict[str, Any]] = [
-            {"type": "text", "text": user_text},
-            {
-                "type": "image_url",
-                "image_url": {"url": image_to_data_url(base_reference)},
-            },
-            {
-                "type": "image_url",
-                "image_url": {"url": image_to_data_url(reference_frame)},
-            },
-        ]
-
-        if quantized_reference is not None:
-            content.append(
-                {
-                    "type": "image_url",
-                    "image_url": {"url": image_to_data_url(quantized_reference)},
-                }
-            )
-
-        messages: list[dict[str, Any]] = [
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": content},
-        ]
-
-        response_text = await self._chat.chat(
-            messages, temperature=temperature, response_format="json_object"
-        )
-        grid = parse_grid_response(
-            response_text, expected_rows=frame_height, expected_cols=frame_width
-        )
-        logger.debug("Grid response: %d rows, all valid symbols", len(grid))
-        return grid
 
     async def generate_frame(
         self,
         reference_frame: bytes,
         context: FrameContext,
         frame_index: int,
+        *,
+        is_anchor: bool = False,
+        base_reference: bytes | None = None,
         prev_frame_grid: list[str] | None = None,
         prev_frame_rendered: bytes | None = None,
         temperature: float = 1.0,
@@ -274,13 +221,24 @@ class GridGenerator:
     ) -> list[str]:
         """Generate a single pixel-precise frame grid.
 
+        This method handles both anchor frame generation (when ``is_anchor=True``)
+        and regular frame generation. The anchor frame (IDLE Frame 0) establishes
+        the character's canonical appearance and is used as reference for all
+        subsequent frames.
+
         Args:
             reference_frame: PNG bytes of the rough reference for this frame.
-            context: Frame context containing anchor_grid, anchor_rendered, palette,
-                animation, generation config, and frame dimensions.
+            context: Frame context containing palette, animation, generation config,
+                and frame dimensions. For non-anchor frames, must also contain
+                anchor_grid and anchor_rendered.
             frame_index: Index of this frame within the row.
+            is_anchor: If True, generates the anchor frame (IDLE Frame 0).
+            base_reference: PNG bytes of the full base character reference image.
+                Required when is_anchor=True, ignored otherwise.
             prev_frame_grid: Grid of the previous frame (for continuity).
+                Only used when is_anchor=False.
             prev_frame_rendered: PNG bytes of the rendered previous frame.
+                Only used when is_anchor=False.
             temperature: LLM temperature (1.0=creative, 0.3=constrained).
             additional_guidance: Extra prompt text for retry escalation.
 
@@ -288,6 +246,8 @@ class GridGenerator:
             A list of *context.frame_height* strings, each *context.frame_width* characters.
 
         Raises:
+            ValueError: If is_anchor=True but base_reference is None, or if
+                is_anchor=False but anchor_rendered/anchor_grid are missing from context.
             GenerationError: If the LLM fails to produce a valid grid.
         """
         palette = context.palette
@@ -295,20 +255,12 @@ class GridGenerator:
         generation = context.generation
         frame_width = context.frame_width
         frame_height = context.frame_height
-        anchor_grid = context.anchor_grid
-        anchor_rendered = context.anchor_rendered
 
         system_prompt = _build_system_prompt(
             palette, generation, width=frame_width, height=frame_height
         )
 
-        # Validate context for non-anchor frame generation
-        if anchor_rendered is None or anchor_grid is None:
-            raise ValueError(
-                "anchor_rendered and anchor_grid must be provided in context "
-                "for non-anchor frame generation"
-            )
-
+        # Extract frame description
         frame_desc = ""
         if animation.frame_descriptions and frame_index < len(
             animation.frame_descriptions
@@ -321,60 +273,114 @@ class GridGenerator:
         if animation.prompt_context:
             animation_context = f"Animation context: {animation.prompt_context}"
 
-        user_text = build_frame_prompt(
-            frame_index=frame_index,
-            animation_name=animation.name,
-            animation_context=animation_context,
-            frame_description=frame_desc,
-            additional_guidance=additional_guidance,
-        )
+        # Build user prompt based on anchor vs non-anchor
+        if is_anchor:
+            # Validate anchor-specific requirements
+            if base_reference is None:
+                raise ValueError("base_reference is required when is_anchor=True")
 
-        # Build multimodal content
-        content: list[dict[str, Any]] = [
-            {"type": "text", "text": user_text},
-            {
-                "type": "image_url",
-                "image_url": {"url": image_to_data_url(reference_frame)},
-            },
-            {
-                "type": "image_url",
-                "image_url": {"url": image_to_data_url(anchor_rendered)},
-            },
-        ]
+            # Build quantized reference section
+            quantized_section = ""
+            if context.quantized_reference is not None:
+                quantized_section = QUANTIZED_REFERENCE_SECTION.format(
+                    width=frame_width, height=frame_height
+                )
 
-        if prev_frame_rendered is not None:
-            content.append(
+            user_text = build_anchor_frame_prompt(
+                animation_name=animation.name,
+                animation_context=animation_context,
+                frame_description=frame_desc,
+                quantized_section=quantized_section,
+                additional_guidance=additional_guidance,
+            )
+
+            # Build multimodal content for anchor frame
+            content: list[dict[str, Any]] = [
+                {"type": "text", "text": user_text},
                 {
                     "type": "image_url",
-                    "image_url": {"url": image_to_data_url(prev_frame_rendered)},
-                }
+                    "image_url": {"url": image_to_data_url(base_reference)},
+                },
+                {
+                    "type": "image_url",
+                    "image_url": {"url": image_to_data_url(reference_frame)},
+                },
+            ]
+
+            if context.quantized_reference is not None:
+                content.append(
+                    {
+                        "type": "image_url",
+                        "image_url": {
+                            "url": image_to_data_url(context.quantized_reference)
+                        },
+                    }
+                )
+        else:
+            # Validate context for non-anchor frame generation
+            if context.anchor_rendered is None or context.anchor_grid is None:
+                raise ValueError(
+                    "anchor_rendered and anchor_grid must be provided in context "
+                    "for non-anchor frame generation"
+                )
+
+            user_text = build_frame_prompt(
+                frame_index=frame_index,
+                animation_name=animation.name,
+                animation_context=animation_context,
+                frame_description=frame_desc,
+                additional_guidance=additional_guidance,
             )
 
-        # Add anchor grid and previous frame grid as text context
-        anchor_text = (
-            "The anchor frame (IDLE F0) grid for identity reference:\n"
-            + "\n".join(anchor_grid)
+            # Build multimodal content for non-anchor frame
+            content = [
+                {"type": "text", "text": user_text},
+                {
+                    "type": "image_url",
+                    "image_url": {"url": image_to_data_url(reference_frame)},
+                },
+                {
+                    "type": "image_url",
+                    "image_url": {"url": image_to_data_url(context.anchor_rendered)},
+                },
+            ]
+
+            if prev_frame_rendered is not None:
+                content.append(
+                    {
+                        "type": "image_url",
+                        "image_url": {"url": image_to_data_url(prev_frame_rendered)},
+                    }
+                )
+
+            # Add anchor grid and previous frame grid as text context
+            anchor_text = (
+                "The anchor frame (IDLE F0) grid for identity reference:\n"
+                + "\n".join(context.anchor_grid)
+            )
+            content.append({"type": "text", "text": anchor_text})
+
+            if prev_frame_grid is not None:
+                prev_text = (
+                    f"Previous frame (frame {frame_index - 1}) grid "
+                    "for animation continuity:\n" + "\n".join(prev_frame_grid)
+                )
+                content.append({"type": "text", "text": prev_text})
+
+        # Log frame generation
+        frame_type = "anchor" if is_anchor else "frame"
+        logger.info(
+            "Generating %s: %s F%d (temp=%.1f)",
+            frame_type,
+            animation.name,
+            frame_index,
+            temperature,
         )
-        content.append({"type": "text", "text": anchor_text})
-
-        if prev_frame_grid is not None:
-            prev_text = (
-                f"Previous frame (frame {frame_index - 1}) grid "
-                "for animation continuity:\n" + "\n".join(prev_frame_grid)
-            )
-            content.append({"type": "text", "text": prev_text})
 
         messages: list[dict[str, Any]] = [
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": content},
         ]
-
-        logger.info(
-            "Generating frame: %s F%d (temp=%.1f)",
-            animation.name,
-            frame_index,
-            temperature,
-        )
 
         response_text = await self._chat.chat(
             messages, temperature=temperature, response_format="json_object"
