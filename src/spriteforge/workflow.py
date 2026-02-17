@@ -22,6 +22,7 @@ from typing import Any, Literal, overload
 from PIL import Image
 
 from spriteforge.assembler import assemble_spritesheet
+from spriteforge.checkpoint import CheckpointManager
 from spriteforge.errors import GateError, RetryExhaustedError
 from spriteforge.gates import GateVerdict, LLMGateChecker, ProgrammaticChecker
 from spriteforge.generator import GenerationError, GridGenerator
@@ -71,6 +72,7 @@ class SpriteForgeWorkflow:
         palette_map: dict[str, tuple[int, int, int, int]],
         preprocessor: Callable[..., PreprocessResult] | None = None,
         max_concurrent_rows: int = 0,
+        checkpoint_dir: str | Path | None = None,
     ) -> None:
         """Initialize the workflow with all required components.
 
@@ -89,6 +91,10 @@ class SpriteForgeWorkflow:
             max_concurrent_rows: Maximum number of rows to process in
                 parallel after the anchor row.  ``0`` (default) means
                 unlimited — all remaining rows run concurrently.
+            checkpoint_dir: Optional directory for saving/loading checkpoints.
+                If provided, enables checkpoint/resume support. After each
+                row completes Gate 3A, its strip PNG and frame grids are
+                saved. On resume, completed rows are skipped.
         """
         self.config = config
         self.reference_provider = reference_provider
@@ -99,6 +105,9 @@ class SpriteForgeWorkflow:
         self.palette_map = palette_map
         self.preprocessor = preprocessor
         self.max_concurrent_rows = max_concurrent_rows
+        self.checkpoint_manager: CheckpointManager | None = None
+        if checkpoint_dir is not None:
+            self.checkpoint_manager = CheckpointManager(Path(checkpoint_dir))
 
     async def close(self) -> None:
         """Clean up all provider resources.
@@ -170,6 +179,17 @@ class SpriteForgeWorkflow:
             total_rows,
         )
 
+        # ---- Check for existing checkpoints (resume support) ----
+        completed_rows: set[int] = set()
+        if self.checkpoint_manager is not None:
+            completed_rows = self.checkpoint_manager.completed_rows()
+            if completed_rows:
+                logger.info(
+                    "Found %d completed checkpoint(s): %s",
+                    len(completed_rows),
+                    sorted(completed_rows),
+                )
+
         # ---- Preprocessing step (optional) ----
         quantized_reference: bytes | None = None
         if self.preprocessor is not None:
@@ -195,44 +215,86 @@ class SpriteForgeWorkflow:
             progress_callback("row", 0, total_rows)
 
         anchor_animation = self.config.animations[0]
-        logger.info(
-            "Processing row 0/%d: %s (%d frames)",
-            total_rows,
-            anchor_animation.name,
-            anchor_animation.frames,
-        )
-        anchor_grid, row0_grids = await self._process_row(
-            base_reference,
-            anchor_animation,
-            palette,
-            palette_map,
-            is_anchor=True,
-            quantized_reference=quantized_reference,
-        )
+        
+        # Check if row 0 is already checkpointed
+        if anchor_animation.row in completed_rows and self.checkpoint_manager is not None:
+            logger.info(
+                "Loading row 0/%d from checkpoint: %s (%d frames)",
+                total_rows,
+                anchor_animation.name,
+                anchor_animation.frames,
+            )
+            checkpoint_data = self.checkpoint_manager.load_row(anchor_animation.row)
+            if checkpoint_data is None:
+                raise RuntimeError(
+                    f"Checkpoint for row {anchor_animation.row} was reported as "
+                    "completed but could not be loaded"
+                )
+            row0_strip_bytes, row0_grids = checkpoint_data
+            # Extract anchor grid (first grid)
+            anchor_grid = row0_grids[0]
+            # Render anchor frame for subsequent rows
+            anchor_render_context = self._build_frame_context(
+                palette=palette,
+                palette_map=palette_map,
+                animation=anchor_animation,
+                anchor_grid=anchor_grid,
+                anchor_rendered=None,
+                quantized_reference=None,
+            )
+            anchor_rendered = frame_to_png_bytes(
+                render_frame(anchor_grid, anchor_render_context)
+            )
+            row_images: dict[int, bytes] = {anchor_animation.row: row0_strip_bytes}
+            logger.info("Row 0 (%s) loaded from checkpoint", anchor_animation.name)
+        else:
+            logger.info(
+                "Processing row 0/%d: %s (%d frames)",
+                total_rows,
+                anchor_animation.name,
+                anchor_animation.frames,
+            )
+            anchor_grid, row0_grids = await self._process_row(
+                base_reference,
+                anchor_animation,
+                palette,
+                palette_map,
+                is_anchor=True,
+                quantized_reference=quantized_reference,
+            )
 
-        # Render and save anchor row strip
-        # Create context for rendering with the anchor grid we just generated
-        anchor_render_context = self._build_frame_context(
-            palette=palette,
-            palette_map=palette_map,
-            animation=anchor_animation,
-            anchor_grid=anchor_grid,
-            anchor_rendered=None,
-            quantized_reference=None,
-        )
-        anchor_rendered = frame_to_png_bytes(
-            render_frame(anchor_grid, anchor_render_context)
-        )
-        row_images: dict[int, bytes] = {}
-        row0_strip = render_row_strip(row0_grids, anchor_render_context)
-        row_images[anchor_animation.row] = frame_to_png_bytes(row0_strip)
+            # Render and save anchor row strip
+            # Create context for rendering with the anchor grid we just generated
+            anchor_render_context = self._build_frame_context(
+                palette=palette,
+                palette_map=palette_map,
+                animation=anchor_animation,
+                anchor_grid=anchor_grid,
+                anchor_rendered=None,
+                quantized_reference=None,
+            )
+            anchor_rendered = frame_to_png_bytes(
+                render_frame(anchor_grid, anchor_render_context)
+            )
+            row_images: dict[int, bytes] = {}
+            row0_strip = render_row_strip(row0_grids, anchor_render_context)
+            row_images[anchor_animation.row] = frame_to_png_bytes(row0_strip)
 
-        logger.info(
-            "Row 0 (%s) complete: %d/%d frames generated",
-            anchor_animation.name,
-            anchor_animation.frames,
-            anchor_animation.frames,
-        )
+            # Save checkpoint for row 0
+            if self.checkpoint_manager is not None:
+                self.checkpoint_manager.save_row(
+                    row=anchor_animation.row,
+                    animation_name=anchor_animation.name,
+                    strip_bytes=row_images[anchor_animation.row],
+                    grids=row0_grids,
+                )
+
+            logger.info(
+                "Row 0 (%s) complete: %d/%d frames generated",
+                anchor_animation.name,
+                anchor_animation.frames,
+                anchor_animation.frames,
+            )
 
         if progress_callback:
             progress_callback("row", 1, total_rows)
@@ -253,43 +315,75 @@ class SpriteForgeWorkflow:
                 if semaphore is not None:
                     await semaphore.acquire()
                 try:
-                    logger.info(
-                        "Processing row %d/%d: %s (%d frames)",
-                        row_idx_seq,
-                        total_rows,
-                        animation.name,
-                        animation.frames,
-                    )
+                    # Check if this row is already checkpointed
+                    if animation.row in completed_rows and self.checkpoint_manager is not None:
+                        logger.info(
+                            "Loading row %d/%d from checkpoint: %s (%d frames)",
+                            row_idx_seq,
+                            total_rows,
+                            animation.name,
+                            animation.frames,
+                        )
+                        checkpoint_data = self.checkpoint_manager.load_row(animation.row)
+                        if checkpoint_data is None:
+                            raise RuntimeError(
+                                f"Checkpoint for row {animation.row} was reported as "
+                                "completed but could not be loaded"
+                            )
+                        row_strip_bytes, row_grids = checkpoint_data
+                        row_images[animation.row] = row_strip_bytes
+                        logger.info(
+                            "Row %d (%s) loaded from checkpoint",
+                            row_idx_seq,
+                            animation.name,
+                        )
+                    else:
+                        logger.info(
+                            "Processing row %d/%d: %s (%d frames)",
+                            row_idx_seq,
+                            total_rows,
+                            animation.name,
+                            animation.frames,
+                        )
 
-                    row_grids = await self._process_row(
-                        base_reference,
-                        animation,
-                        palette,
-                        palette_map,
-                        is_anchor=False,
-                        anchor_grid=anchor_grid,
-                        anchor_rendered=anchor_rendered,
-                    )
+                        row_grids = await self._process_row(
+                            base_reference,
+                            animation,
+                            palette,
+                            palette_map,
+                            is_anchor=False,
+                            anchor_grid=anchor_grid,
+                            anchor_rendered=anchor_rendered,
+                        )
 
-                    # Create context for rendering this row
-                    row_render_context = self._build_frame_context(
-                        palette=palette,
-                        palette_map=palette_map,
-                        animation=animation,
-                        anchor_grid=anchor_grid,
-                        anchor_rendered=anchor_rendered,
-                        quantized_reference=None,
-                    )
-                    row_strip = render_row_strip(row_grids, row_render_context)
-                    row_images[animation.row] = frame_to_png_bytes(row_strip)
+                        # Create context for rendering this row
+                        row_render_context = self._build_frame_context(
+                            palette=palette,
+                            palette_map=palette_map,
+                            animation=animation,
+                            anchor_grid=anchor_grid,
+                            anchor_rendered=anchor_rendered,
+                            quantized_reference=None,
+                        )
+                        row_strip = render_row_strip(row_grids, row_render_context)
+                        row_images[animation.row] = frame_to_png_bytes(row_strip)
 
-                    logger.info(
-                        "Row %d (%s) complete: %d/%d frames generated",
-                        row_idx_seq,
-                        animation.name,
-                        animation.frames,
-                        animation.frames,
-                    )
+                        # Save checkpoint for this row
+                        if self.checkpoint_manager is not None:
+                            self.checkpoint_manager.save_row(
+                                row=animation.row,
+                                animation_name=animation.name,
+                                strip_bytes=row_images[animation.row],
+                                grids=row_grids,
+                            )
+
+                        logger.info(
+                            "Row %d (%s) complete: %d/%d frames generated",
+                            row_idx_seq,
+                            animation.name,
+                            animation.frames,
+                            animation.frames,
+                        )
 
                     if progress_callback:
                         # No lock needed: asyncio is single-threaded and
@@ -313,8 +407,14 @@ class SpriteForgeWorkflow:
 
         logger.info("Spritesheet saved: %s", out)
 
+        # Clean up checkpoints after successful assembly
+        if self.checkpoint_manager is not None:
+            self.checkpoint_manager.cleanup()
+
         if progress_callback:
             progress_callback("assembly", 1, 1)
+
+        return out
 
         return out
 
@@ -804,6 +904,7 @@ async def create_workflow(
     credential: Any | None = None,
     preprocessor: Callable[..., PreprocessResult] | None = None,
     max_concurrent_rows: int = 0,
+    checkpoint_dir: str | Path | None = None,
 ) -> SpriteForgeWorkflow:
     """Create a fully wired SpriteForgeWorkflow with tiered model architecture.
 
@@ -831,6 +932,10 @@ async def create_workflow(
         max_concurrent_rows: Maximum number of rows to process in
             parallel after the anchor row. ``0`` (default) means
             unlimited — all remaining rows run concurrently.
+        checkpoint_dir: Optional directory for saving/loading checkpoints.
+            If provided, enables checkpoint/resume support. After each
+            row completes Gate 3A, its strip PNG and frame grids are
+            saved. On resume, completed rows are skipped.
 
     Returns:
         A fully initialized SpriteForgeWorkflow ready to run.
@@ -928,6 +1033,7 @@ async def create_workflow(
         palette_map=palette_map,
         preprocessor=preprocessor,
         max_concurrent_rows=max_concurrent_rows,
+        checkpoint_dir=checkpoint_dir,
     )
 
     # Store credential ownership info for cleanup
