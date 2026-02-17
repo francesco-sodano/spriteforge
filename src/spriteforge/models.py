@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
-from pydantic import BaseModel, Field, field_validator, model_validator
+from typing import Any
+
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 
 class PaletteColor(BaseModel):
@@ -16,11 +18,26 @@ class PaletteColor(BaseModel):
         b: Blue channel (0–255).
     """
 
-    element: str
+    model_config = ConfigDict(populate_by_name=True)
+
+    element: str = Field(validation_alias="name", default="")
     symbol: str
     r: int = Field(..., ge=0, le=255)
     g: int = Field(..., ge=0, le=255)
     b: int = Field(..., ge=0, le=255)
+
+    @model_validator(mode="before")
+    @classmethod
+    def _convert_rgb_list(cls, data: Any) -> Any:
+        """Convert YAML rgb: [r, g, b] format to separate r, g, b fields."""
+        if isinstance(data, dict) and "rgb" in data:
+            rgb = data.pop("rgb")
+            if not isinstance(rgb, list) or len(rgb) != 3:
+                raise ValueError(f"'rgb' must be a list of 3 ints, got {rgb!r}")
+            data["r"] = rgb[0]
+            data["g"] = rgb[1]
+            data["b"] = rgb[2]
+        return data
 
     @field_validator("symbol")
     @classmethod
@@ -119,12 +136,28 @@ class CharacterConfig(BaseModel):
         spritesheet_columns: Maximum frames per row in the sheet.
     """
 
+    model_config = ConfigDict(populate_by_name=True)
+
     name: str
-    character_class: str = ""
+    character_class: str = Field(default="", validation_alias="class")
     description: str = ""
     frame_width: int = Field(default=64, gt=0)
     frame_height: int = Field(default=64, gt=0)
     spritesheet_columns: int = Field(default=14, gt=0)
+
+    @model_validator(mode="before")
+    @classmethod
+    def _convert_frame_size(cls, data: Any) -> Any:
+        """Convert YAML frame_size: [w, h] format to frame_width/frame_height."""
+        if isinstance(data, dict) and "frame_size" in data:
+            fs = data.pop("frame_size")
+            if not isinstance(fs, list) or len(fs) != 2:
+                raise ValueError(
+                    f"'frame_size' must be a list of [width, height], got {fs!r}"
+                )
+            data["frame_width"] = fs[0]
+            data["frame_height"] = fs[1]
+        return data
 
     @property
     def frame_size(self) -> tuple[int, int]:
