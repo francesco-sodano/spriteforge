@@ -1,0 +1,281 @@
+"""Tests for spriteforge CLI commands.
+
+This module tests the CLI commands (generate, validate, estimate)
+implemented in src/spriteforge/cli.py.
+"""
+
+from __future__ import annotations
+
+import os
+from pathlib import Path
+
+import pytest
+from click.testing import CliRunner
+
+from spriteforge.cli import main
+
+
+@pytest.fixture
+def cli_runner() -> CliRunner:
+    """Fixture providing a Click CLI runner."""
+    return CliRunner()
+
+
+@pytest.fixture
+def test_config_path() -> Path:
+    """Path to a test configuration file."""
+    return Path("configs/theron.yaml")
+
+
+@pytest.fixture
+def test_config_simple() -> Path:
+    """Path to a simple test configuration file."""
+    # Use a minimal config if available
+    simple_path = Path("configs/examples/simple_enemy.yaml")
+    if simple_path.exists():
+        return simple_path
+    return Path("configs/theron.yaml")
+
+
+# ---------------------------------------------------------------------------
+# CLI Entry Point Tests
+# ---------------------------------------------------------------------------
+
+
+def test_cli_help_flag(cli_runner: CliRunner) -> None:
+    """Test that --help flag displays usage information."""
+    result = cli_runner.invoke(main, ["--help"])
+    assert result.exit_code == 0
+    assert "SpriteForge" in result.output
+    assert "generate" in result.output
+    assert "validate" in result.output
+    assert "estimate" in result.output
+
+
+def test_cli_version_flag(cli_runner: CliRunner) -> None:
+    """Test that --version flag displays version information."""
+    result = cli_runner.invoke(main, ["--version"])
+    assert result.exit_code == 0
+    assert "version" in result.output.lower() or "0.1.0" in result.output
+
+
+# ---------------------------------------------------------------------------
+# Generate Command Tests
+# ---------------------------------------------------------------------------
+
+
+def test_generate_help(cli_runner: CliRunner) -> None:
+    """Test that generate --help displays usage information."""
+    result = cli_runner.invoke(main, ["generate", "--help"])
+    assert result.exit_code == 0
+    assert "Generate a spritesheet" in result.output
+    assert "--output" in result.output
+    assert "--base-image" in result.output
+    assert "--verbose" in result.output
+
+
+def test_generate_missing_config(cli_runner: CliRunner) -> None:
+    """Test that generate fails gracefully when config file doesn't exist."""
+    result = cli_runner.invoke(main, ["generate", "nonexistent.yaml"])
+    assert result.exit_code != 0
+
+
+def test_generate_requires_base_image(
+    cli_runner: CliRunner, test_config_path: Path, tmp_path: Path
+) -> None:
+    """Test that generate requires base image to be specified."""
+    # Create a minimal config without base_image_path
+    test_config = tmp_path / "test_config.yaml"
+    test_config.write_text("""
+character:
+  name: "Test"
+  class: "Warrior"
+  description: "Test character"
+  frame_size: [64, 64]
+  spritesheet_columns: 10
+
+animations:
+  - name: "idle"
+    row: 0
+    frames: 1
+    timing_ms: 100
+""")
+    result = cli_runner.invoke(main, ["generate", str(test_config)])
+    assert result.exit_code != 0
+    assert "No base image specified" in result.output
+
+
+# ---------------------------------------------------------------------------
+# Validate Command Tests
+# ---------------------------------------------------------------------------
+
+
+def test_validate_help(cli_runner: CliRunner) -> None:
+    """Test that validate --help displays usage information."""
+    result = cli_runner.invoke(main, ["validate", "--help"])
+    assert result.exit_code == 0
+    assert "Validate a character configuration" in result.output
+    assert "--no-check-base-image" in result.output
+
+
+def test_validate_missing_config(cli_runner: CliRunner) -> None:
+    """Test that validate fails gracefully when config file doesn't exist."""
+    result = cli_runner.invoke(main, ["validate", "nonexistent.yaml"])
+    assert result.exit_code != 0
+
+
+def test_validate_valid_config_no_check_base(
+    cli_runner: CliRunner, test_config_path: Path
+) -> None:
+    """Test that validate succeeds with valid config when skipping base image check."""
+    if not test_config_path.exists():
+        pytest.skip(f"Test config not found: {test_config_path}")
+
+    result = cli_runner.invoke(
+        main, ["validate", str(test_config_path), "--no-check-base-image"]
+    )
+    assert result.exit_code == 0
+    assert "✓" in result.output or "valid" in result.output.lower()
+
+
+def test_validate_valid_config_with_base_check(
+    cli_runner: CliRunner, test_config_path: Path
+) -> None:
+    """Test that validate checks base image existence by default."""
+    if not test_config_path.exists():
+        pytest.skip(f"Test config not found: {test_config_path}")
+
+    result = cli_runner.invoke(main, ["validate", str(test_config_path)])
+    # Should succeed if base image exists in docs_assets/
+    base_image = Path("docs_assets/theron_base_reference.png")
+    if base_image.exists():
+        assert result.exit_code == 0
+        assert "✓" in result.output or "valid" in result.output.lower()
+    else:
+        # If base image doesn't exist, should fail with appropriate error
+        assert result.exit_code != 0
+        assert "does not exist" in result.output.lower()
+
+
+def test_validate_invalid_yaml(cli_runner: CliRunner, tmp_path: Path) -> None:
+    """Test that validate fails gracefully with malformed YAML."""
+    invalid_config = tmp_path / "invalid.yaml"
+    invalid_config.write_text("invalid: yaml: content:\n  - broken")
+
+    result = cli_runner.invoke(main, ["validate", str(invalid_config)])
+    assert result.exit_code != 0
+
+
+def test_validate_missing_required_section(
+    cli_runner: CliRunner, tmp_path: Path
+) -> None:
+    """Test that validate fails when required sections are missing."""
+    incomplete_config = tmp_path / "incomplete.yaml"
+    incomplete_config.write_text("character:\n  name: Test\n")
+
+    result = cli_runner.invoke(main, ["validate", str(incomplete_config)])
+    assert result.exit_code != 0
+    assert "Missing" in result.output or "required" in result.output.lower()
+
+
+# ---------------------------------------------------------------------------
+# Estimate Command Tests
+# ---------------------------------------------------------------------------
+
+
+def test_estimate_help(cli_runner: CliRunner) -> None:
+    """Test that estimate --help displays usage information."""
+    result = cli_runner.invoke(main, ["estimate", "--help"])
+    assert result.exit_code == 0
+    assert "Estimate LLM call costs" in result.output
+
+
+def test_estimate_missing_config(cli_runner: CliRunner) -> None:
+    """Test that estimate fails gracefully when config file doesn't exist."""
+    result = cli_runner.invoke(main, ["estimate", "nonexistent.yaml"])
+    assert result.exit_code != 0
+
+
+def test_estimate_valid_config(cli_runner: CliRunner, test_config_path: Path) -> None:
+    """Test that estimate produces call count estimates."""
+    if not test_config_path.exists():
+        pytest.skip(f"Test config not found: {test_config_path}")
+
+    result = cli_runner.invoke(main, ["estimate", str(test_config_path)])
+    assert result.exit_code == 0
+    assert "Minimum calls:" in result.output
+    assert "Expected calls:" in result.output
+    assert "Maximum calls:" in result.output
+
+
+def test_estimate_shows_breakdown(
+    cli_runner: CliRunner, test_config_path: Path
+) -> None:
+    """Test that estimate shows detailed breakdown of call types."""
+    if not test_config_path.exists():
+        pytest.skip(f"Test config not found: {test_config_path}")
+
+    result = cli_runner.invoke(main, ["estimate", str(test_config_path)])
+    assert result.exit_code == 0
+    # Check for breakdown sections
+    assert "MINIMUM" in result.output
+    assert "EXPECTED" in result.output
+    assert "MAXIMUM" in result.output
+    # Check for specific call types
+    assert "reference_generation" in result.output
+    assert "grid_generation" in result.output
+
+
+def test_estimate_with_budget_config(cli_runner: CliRunner, tmp_path: Path) -> None:
+    """Test that estimate shows budget check when budget is configured."""
+    config_with_budget = tmp_path / "budget_config.yaml"
+    config_with_budget.write_text("""
+character:
+  name: "Test"
+  class: "Warrior"
+  description: "Test character"
+  frame_size: [64, 64]
+  spritesheet_columns: 10
+
+animations:
+  - name: "idle"
+    row: 0
+    frames: 3
+    timing_ms: 100
+
+generation:
+  budget:
+    max_llm_calls: 100
+    max_retries_per_row: 2
+""")
+    result = cli_runner.invoke(main, ["estimate", str(config_with_budget)])
+    assert result.exit_code == 0
+    assert "Budget" in result.output or "budget" in result.output.lower()
+    assert "max_llm_calls: 100" in result.output
+
+
+# ---------------------------------------------------------------------------
+# Verbose Flag Tests
+# ---------------------------------------------------------------------------
+
+
+def test_verbose_flag_validate(cli_runner: CliRunner, test_config_path: Path) -> None:
+    """Test that --verbose flag is accepted by validate command."""
+    if not test_config_path.exists():
+        pytest.skip(f"Test config not found: {test_config_path}")
+
+    result = cli_runner.invoke(
+        main, ["validate", str(test_config_path), "--no-check-base-image", "--verbose"]
+    )
+    # Should not error on --verbose flag
+    assert result.exit_code == 0
+
+
+def test_verbose_flag_estimate(cli_runner: CliRunner, test_config_path: Path) -> None:
+    """Test that --verbose flag is accepted by estimate command."""
+    if not test_config_path.exists():
+        pytest.skip(f"Test config not found: {test_config_path}")
+
+    result = cli_runner.invoke(main, ["estimate", str(test_config_path), "--verbose"])
+    # Should not error on --verbose flag
+    assert result.exit_code == 0

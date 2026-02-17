@@ -97,9 +97,7 @@ def main() -> None:
         else:
             overage = estimate.expected_calls - budget_limit
             print(f"⚠ Expected calls exceed budget by {overage} calls")
-            print(
-                f"  Consider reducing spritesheet complexity or increasing budget"
-            )
+            print(f"  Consider reducing spritesheet complexity or increasing budget")
 
         if estimate.max_calls > budget_limit:
             print(
