@@ -64,34 +64,6 @@ def _parse_yaml(path: Path) -> dict:
     return data
 
 
-def _yaml_color_to_model(raw: dict) -> dict:
-    """Transform a YAML color entry to PaletteColor constructor kwargs.
-
-    Handles field renames:
-    - ``name`` → ``element``
-    - ``rgb: [R, G, B]`` → ``r``, ``g``, ``b``
-
-    Args:
-        raw: A single YAML color mapping.
-
-    Returns:
-        Dict ready for ``PaletteColor(**result)``.
-
-    Raises:
-        ValueError: If ``rgb`` is missing or not a 3-element list.
-    """
-    rgb = raw.get("rgb")
-    if not isinstance(rgb, list) or len(rgb) != 3:
-        raise ValueError(f"'rgb' must be a list of 3 ints, got {rgb!r}")
-    return {
-        "element": raw.get("name", ""),
-        "symbol": raw.get("symbol", ""),
-        "r": rgb[0],
-        "g": rgb[1],
-        "b": rgb[2],
-    }
-
-
 def _parse_palette(data: dict) -> PaletteConfig:
     """Parse a YAML palette section into a PaletteConfig.
 
@@ -108,10 +80,9 @@ def _parse_palette(data: dict) -> PaletteConfig:
               rgb: [235, 210, 185]
             ...
 
-    Field name translation (YAML → model) is handled by
-    :func:`_yaml_color_to_model`; all type/constraint validation is
-    delegated to Pydantic's ``PaletteColor`` and ``PaletteConfig``
-    models.
+    Pydantic aliases handle field name translation (YAML → model).
+    All type/constraint validation is delegated to Pydantic's
+    ``PaletteColor`` and ``PaletteConfig`` models.
 
     Args:
         data: Parsed YAML dict for the palette section.
@@ -133,18 +104,16 @@ def _parse_palette(data: dict) -> PaletteConfig:
         outline_raw = data["outline"]
         if not isinstance(outline_raw, dict):
             raise ValueError("'palette.outline' must be a mapping")
-        outline_kw = _yaml_color_to_model(outline_raw)
-        outline_kw.setdefault("element", "Outline")
-        outline_kw.setdefault("symbol", "O")
-        kwargs["outline"] = PaletteColor(**outline_kw)
+        # Set defaults for outline if not provided
+        outline_raw.setdefault("name", "Outline")
+        outline_raw.setdefault("symbol", "O")
+        kwargs["outline"] = PaletteColor(**outline_raw)
 
     if "colors" in data:
         colors_raw = data["colors"]
         if not isinstance(colors_raw, list):
             raise ValueError("'palette.colors' must be a YAML sequence")
-        kwargs["colors"] = [
-            PaletteColor(**_yaml_color_to_model(entry)) for entry in colors_raw
-        ]
+        kwargs["colors"] = [PaletteColor(**entry) for entry in colors_raw]
 
     return PaletteConfig(**kwargs)
 
@@ -188,23 +157,8 @@ def load_config(path: str | Path) -> SpritesheetSpec:
         )
 
     # --- Build CharacterConfig ---
-    char_raw = data["character"].copy()
-
-    # Map YAML 'class' → model 'character_class'
-    if "class" in char_raw:
-        char_raw["character_class"] = char_raw.pop("class")
-
-    # Map YAML 'frame_size' → model 'frame_width' / 'frame_height'
-    if "frame_size" in char_raw:
-        fs = char_raw.pop("frame_size")
-        if not isinstance(fs, list) or len(fs) != 2:
-            raise ValueError(
-                f"'frame_size' must be a list of [width, height], got {fs!r}"
-            )
-        char_raw["frame_width"] = fs[0]
-        char_raw["frame_height"] = fs[1]
-
-    character = CharacterConfig(**char_raw)
+    # Pydantic aliases handle field name translation (YAML → model)
+    character = CharacterConfig(**data["character"])
 
     # --- Build AnimationDef list ---
     animations = [AnimationDef(**anim_raw) for anim_raw in data["animations"]]
