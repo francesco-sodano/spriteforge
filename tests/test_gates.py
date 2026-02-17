@@ -319,6 +319,32 @@ class TestRunAll:
         assert len(verdicts) == 5
         assert all(isinstance(v, GateVerdict) for v in verdicts)
 
+    def test_run_all_uses_config_feet_row(
+        self,
+        checker: ProgrammaticChecker,
+        sample_palette: PaletteConfig,
+        sample_animation: AnimationDef,
+    ) -> None:
+        """run_all respects GenerationConfig.feet_row instead of hardcoding."""
+        grid = _make_valid_grid(".", 64, 64)
+        # Place content only at row 40 — default feet_row=56 would fail
+        grid[40] = "." * 30 + "s" + "." * 33
+        context = FrameContext(
+            palette=sample_palette,
+            palette_map=build_palette_map(sample_palette),
+            generation=GenerationConfig(feet_row=40),
+            frame_width=64,
+            frame_height=64,
+            animation=sample_animation,
+            spritesheet_columns=14,
+        )
+        verdicts = checker.run_all(grid, context)
+        feet_verdict = [
+            v for v in verdicts if v.gate_name == "programmatic_feet_position"
+        ][0]
+        assert feet_verdict.passed is True
+        assert "40" in feet_verdict.feedback
+
 
 # ---------------------------------------------------------------------------
 # ProgrammaticChecker — variable frame sizes
@@ -348,14 +374,14 @@ class TestProgrammaticCheckerVariableSize:
         sample_palette: PaletteConfig,
         sample_animation: AnimationDef,
     ) -> None:
-        """feet_row for 32-row grid is 28 (int(32 * 0.875)), not 56."""
+        """feet_row must be set in config for non-64px frames."""
         grid = _make_valid_grid(".", 32, 32)
         # Place non-transparent pixels near row 28 (expected feet for 32px)
         grid[27] = "." * 15 + "s" + "." * 16
         context = FrameContext(
             palette=sample_palette,
             palette_map=build_palette_map(sample_palette),
-            generation=GenerationConfig(),
+            generation=GenerationConfig(feet_row=28),
             frame_width=32,
             frame_height=32,
             animation=sample_animation,
@@ -373,14 +399,14 @@ class TestProgrammaticCheckerVariableSize:
         sample_palette: PaletteConfig,
         sample_animation: AnimationDef,
     ) -> None:
-        """feet_row for 128-row grid is 112 (int(128 * 0.875))."""
+        """feet_row must be set in config for 128px frames."""
         grid = _make_valid_grid(".", 128, 128)
         # Place non-transparent pixels near row 112
         grid[112] = "." * 60 + "s" + "." * 67
         context = FrameContext(
             palette=sample_palette,
             palette_map=build_palette_map(sample_palette),
-            generation=GenerationConfig(),
+            generation=GenerationConfig(feet_row=112),
             frame_width=128,
             frame_height=128,
             animation=sample_animation,

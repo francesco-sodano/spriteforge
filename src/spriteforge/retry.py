@@ -143,12 +143,18 @@ class RetryManager:
         Raises:
             ValueError: If *attempt* does not fall within any configured range.
         """
+        if attempt < 1:
+            raise ValueError(
+                f"Attempt {attempt} must be >= 1 (1-based attempt number)."
+            )
         cfg = self._config
         if cfg.soft_range[0] <= attempt <= cfg.soft_range[1]:
             return RetryTier.SOFT
         if cfg.guided_range[0] <= attempt <= cfg.guided_range[1]:
             return RetryTier.GUIDED
-        if cfg.constrained_range[0] <= attempt <= cfg.constrained_range[1]:
+        # Clamp attempts beyond the constrained range to CONSTRAINED
+        # so callers don't crash when max_retries > constrained_range[1].
+        if attempt >= cfg.constrained_range[0]:
             return RetryTier.CONSTRAINED
         raise ValueError(
             f"Attempt {attempt} does not fall within any configured tier range."
@@ -210,12 +216,8 @@ class RetryManager:
         next_attempt = context.current_attempt + 1
         if next_attempt < context.max_attempts:
             # next_attempt is 0-based; get_tier expects 1-based attempt.
-            # Clamp to the constrained range upper bound to avoid
-            # out-of-range errors when tier ranges don't cover every
-            # possible attempt number.
-            clamped_attempt = min(next_attempt + 1, self._config.constrained_range[1])
-            tier = self.get_tier(clamped_attempt)
-            temperature = self.get_temperature(clamped_attempt)
+            tier = self.get_tier(next_attempt + 1)
+            temperature = self.get_temperature(next_attempt + 1)
             logger.info(
                 "Retry %d/%d for %s — %s (temp=%.1f)",
                 next_attempt + 1,

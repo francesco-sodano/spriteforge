@@ -76,12 +76,16 @@ class TestGetTier:
         for attempt in (7, 8, 9, 10):
             assert mgr.get_tier(attempt) is RetryTier.CONSTRAINED
 
-    def test_get_tier_out_of_range(self) -> None:
+    def test_get_tier_out_of_range_below(self) -> None:
         mgr = RetryManager()
         with pytest.raises(ValueError):
             mgr.get_tier(0)
-        with pytest.raises(ValueError):
-            mgr.get_tier(11)
+
+    def test_get_tier_clamps_beyond_constrained(self) -> None:
+        """Attempts above constrained_range clamp to CONSTRAINED."""
+        mgr = RetryManager()
+        assert mgr.get_tier(11) is RetryTier.CONSTRAINED
+        assert mgr.get_tier(20) is RetryTier.CONSTRAINED
 
 
 # ---------------------------------------------------------------------------
@@ -106,6 +110,12 @@ class TestGetTemperature:
         mgr = RetryManager()
         for attempt in (7, 8, 9, 10):
             assert mgr.get_temperature(attempt) == 0.3
+
+    def test_get_temperature_beyond_constrained_range(self) -> None:
+        """Attempts above constrained_range still return constrained temperature."""
+        mgr = RetryManager()
+        assert mgr.get_temperature(11) == 0.3
+        assert mgr.get_temperature(15) == 0.3
 
 
 # ---------------------------------------------------------------------------
@@ -350,6 +360,20 @@ class TestBuildEscalatedGuidance:
         guidance = mgr.build_escalated_guidance(ctx)
         assert "CRITICAL" in guidance
         assert "fb1" in guidance
+
+    def test_build_guidance_beyond_constrained_range(self) -> None:
+        """Attempts beyond constrained_range still produce constrained guidance."""
+        mgr = RetryManager()
+        ctx = RetryContext(
+            frame_id="f",
+            current_attempt=11,  # next attempt=12 → beyond range
+            max_attempts=15,
+            failure_history=[],
+            accumulated_feedback=["fb"],
+        )
+        # Must not raise ValueError
+        guidance = mgr.build_escalated_guidance(ctx)
+        assert "CRITICAL" in guidance
 
 
 # ---------------------------------------------------------------------------

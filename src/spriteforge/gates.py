@@ -300,7 +300,7 @@ class ProgrammaticChecker:
         frame_width = context.frame_width
         frame_height = context.frame_height
         palette = context.palette
-        feet_row = int(frame_height * 0.875)
+        feet_row = context.generation.feet_row
         verdicts = [
             self.check_dimensions(
                 grid, expected_rows=frame_height, expected_cols=frame_width
