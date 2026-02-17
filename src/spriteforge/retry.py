@@ -239,11 +239,13 @@ class RetryManager:
             }
         )
 
-    def create_context(self, frame_id: str) -> RetryContext:
+    def create_context(self, frame_id: str, max_attempts: int | None = None) -> RetryContext:
         """Create a fresh retry context for a new frame.
 
         Args:
             frame_id: Identifier for the frame (e.g. ``"row0_frame0"``).
+            max_attempts: Optional override for max attempts. When None,
+                uses self._config.max_retries.
 
         Returns:
             A new :class:`RetryContext` with attempt count 0 and empty
@@ -251,7 +253,7 @@ class RetryManager:
         """
         return RetryContext(
             frame_id=frame_id,
-            max_attempts=self._config.max_retries,
+            max_attempts=max_attempts or self._config.max_retries,
         )
 
     # -- guidance builder ---------------------------------------------------

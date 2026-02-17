@@ -71,6 +71,7 @@ class SpriteForgeWorkflow:
         palette_map: dict[str, tuple[int, int, int, int]],
         preprocessor: Callable[..., PreprocessResult] | None = None,
         max_concurrent_rows: int = 0,
+        call_tracker: Any | None = None,
     ) -> None:
         """Initialize the workflow with all required components.
 
@@ -89,6 +90,7 @@ class SpriteForgeWorkflow:
             max_concurrent_rows: Maximum number of rows to process in
                 parallel after the anchor row.  ``0`` (default) means
                 unlimited — all remaining rows run concurrently.
+            call_tracker: Optional CallTracker for budget enforcement.
         """
         self.config = config
         self.reference_provider = reference_provider
@@ -98,6 +100,8 @@ class SpriteForgeWorkflow:
         self.retry_manager = retry_manager
         self.palette_map = palette_map
         self.preprocessor = preprocessor
+        self.max_concurrent_rows = max_concurrent_rows
+        self.call_tracker = call_tracker
         self.max_concurrent_rows = max_concurrent_rows
 
     async def close(self) -> None:
@@ -469,6 +473,8 @@ class SpriteForgeWorkflow:
         row_strip_bytes = frame_to_png_bytes(row_strip)
         ref_strip_bytes = frame_to_png_bytes(reference_strip.convert("RGBA"))
 
+        if self.call_tracker:
+            self.call_tracker.increment("gate_3a")
         verdict = await self.gate_checker.gate_3a(
             row_strip_bytes, ref_strip_bytes, animation
         )
@@ -559,7 +565,13 @@ class SpriteForgeWorkflow:
         """
         animation = context.animation
         frame_id = f"row{animation.row}_frame{frame_index}"
-        retry_ctx = self.retry_manager.create_context(frame_id)
+        
+        # Use per-row retry budget if configured
+        max_attempts = None
+        if self.config.generation.budget and self.config.generation.budget.max_retries_per_row > 0:
+            max_attempts = self.config.generation.budget.max_retries_per_row
+        
+        retry_ctx = self.retry_manager.create_context(frame_id, max_attempts=max_attempts)
 
         while self.retry_manager.should_retry(retry_ctx):
             attempt = retry_ctx.current_attempt + 1
@@ -569,6 +581,8 @@ class SpriteForgeWorkflow:
                 guidance = self.retry_manager.build_escalated_guidance(retry_ctx)
 
             # Generate the grid
+            if self.call_tracker:
+                self.call_tracker.increment("grid_generation")
             grid = await self.grid_generator.generate_frame(
                 reference_frame=reference_frame,
                 context=context,
@@ -655,6 +669,8 @@ class SpriteForgeWorkflow:
         )
 
         for attempt in range(max_ref_retries):
+            if self.call_tracker:
+                self.call_tracker.increment("reference_generation")
             strip = await self.reference_provider.generate_row_strip(
                 base_reference=base_reference,
                 prompt=prompt,
@@ -664,6 +680,8 @@ class SpriteForgeWorkflow:
 
             # Gate -1: Validate reference quality
             strip_bytes = frame_to_png_bytes(strip.convert("RGBA"))
+            if self.call_tracker:
+                self.call_tracker.increment("gate_minus_1")
             verdict = await self.gate_checker.gate_minus_1(
                 strip_bytes, base_reference, animation
             )
@@ -760,16 +778,24 @@ class SpriteForgeWorkflow:
         gates: list[Any] = [
             self.gate_checker.gate_0(frame_rendered, reference_frame, frame_desc),
         ]
+        gate_count = 1
 
         if anchor_rendered is not None and not is_anchor:
             gates.append(
                 self.gate_checker.gate_1(frame_rendered, anchor_rendered),
             )
+            gate_count += 1
 
         if prev_frame_rendered is not None:
             gates.append(
                 self.gate_checker.gate_2(frame_rendered, prev_frame_rendered),
             )
+            gate_count += 1
+
+        # Track gate calls
+        if self.call_tracker:
+            for _ in range(gate_count):
+                self.call_tracker.increment("gate_check")
 
         return list(await asyncio.gather(*gates))
 
@@ -908,6 +934,13 @@ async def create_workflow(
     programmatic_checker = ProgrammaticChecker()
     retry_manager = RetryManager()
 
+    # Create call tracker if budget is configured
+    call_tracker = None
+    if config.generation.budget is not None:
+        from spriteforge.budget import CallTracker
+
+        call_tracker = CallTracker(config.generation.budget)
+
     # Build palette map (use first palette, or will be replaced by preprocessor if auto_palette)
     palette_map: dict[str, tuple[int, int, int, int]]
     if config.palettes:
@@ -928,6 +961,7 @@ async def create_workflow(
         palette_map=palette_map,
         preprocessor=preprocessor,
         max_concurrent_rows=max_concurrent_rows,
+        call_tracker=call_tracker,
     )
 
     # Store credential ownership info for cleanup

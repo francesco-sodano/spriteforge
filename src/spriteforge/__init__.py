@@ -2,8 +2,10 @@
 
 from typing import Any
 
+from spriteforge.budget import CallEstimate, CallTracker, estimate_calls
 from spriteforge.config import load_config, validate_config
 from spriteforge.errors import (
+    BudgetExhaustedError,
     ConfigError,
     GateError,
     GenerationError,
@@ -23,6 +25,7 @@ from spriteforge.generator import GridGenerator, parse_grid_response
 from spriteforge.logging import get_logger, setup_logging
 from spriteforge.models import (
     AnimationDef,
+    BudgetConfig,
     CharacterConfig,
     GenerationConfig,
     PaletteColor,
@@ -79,6 +82,10 @@ def __getattr__(name: str) -> Any:
 __all__ = [
     "AnimationDef",
     "AzureChatProvider",
+    "BudgetConfig",
+    "BudgetExhaustedError",
+    "CallEstimate",
+    "CallTracker",
     "CharacterConfig",
     "ChatProvider",
     "ConfigError",
@@ -107,6 +114,7 @@ __all__ = [
     "SpriteForgeWorkflow",
     "build_palette_map",
     "create_workflow",
+    "estimate_calls",
     "extract_palette_from_image",
     "frame_to_png_bytes",
     "get_logger",
