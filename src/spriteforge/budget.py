@@ -27,6 +27,9 @@ class CallTracker:
     Tracks total calls across all providers (chat and reference generation).
     Raises BudgetExhaustedError when budget is exceeded. Logs warnings at
     configurable threshold.
+
+    Optionally tracks prompt and completion token counts when
+    ``budget.track_tokens`` is enabled.
     """
 
     def __init__(self, budget: BudgetConfig | None = None) -> None:
@@ -37,6 +40,8 @@ class CallTracker:
         """
         self._budget = budget
         self._count = 0
+        self._prompt_tokens = 0
+        self._completion_tokens = 0
         self._lock = threading.Lock()
         self._warned = False
 
@@ -45,6 +50,31 @@ class CallTracker:
         """Get the current call count (thread-safe)."""
         with self._lock:
             return self._count
+
+    @property
+    def token_usage(self) -> dict[str, int]:
+        """Get accumulated token counts (thread-safe)."""
+        with self._lock:
+            return {
+                "prompt_tokens": self._prompt_tokens,
+                "completion_tokens": self._completion_tokens,
+                "total_tokens": self._prompt_tokens + self._completion_tokens,
+            }
+
+    def record_tokens(self, prompt_tokens: int, completion_tokens: int) -> None:
+        """Record token usage from an LLM call.
+
+        Only records when ``budget.track_tokens`` is enabled.
+
+        Args:
+            prompt_tokens: Number of prompt/input tokens.
+            completion_tokens: Number of completion/output tokens.
+        """
+        if self._budget is None or not self._budget.track_tokens:
+            return
+        with self._lock:
+            self._prompt_tokens += prompt_tokens
+            self._completion_tokens += completion_tokens
 
     def increment(self, call_type: str = "LLM") -> None:
         """Increment the call counter and check budget.
@@ -88,6 +118,8 @@ class CallTracker:
         """Reset the counter to zero (for testing)."""
         with self._lock:
             self._count = 0
+            self._prompt_tokens = 0
+            self._completion_tokens = 0
             self._warned = False
 
 

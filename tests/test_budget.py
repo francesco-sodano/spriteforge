@@ -176,6 +176,68 @@ class TestCallTracker:
 
 
 # ---------------------------------------------------------------------------
+# Token tracking tests
+# ---------------------------------------------------------------------------
+
+
+class TestCallTrackerTokenTracking:
+    """Tests for token tracking in CallTracker."""
+
+    def test_record_tokens_when_enabled(self) -> None:
+        """Token counts accumulate when track_tokens is True."""
+        budget = BudgetConfig(track_tokens=True)
+        tracker = CallTracker(budget)
+        tracker.record_tokens(100, 50)
+        tracker.record_tokens(200, 80)
+        usage = tracker.token_usage
+        assert usage["prompt_tokens"] == 300
+        assert usage["completion_tokens"] == 130
+        assert usage["total_tokens"] == 430
+
+    def test_record_tokens_ignored_when_disabled(self) -> None:
+        """Token counts are not recorded when track_tokens is False."""
+        budget = BudgetConfig(track_tokens=False)
+        tracker = CallTracker(budget)
+        tracker.record_tokens(100, 50)
+        usage = tracker.token_usage
+        assert usage["prompt_tokens"] == 0
+        assert usage["completion_tokens"] == 0
+
+    def test_record_tokens_ignored_without_budget(self) -> None:
+        """Token counts are not recorded when no budget is set."""
+        tracker = CallTracker()
+        tracker.record_tokens(100, 50)
+        assert tracker.token_usage["total_tokens"] == 0
+
+    def test_reset_clears_tokens(self) -> None:
+        """Reset clears accumulated token counts."""
+        budget = BudgetConfig(track_tokens=True)
+        tracker = CallTracker(budget)
+        tracker.record_tokens(100, 50)
+        tracker.reset()
+        assert tracker.token_usage["total_tokens"] == 0
+
+    def test_token_tracking_thread_safety(self) -> None:
+        """Token recording is thread-safe."""
+        budget = BudgetConfig(track_tokens=True)
+        tracker = CallTracker(budget)
+
+        def worker() -> None:
+            for _ in range(100):
+                tracker.record_tokens(10, 5)
+
+        threads = [threading.Thread(target=worker) for _ in range(10)]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
+
+        usage = tracker.token_usage
+        assert usage["prompt_tokens"] == 10000
+        assert usage["completion_tokens"] == 5000
+
+
+# ---------------------------------------------------------------------------
 # estimate_calls tests
 # ---------------------------------------------------------------------------
 

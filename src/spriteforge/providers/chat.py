@@ -11,7 +11,14 @@ class ChatProvider(ABC):
 
     Implementations handle the specifics of calling a particular LLM API.
     The interface is intentionally minimal — just text/vision in, text out.
+
+    After each call, ``last_usage`` is populated with token counts when
+    the underlying API exposes them. Callers can feed this into
+    ``CallTracker.record_tokens()``.
     """
+
+    last_usage: dict[str, int] | None = None
+    """Token usage from the most recent ``chat()`` call, or *None*."""
 
     @abstractmethod
     async def chat(
