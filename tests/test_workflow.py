@@ -12,6 +12,7 @@ import pytest
 from PIL import Image
 
 from spriteforge.errors import GateError, RetryExhaustedError
+from spriteforge.frame_generator import FrameGenerator
 from spriteforge.gates import GateVerdict, LLMGateChecker, ProgrammaticChecker
 from spriteforge.generator import GenerationError, GridGenerator
 from spriteforge.models import (
@@ -22,7 +23,6 @@ from spriteforge.models import (
     PaletteConfig,
     SpritesheetSpec,
 )
-from spriteforge.palette import build_palette_map
 from spriteforge.preprocessor import PreprocessResult
 from spriteforge.providers._base import ProviderError, ReferenceProvider
 from spriteforge.row_processor import RowProcessor
@@ -169,8 +169,6 @@ def _build_workflow(
     preprocessor: Any = None,
 ) -> SpriteForgeWorkflow:
     """Build a SpriteForgeWorkflow with mock dependencies."""
-    palette_map = build_palette_map(palette)
-
     if reference_provider is None:
         reference_provider = AsyncMock(spec=ReferenceProvider)
         reference_provider.generate_row_strip = AsyncMock(
@@ -204,14 +202,23 @@ def _build_workflow(
     if retry_manager is None:
         retry_manager = RetryManager()
 
-    return SpriteForgeWorkflow(
-        config=config,
-        reference_provider=reference_provider,
+    frame_generator = FrameGenerator(
         grid_generator=grid_generator,
         gate_checker=gate_checker,
         programmatic_checker=programmatic_checker,
         retry_manager=retry_manager,
-        palette_map=palette_map,
+        generation_config=config.generation,
+    )
+    row_processor = RowProcessor(
+        config=config,
+        frame_generator=frame_generator,
+        gate_checker=gate_checker,
+        reference_provider=reference_provider,
+    )
+
+    return SpriteForgeWorkflow(
+        config=config,
+        row_processor=row_processor,
         preprocessor=preprocessor,
     )
 
@@ -587,12 +594,9 @@ class TestFinalAssemblyStage:
         ref_img.save(str(ref_path))
         out_path = tmp_path / "out.png"
 
-        with patch(
-            "spriteforge.workflow.assemble_final_spritesheet",
-            new_callable=AsyncMock,
-        ) as mock_assemble:
-            mock_assemble.return_value = out_path
-            result = await wf.run(ref_path, out_path)
+        mock_assemble = AsyncMock(return_value=out_path)
+        wf.assembler = mock_assemble
+        result = await wf.run(ref_path, out_path)
 
         assert result == out_path
         mock_assemble.assert_awaited_once()
@@ -1951,18 +1955,24 @@ async def test_workflow_single_row_integration(
         ),
     )
 
-    # Build palette map
-    palette_map = build_palette_map(test_palette)
-
-    # Create workflow with real components
-    workflow = SpriteForgeWorkflow(
-        config=config,
-        reference_provider=ref_provider,
+    frame_generator = FrameGenerator(
         grid_generator=GridGenerator(grid_chat_provider),
         gate_checker=LLMGateChecker(gate_chat_provider),
         programmatic_checker=ProgrammaticChecker(),
         retry_manager=RetryManager(),
-        palette_map=palette_map,
+        generation_config=config.generation,
+    )
+    row_processor = RowProcessor(
+        config=config,
+        frame_generator=frame_generator,
+        gate_checker=frame_generator.gate_checker,
+        reference_provider=ref_provider,
+    )
+
+    # Create workflow with real components
+    workflow = SpriteForgeWorkflow(
+        config=config,
+        row_processor=row_processor,
     )
 
     # Run workflow
@@ -2278,15 +2288,26 @@ async def test_workflow_close_cleans_all(single_row_config: SpritesheetSpec) -> 
 
     mock_gate_checker = AsyncMock()
     mock_gate_checker._chat = mock_gate_provider
+    mock_prog_checker = ProgrammaticChecker()
+    mock_retry_manager = RetryManager()
+
+    frame_generator = FrameGenerator(
+        grid_generator=mock_grid_gen,
+        gate_checker=mock_gate_checker,
+        programmatic_checker=mock_prog_checker,
+        retry_manager=mock_retry_manager,
+        generation_config=single_row_config.generation,
+    )
+    row_processor = RowProcessor(
+        config=single_row_config,
+        frame_generator=frame_generator,
+        gate_checker=mock_gate_checker,
+        reference_provider=mock_ref_provider,
+    )
 
     workflow = SpriteForgeWorkflow(
         config=single_row_config,
-        reference_provider=mock_ref_provider,
-        grid_generator=mock_grid_gen,
-        gate_checker=mock_gate_checker,
-        programmatic_checker=ProgrammaticChecker(),
-        retry_manager=RetryManager(),
-        palette_map=build_palette_map(single_row_config.palette),
+        row_processor=row_processor,
     )
 
     # Close workflow
