@@ -468,9 +468,7 @@ class TestCallTracking:
                 passed=True,
                 confidence=0.9,
                 feedback="ok",
-                details={
-                    "token_usage": {"prompt_tokens": 5, "completion_tokens": 3}
-                },
+                details={"token_usage": {"prompt_tokens": 5, "completion_tokens": 3}},
             )
         )
         gate_checker.gate_1 = AsyncMock(return_value=_passing_verdict("gate_1"))

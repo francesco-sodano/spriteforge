@@ -27,7 +27,11 @@ from spriteforge.prompts.generator import (
     build_frame_prompt,
 )
 from spriteforge.providers.chat import ChatProvider
-from spriteforge.utils import compress_grid_rle, image_to_data_url, validate_grid_dimensions
+from spriteforge.utils import (
+    compress_grid_rle,
+    image_to_data_url,
+    validate_grid_dimensions,
+)
 
 logger = get_logger("generator")
 
