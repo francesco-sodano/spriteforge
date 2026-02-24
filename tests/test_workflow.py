@@ -27,7 +27,7 @@ from spriteforge.preprocessor import PreprocessResult
 from spriteforge.providers._base import ProviderError, ReferenceProvider
 from spriteforge.row_processor import RowProcessor
 from spriteforge.retry import RetryManager
-from spriteforge.workflow import SpriteForgeWorkflow
+from spriteforge.workflow import SpriteForgeWorkflow, assemble_final_spritesheet
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -538,6 +538,67 @@ class TestRunProgressCallback:
         assert "row" in stage_names
         assert "assembly" in stage_names
         assert len(callback_calls) >= 3
+
+
+class TestFinalAssemblyStage:
+    """Tests for final assembly stage extraction."""
+
+    @pytest.mark.asyncio
+    async def test_assemble_final_spritesheet_finalizes_pipeline(
+        self,
+        single_row_config: SpritesheetSpec,
+        tmp_path: Path,
+    ) -> None:
+        out_path = tmp_path / "out.png"
+        checkpoint_manager = MagicMock()
+        callback_calls: list[tuple[str, int, int]] = []
+
+        def progress(stage: str, current: int, total: int) -> None:
+            callback_calls.append((stage, current, total))
+
+        row_images = {0: b"row0"}
+
+        with patch("spriteforge.workflow.assemble_spritesheet") as mock_assemble:
+            result = await assemble_final_spritesheet(
+                row_images=row_images,
+                config=single_row_config,
+                output_path=out_path,
+                checkpoint_manager=checkpoint_manager,
+                progress_callback=progress,
+            )
+
+        assert result == out_path
+        mock_assemble.assert_called_once_with(
+            row_images, single_row_config, output_path=out_path
+        )
+        checkpoint_manager.cleanup.assert_called_once()
+        assert callback_calls == [("assembly", 0, 1), ("assembly", 1, 1)]
+
+    @pytest.mark.asyncio
+    async def test_run_delegates_to_assemble_final_spritesheet(
+        self,
+        single_row_config: SpritesheetSpec,
+        sample_palette: PaletteConfig,
+        tmp_path: Path,
+    ) -> None:
+        wf = _build_workflow(single_row_config, sample_palette)
+        ref_img = Image.new("RGBA", (64, 64), (100, 100, 100, 255))
+        ref_path = tmp_path / "ref.png"
+        ref_img.save(str(ref_path))
+        out_path = tmp_path / "out.png"
+
+        with patch(
+            "spriteforge.workflow.assemble_final_spritesheet",
+            new_callable=AsyncMock,
+        ) as mock_assemble:
+            mock_assemble.return_value = out_path
+            result = await wf.run(ref_path, out_path)
+
+        assert result == out_path
+        mock_assemble.assert_awaited_once()
+        assert mock_assemble.await_args.kwargs["config"] is single_row_config
+        assert mock_assemble.await_args.kwargs["output_path"] == out_path
+        assert mock_assemble.await_args.kwargs["checkpoint_manager"] is None
 
 
 class TestRunFullPipeline:
