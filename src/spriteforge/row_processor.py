@@ -22,7 +22,7 @@ from spriteforge.providers._base import ProviderError, ReferenceProvider
 from spriteforge.prompts.providers import build_reference_prompt
 from spriteforge.renderer import frame_to_png_bytes, render_frame, render_row_strip
 
-logger = get_logger("workflow")
+logger = get_logger("row_processor")
 
 
 class RowProcessor:
