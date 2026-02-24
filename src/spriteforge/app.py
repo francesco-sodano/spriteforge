@@ -32,6 +32,9 @@ async def run_spriteforge(
     Returns:
         Path to the generated spritesheet.
     """
+    # Kept for forward compatibility with CLI/API contracts; debug artifact
+    # persistence is wired in a follow-up without changing this signature.
+    _ = debug
     spec = load_config(config_path)
 
     if not base_image_path.is_file():

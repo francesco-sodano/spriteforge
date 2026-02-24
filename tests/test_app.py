@@ -7,6 +7,7 @@ from argparse import Namespace
 from pathlib import Path
 
 import pytest
+from PIL import Image
 
 from spriteforge import __main__
 from spriteforge.app import run_spriteforge
@@ -18,8 +19,8 @@ from spriteforge.models import (
 )
 
 
-def _write_minimal_config(path: Path, *, with_base_image: bool = False) -> None:
-    base_image_line = 'base_image_path: "base.png"\n' if with_base_image else ""
+def _write_minimal_config(path: Path, *, include_base_image_path: bool = False) -> None:
+    base_image_line = 'base_image_path: "base.png"\n' if include_base_image_path else ""
     path.write_text(
         "\n".join(
             [
@@ -66,6 +67,10 @@ def _make_spec(*, name: str = "Test Hero") -> SpritesheetSpec:
     )
 
 
+def _write_test_png(path: Path) -> None:
+    Image.new("RGBA", (1, 1), (0, 0, 0, 0)).save(path)
+
+
 def test_help_flag(
     monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
@@ -98,7 +103,7 @@ def test_dry_run_validates_config(
     exit_code = asyncio.run(__main__.async_main(args))
 
     assert exit_code == 0
-    assert "Config valid: Test Hero, 1 rows" in capsys.readouterr().out
+    assert "Config valid: Test Hero, 1 animation" in capsys.readouterr().out
 
 
 def test_dry_run_invalid_config(capsys: pytest.CaptureFixture[str]) -> None:
@@ -131,7 +136,7 @@ async def test_full_run_happy_path(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     base = tmp_path / "base.png"
-    base.write_bytes(b"png")
+    _write_test_png(base)
     output = tmp_path / "sheet.png"
 
     spec = _make_spec()
@@ -171,7 +176,7 @@ async def test_output_defaults_to_character_name(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     base = tmp_path / "base.png"
-    base.write_bytes(b"png")
+    _write_test_png(base)
 
     spec = _make_spec(name="Unit Hero")
     monkeypatch.setattr(__main__, "load_config", lambda _path: spec)
@@ -219,7 +224,7 @@ async def test_auto_palette_flag_sets_config(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     base = tmp_path / "base.png"
-    base.write_bytes(b"png")
+    _write_test_png(base)
 
     spec = _make_spec()
     monkeypatch.setattr(__main__, "load_config", lambda _path: spec)
@@ -259,7 +264,7 @@ async def test_max_colors_flag_sets_config(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     base = tmp_path / "base.png"
-    base.write_bytes(b"png")
+    _write_test_png(base)
 
     spec = _make_spec()
     monkeypatch.setattr(__main__, "load_config", lambda _path: spec)
@@ -323,7 +328,7 @@ async def test_preprocessor_created_for_workflow(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     base = tmp_path / "base.png"
-    base.write_bytes(b"png")
+    _write_test_png(base)
 
     spec = _make_spec()
     monkeypatch.setattr(__main__, "load_config", lambda _path: spec)
@@ -368,7 +373,7 @@ async def test_run_spriteforge_returns_path(
     config = tmp_path / "config.yaml"
     _write_minimal_config(config)
     base = tmp_path / "base.png"
-    base.write_bytes(b"png")
+    _write_test_png(base)
 
     monkeypatch.setattr("spriteforge.app.load_config", lambda _path: _make_spec())
 
@@ -394,7 +399,7 @@ async def test_run_spriteforge_returns_path(
 @pytest.mark.asyncio
 async def test_run_spriteforge_missing_config(tmp_path: Path) -> None:
     base = tmp_path / "base.png"
-    base.write_bytes(b"png")
+    _write_test_png(base)
 
     with pytest.raises(FileNotFoundError):
         await run_spriteforge(

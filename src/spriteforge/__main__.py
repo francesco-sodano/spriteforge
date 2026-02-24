@@ -105,8 +105,7 @@ async def async_main(args: argparse.Namespace) -> int:
 
         if args.auto_palette:
             spec.generation.auto_palette = True
-        if args.max_colors is not None:
-            spec.generation.max_palette_colors = args.max_colors
+        spec.generation.max_palette_colors = args.max_colors
 
         if args.dry_run:
             palette_source = (
@@ -114,9 +113,10 @@ async def async_main(args: argparse.Namespace) -> int:
                 if spec.generation.auto_palette
                 else "YAML config"
             )
+            animation_label = "animation" if len(spec.animations) == 1 else "animations"
             print(
                 f"Config valid: {spec.character.name}, "
-                f"{len(spec.animations)} rows, "
+                f"{len(spec.animations)} {animation_label}, "
                 f"palette: {palette_source}"
             )
             return 0
