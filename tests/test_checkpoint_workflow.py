@@ -10,6 +10,8 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 from PIL import Image
 
+from spriteforge.checkpoint import CheckpointManager
+from spriteforge.frame_generator import FrameGenerator
 from spriteforge.gates import GateVerdict, LLMGateChecker, ProgrammaticChecker
 from spriteforge.generator import GridGenerator
 from spriteforge.models import (
@@ -20,8 +22,8 @@ from spriteforge.models import (
     PaletteConfig,
     SpritesheetSpec,
 )
-from spriteforge.palette import build_palette_map
 from spriteforge.providers._base import ReferenceProvider
+from spriteforge.row_processor import RowProcessor
 from spriteforge.retry import RetryManager
 from spriteforge.workflow import SpriteForgeWorkflow
 
@@ -70,6 +72,37 @@ def _create_mock_strip_bytes(
     buf = io.BytesIO()
     img.save(buf, format="PNG")
     return buf.getvalue()
+
+
+def _build_workflow(
+    config: SpritesheetSpec,
+    reference_provider: ReferenceProvider,
+    grid_generator: GridGenerator,
+    gate_checker: LLMGateChecker,
+    programmatic_checker: ProgrammaticChecker,
+    checkpoint_dir: Path | None,
+) -> SpriteForgeWorkflow:
+    frame_generator = FrameGenerator(
+        grid_generator=grid_generator,
+        gate_checker=gate_checker,
+        programmatic_checker=programmatic_checker,
+        retry_manager=RetryManager(),
+        generation_config=config.generation,
+    )
+    row_processor = RowProcessor(
+        config=config,
+        frame_generator=frame_generator,
+        gate_checker=gate_checker,
+        reference_provider=reference_provider,
+    )
+    checkpoint_manager = (
+        CheckpointManager(checkpoint_dir) if checkpoint_dir is not None else None
+    )
+    return SpriteForgeWorkflow(
+        config=config,
+        row_processor=row_processor,
+        checkpoint_manager=checkpoint_manager,
+    )
 
 
 @pytest.fixture()
@@ -157,14 +190,12 @@ class TestWorkflowCheckpointIntegration:
         mock_prog_checker.check_grid = MagicMock(return_value=None)
 
         # Create workflow with checkpoint support
-        async with SpriteForgeWorkflow(
+        async with _build_workflow(
             config=sample_config,
             reference_provider=mock_ref_provider,
             grid_generator=mock_generator,
             gate_checker=mock_gate_checker,
             programmatic_checker=mock_prog_checker,
-            retry_manager=RetryManager(),
-            palette_map=build_palette_map(sample_palette),
             checkpoint_dir=checkpoint_dir,
         ) as workflow:
             # Run workflow
@@ -229,14 +260,12 @@ class TestWorkflowCheckpointIntegration:
         mock_prog_checker.check_grid = MagicMock(return_value=None)
 
         # Create workflow with checkpoint support
-        async with SpriteForgeWorkflow(
+        async with _build_workflow(
             config=sample_config,
             reference_provider=mock_ref_provider,
             grid_generator=mock_generator,
             gate_checker=mock_gate_checker,
             programmatic_checker=mock_prog_checker,
-            retry_manager=RetryManager(),
-            palette_map=build_palette_map(sample_palette),
             checkpoint_dir=checkpoint_dir,
         ) as workflow:
             # Run workflow (should resume from checkpoint)
@@ -310,14 +339,12 @@ class TestWorkflowCheckpointIntegration:
         mock_prog_checker.check_grid = MagicMock(return_value=None)
 
         # Create workflow with checkpoint support
-        async with SpriteForgeWorkflow(
+        async with _build_workflow(
             config=sample_config,
             reference_provider=mock_ref_provider,
             grid_generator=mock_generator,
             gate_checker=mock_gate_checker,
             programmatic_checker=mock_prog_checker,
-            retry_manager=RetryManager(),
-            palette_map=build_palette_map(sample_palette),
             checkpoint_dir=checkpoint_dir,
         ) as workflow:
             # Run workflow (should resume and only process row 2)
@@ -371,14 +398,12 @@ class TestWorkflowCheckpointIntegration:
         mock_prog_checker.check_grid = MagicMock(return_value=None)
 
         # Create workflow WITHOUT checkpoint support
-        async with SpriteForgeWorkflow(
+        async with _build_workflow(
             config=sample_config,
             reference_provider=mock_ref_provider,
             grid_generator=mock_generator,
             gate_checker=mock_gate_checker,
             programmatic_checker=mock_prog_checker,
-            retry_manager=RetryManager(),
-            palette_map=build_palette_map(sample_palette),
             checkpoint_dir=None,  # No checkpoints
         ) as workflow:
             # Run workflow

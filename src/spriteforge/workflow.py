@@ -14,13 +14,13 @@ frame generation.
 from __future__ import annotations
 
 import asyncio
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable
 from pathlib import Path
 from typing import Any
 
 from spriteforge.assembler import assemble_spritesheet
 from spriteforge.checkpoint import CheckpointManager
-from spriteforge.errors import GateError, RetryExhaustedError
+from spriteforge.errors import GateError
 from spriteforge.frame_generator import FrameGenerator
 from spriteforge.gates import GateVerdict, LLMGateChecker, ProgrammaticChecker
 from spriteforge.generator import GenerationError, GridGenerator
@@ -86,76 +86,40 @@ class SpriteForgeWorkflow:
     def __init__(
         self,
         config: SpritesheetSpec,
-        reference_provider: ReferenceProvider,
-        grid_generator: GridGenerator,
-        gate_checker: LLMGateChecker,
-        programmatic_checker: ProgrammaticChecker,
-        retry_manager: RetryManager,
-        palette_map: dict[str, tuple[int, int, int, int]],
+        row_processor: RowProcessor,
+        assembler: Callable[..., Awaitable[Path]] = assemble_final_spritesheet,
         preprocessor: Callable[..., PreprocessResult] | None = None,
+        checkpoint_manager: CheckpointManager | None = None,
         max_concurrent_rows: int = 0,
-        checkpoint_dir: str | Path | None = None,
-        call_tracker: Any | None = None,
-        frame_generator: FrameGenerator | None = None,
     ) -> None:
         """Initialize the workflow with all required components.
 
         Args:
             config: The spritesheet specification loaded from YAML.
-            reference_provider: Stage 1 reference image provider.
-            grid_generator: Stage 2 grid generator (Claude Opus 4.6).
-            gate_checker: LLM-based verification gate checker.
-            programmatic_checker: Fast deterministic grid checks.
-            retry_manager: Retry and escalation engine.
-            palette_map: Symbol → RGBA mapping for rendering.
+            row_processor: Row-level generation coordinator.
+            assembler: Final assembly stage callable.
             preprocessor: Optional preprocessing callable (e.g.
                 ``preprocess_reference``).  When provided, the base
                 reference image is resized, quantized, and optionally
                 auto-palette-extracted before generation begins.
+            checkpoint_manager: Optional checkpoint manager for resume support.
             max_concurrent_rows: Maximum number of rows to process in
                 parallel after the anchor row.  ``0`` (default) means
                 unlimited — all remaining rows run concurrently.
-            checkpoint_dir: Optional directory for saving/loading checkpoints.
-                If provided, enables checkpoint/resume support. After each
-                row completes Gate 3A, its strip PNG and frame grids are
-                saved. On resume, completed rows are skipped.
-            call_tracker: Optional CallTracker for budget enforcement.
-            frame_generator: Optional FrameGenerator instance. If not provided,
-                one will be created from the other components.
         """
         self.config = config
-        self.reference_provider = reference_provider
-        self.grid_generator = grid_generator
-        self.gate_checker = gate_checker
-        self.programmatic_checker = programmatic_checker
-        self.retry_manager = retry_manager
-        self.palette_map = palette_map
+        self.row_processor = row_processor
+        self.assembler = assembler
         self.preprocessor = preprocessor
+        self.checkpoint_manager = checkpoint_manager
         self.max_concurrent_rows = max_concurrent_rows
-        self.checkpoint_manager: CheckpointManager | None = None
-        if checkpoint_dir is not None:
-            self.checkpoint_manager = CheckpointManager(Path(checkpoint_dir))
-        self.call_tracker = call_tracker
-
-        # Create or use provided FrameGenerator
-        if frame_generator is None:
-            self.frame_generator = FrameGenerator(
-                grid_generator=grid_generator,
-                gate_checker=gate_checker,
-                programmatic_checker=programmatic_checker,
-                retry_manager=retry_manager,
-                generation_config=config.generation,
-                call_tracker=call_tracker,
-            )
-        else:
-            self.frame_generator = frame_generator
-        self.row_processor = RowProcessor(
-            config=config,
-            frame_generator=self.frame_generator,
-            gate_checker=gate_checker,
-            reference_provider=reference_provider,
-            call_tracker=call_tracker,
+        self.palette_map = (
+            build_palette_map(config.palette) if config.palette is not None else {}
         )
+        self.frame_generator = row_processor.frame_generator
+        self.gate_checker = row_processor.gate_checker
+        self.reference_provider = row_processor.reference_provider
+        self.grid_generator = row_processor.frame_generator.grid_generator
 
     async def __aenter__(self) -> "SpriteForgeWorkflow":
         """Enter the async context manager. Returns self."""
@@ -522,7 +486,7 @@ class SpriteForgeWorkflow:
                 len(remaining_animations),
             )
 
-        return await assemble_final_spritesheet(
+        return await self.assembler(
             row_images=row_images,
             config=self.config,
             output_path=out,
@@ -659,27 +623,32 @@ async def create_workflow(
 
         call_tracker = CallTracker(config.generation.budget)
 
-    # Build palette map (use palette, or will be replaced by preprocessor if auto_palette)
-    palette_map: dict[str, tuple[int, int, int, int]]
-    if config.palette is not None:
-        palette_map = build_palette_map(config.palette)
-    else:
-        # Empty palette map — will be filled by preprocessor if auto_palette enabled
-        palette_map = {}
-
-    # Create workflow
-    workflow = SpriteForgeWorkflow(
-        config=config,
-        reference_provider=reference_provider,
+    frame_generator = FrameGenerator(
         grid_generator=grid_generator,
         gate_checker=gate_checker,
         programmatic_checker=programmatic_checker,
         retry_manager=retry_manager,
-        palette_map=palette_map,
-        preprocessor=preprocessor,
-        max_concurrent_rows=max_concurrent_rows,
-        checkpoint_dir=checkpoint_dir,
+        generation_config=config.generation,
         call_tracker=call_tracker,
+    )
+    row_processor = RowProcessor(
+        config=config,
+        frame_generator=frame_generator,
+        gate_checker=gate_checker,
+        reference_provider=reference_provider,
+        call_tracker=call_tracker,
+    )
+    checkpoint_manager = (
+        CheckpointManager(Path(checkpoint_dir)) if checkpoint_dir is not None else None
+    )
+
+    # Create workflow
+    workflow = SpriteForgeWorkflow(
+        config=config,
+        row_processor=row_processor,
+        preprocessor=preprocessor,
+        checkpoint_manager=checkpoint_manager,
+        max_concurrent_rows=max_concurrent_rows,
     )
 
     # Store credential ownership info for cleanup
