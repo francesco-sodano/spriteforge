@@ -41,6 +41,20 @@ class RowProcessor:
         self.gate_checker = gate_checker
         self.reference_provider = reference_provider
         self.call_tracker = call_tracker
+        self._closed = False
+
+    async def close(self) -> None:
+        """Close resources owned by row processing."""
+        if self._closed:
+            return
+        await self.frame_generator.close()
+        if hasattr(self.gate_checker, "_chat") and hasattr(
+            self.gate_checker._chat, "close"
+        ):
+            await self.gate_checker._chat.close()
+        if hasattr(self.reference_provider, "close"):
+            await self.reference_provider.close()
+        self._closed = True
 
     async def process_anchor_row(
         self,
