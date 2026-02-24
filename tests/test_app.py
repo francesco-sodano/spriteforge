@@ -1,144 +1,403 @@
-"""Tests for spriteforge CLI and programmatic API.
-
-This module contains tests for:
-- CLI entry point (__main__.py)
-- Programmatic API (app.py run_spriteforge function)
-
-NOTE: These tests are currently stubs/TODOs pending implementation
-of issue #10 (CLI Entry Point). Once __main__.py and app.py are
-implemented, these tests should be filled in according to the
-test plan in that issue.
-"""
+"""Tests for spriteforge CLI entry point and programmatic API."""
 
 from __future__ import annotations
 
+import asyncio
+from argparse import Namespace
+from pathlib import Path
+
 import pytest
 
-# ---------------------------------------------------------------------------
-# CLI Tests (TODO: dependent on issue #10)
-# ---------------------------------------------------------------------------
+from spriteforge import __main__
+from spriteforge.app import run_spriteforge
+from spriteforge.models import (
+    AnimationDef,
+    CharacterConfig,
+    GenerationConfig,
+    SpritesheetSpec,
+)
 
 
-@pytest.mark.skip(reason="Pending issue #10: CLI entry point not yet implemented")
-def test_cli_help_flag() -> None:
-    """Test that --help flag displays usage information.
-
-    TODO (issue #10): Once __main__.py is implemented, test that:
-    - Running `spriteforge --help` displays help text
-    - Help text includes all expected arguments (config, output, verbose, etc.)
-    - Exit code is 0
-    """
-    pass
-
-
-@pytest.mark.skip(reason="Pending issue #10: CLI entry point not yet implemented")
-def test_cli_version_flag() -> None:
-    """Test that --version flag displays version information.
-
-    TODO (issue #10): Once __main__.py is implemented, test that:
-    - Running `spriteforge --version` displays version string
-    - Version matches package version from pyproject.toml
-    - Exit code is 0
-    """
-    pass
-
-
-@pytest.mark.skip(reason="Pending issue #10: CLI entry point not yet implemented")
-def test_cli_missing_required_args() -> None:
-    """Test that CLI fails gracefully when required args are missing.
-
-    TODO (issue #10): Once __main__.py is implemented, test that:
-    - Running without required args shows error message
-    - Error message indicates which args are required
-    - Exit code is non-zero
-    """
-    pass
+def _write_minimal_config(path: Path, *, with_base_image: bool = False) -> None:
+    base_image_line = 'base_image_path: "base.png"\n' if with_base_image else ""
+    path.write_text(
+        "\n".join(
+            [
+                "character:",
+                '  name: "Test Hero"',
+                '  class: "Warrior"',
+                '  description: "Test character"',
+                "  frame_size: [64, 64]",
+                "  spritesheet_columns: 4",
+                "",
+                "animations:",
+                '  - name: "idle"',
+                "    row: 0",
+                "    frames: 1",
+                "    timing_ms: 100",
+                "",
+                base_image_line,
+            ]
+        ),
+        encoding="utf-8",
+    )
 
 
-@pytest.mark.skip(reason="Pending issue #10: CLI entry point not yet implemented")
-def test_cli_invalid_config_path() -> None:
-    """Test that CLI handles invalid config file path gracefully.
-
-    TODO (issue #10): Once __main__.py is implemented, test that:
-    - Running with non-existent config file shows clear error
-    - Error indicates which file was not found
-    - Exit code is non-zero
-    """
-    pass
-
-
-@pytest.mark.skip(reason="Pending issue #10: CLI entry point not yet implemented")
-def test_cli_verbose_flag() -> None:
-    """Test that --verbose flag enables detailed logging.
-
-    TODO (issue #10): Once __main__.py is implemented, test that:
-    - Running with --verbose produces more log output
-    - Debug-level messages are visible
-    - Workflow progress is reported
-    """
-    pass
-
-
-# ---------------------------------------------------------------------------
-# Programmatic API Tests (TODO: dependent on issue #10)
-# ---------------------------------------------------------------------------
+def _make_spec(*, name: str = "Test Hero") -> SpritesheetSpec:
+    return SpritesheetSpec(
+        character=CharacterConfig(
+            name=name,
+            character_class="Warrior",
+            description="Test",
+            frame_width=64,
+            frame_height=64,
+            spritesheet_columns=4,
+        ),
+        animations=[
+            AnimationDef(
+                name="idle",
+                row=0,
+                frames=1,
+                timing_ms=100,
+                prompt_context="Idle",
+            )
+        ],
+        generation=GenerationConfig(),
+    )
 
 
-@pytest.mark.skip(reason="Pending issue #10: Programmatic API not yet implemented")
-def test_run_spriteforge_basic() -> None:
-    """Test run_spriteforge() with minimal valid arguments.
-
-    TODO (issue #10): Once app.py run_spriteforge() is implemented, test that:
-    - Function accepts config path and output path
-    - Returns Path to generated spritesheet
-    - Generated file exists and is valid PNG
-    """
-    pass
-
-
-@pytest.mark.skip(reason="Pending issue #10: Programmatic API not yet implemented")
-def test_run_spriteforge_with_options() -> None:
-    """Test run_spriteforge() with all optional parameters.
-
-    TODO (issue #10): Once app.py run_spriteforge() is implemented, test that:
-    - Function accepts verbose, log_file, progress_callback params
-    - Progress callback is invoked during generation
-    - Log file is created when log_file path provided
-    """
-    pass
+def test_help_flag(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    monkeypatch.setattr("sys.argv", ["spriteforge", "--help"])
+    with pytest.raises(SystemExit) as exc:
+        __main__.main()
+    assert exc.value.code == 0
+    out = capsys.readouterr().out
+    assert "--config" in out
+    assert "--base-image" in out
+    assert "--auto-palette" in out
 
 
-@pytest.mark.skip(reason="Pending issue #10: Programmatic API not yet implemented")
-def test_run_spriteforge_invalid_config() -> None:
-    """Test run_spriteforge() error handling with invalid config.
-
-    TODO (issue #10): Once app.py run_spriteforge() is implemented, test that:
-    - Function raises ConfigError for invalid YAML
-    - Error message is descriptive
-    - No partial output files are created
-    """
-    pass
+def test_missing_config(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr("sys.argv", ["spriteforge"])
+    with pytest.raises(SystemExit) as exc:
+        __main__.main()
+    assert exc.value.code == 2
 
 
-@pytest.mark.skip(reason="Pending issue #10: Programmatic API not yet implemented")
-def test_run_spriteforge_missing_reference_image() -> None:
-    """Test run_spriteforge() error handling with missing reference image.
+def test_dry_run_validates_config(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    config_path = tmp_path / "valid.yaml"
+    _write_minimal_config(config_path)
 
-    TODO (issue #10): Once app.py run_spriteforge() is implemented, test that:
-    - Function raises appropriate error when reference image not found
-    - Error message indicates which file is missing
-    - No partial output files are created
-    """
-    pass
+    parser = __main__.build_parser()
+    args = parser.parse_args(["--config", str(config_path), "--dry-run"])
+
+    exit_code = asyncio.run(__main__.async_main(args))
+
+    assert exit_code == 0
+    assert "Config valid: Test Hero, 1 rows" in capsys.readouterr().out
 
 
-@pytest.mark.skip(reason="Pending issue #10: Programmatic API not yet implemented")
-def test_run_spriteforge_progress_callback() -> None:
-    """Test that progress_callback receives expected updates.
+def test_dry_run_invalid_config(capsys: pytest.CaptureFixture[str]) -> None:
+    parser = __main__.build_parser()
+    args = parser.parse_args(["--config", "missing.yaml", "--dry-run"])
 
-    TODO (issue #10): Once app.py run_spriteforge() is implemented, test that:
-    - Callback is invoked for each pipeline stage
-    - Callback receives (stage_name, current, total) args
-    - Final callback indicates completion
-    """
-    pass
+    exit_code = asyncio.run(__main__.async_main(args))
+
+    assert exit_code == 1
+    assert "Error:" in capsys.readouterr().err
+
+
+def test_missing_base_image(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    config_path = tmp_path / "valid.yaml"
+    _write_minimal_config(config_path)
+
+    parser = __main__.build_parser()
+    args = parser.parse_args(
+        ["--config", str(config_path), "--base-image", str(tmp_path / "missing.png")]
+    )
+
+    exit_code = asyncio.run(__main__.async_main(args))
+
+    assert exit_code == 1
+    assert "Base image not found" in capsys.readouterr().err
+
+
+@pytest.mark.asyncio
+async def test_full_run_happy_path(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    base = tmp_path / "base.png"
+    base.write_bytes(b"png")
+    output = tmp_path / "sheet.png"
+
+    spec = _make_spec()
+    monkeypatch.setattr(__main__, "load_config", lambda _path: spec)
+
+    class DummyWorkflow:
+        async def __aenter__(self) -> "DummyWorkflow":
+            return self
+
+        async def __aexit__(self, *_args: object) -> None:
+            return None
+
+        async def run(self, **_kwargs: object) -> Path:
+            return output
+
+    async def fake_create_workflow(**_kwargs: object) -> DummyWorkflow:
+        return DummyWorkflow()
+
+    monkeypatch.setattr(__main__, "create_workflow", fake_create_workflow)
+
+    args = Namespace(
+        config=tmp_path / "config.yaml",
+        base_image=base,
+        output=output,
+        auto_palette=False,
+        max_colors=16,
+        debug=False,
+        verbose=False,
+        dry_run=False,
+    )
+
+    assert await __main__.async_main(args) == 0
+
+
+@pytest.mark.asyncio
+async def test_output_defaults_to_character_name(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    base = tmp_path / "base.png"
+    base.write_bytes(b"png")
+
+    spec = _make_spec(name="Unit Hero")
+    monkeypatch.setattr(__main__, "load_config", lambda _path: spec)
+
+    run_kwargs: dict[str, object] = {}
+
+    class DummyWorkflow:
+        async def __aenter__(self) -> "DummyWorkflow":
+            return self
+
+        async def __aexit__(self, *_args: object) -> None:
+            return None
+
+        async def run(self, **kwargs: object) -> Path:
+            run_kwargs.update(kwargs)
+            return Path("output/unit_hero_spritesheet.png")
+
+    async def fake_create_workflow(**_kwargs: object) -> DummyWorkflow:
+        return DummyWorkflow()
+
+    monkeypatch.setattr(__main__, "create_workflow", fake_create_workflow)
+
+    args = Namespace(
+        config=tmp_path / "config.yaml",
+        base_image=base,
+        output=None,
+        auto_palette=False,
+        max_colors=16,
+        debug=False,
+        verbose=False,
+        dry_run=False,
+    )
+
+    assert await __main__.async_main(args) == 0
+    assert run_kwargs["output_path"] == Path("output/unit_hero_spritesheet.png")
+
+
+def test_verbose_enables_debug_logging() -> None:
+    __main__.configure_logging(verbose=True)
+    assert __main__.logging.getLogger("spriteforge").level == __main__.logging.DEBUG
+
+
+@pytest.mark.asyncio
+async def test_auto_palette_flag_sets_config(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    base = tmp_path / "base.png"
+    base.write_bytes(b"png")
+
+    spec = _make_spec()
+    monkeypatch.setattr(__main__, "load_config", lambda _path: spec)
+
+    class DummyWorkflow:
+        async def __aenter__(self) -> "DummyWorkflow":
+            return self
+
+        async def __aexit__(self, *_args: object) -> None:
+            return None
+
+        async def run(self, **_kwargs: object) -> Path:
+            return Path("output/test_hero_spritesheet.png")
+
+    async def fake_create_workflow(**_kwargs: object) -> DummyWorkflow:
+        return DummyWorkflow()
+
+    monkeypatch.setattr(__main__, "create_workflow", fake_create_workflow)
+
+    args = Namespace(
+        config=tmp_path / "config.yaml",
+        base_image=base,
+        output=None,
+        auto_palette=True,
+        max_colors=16,
+        debug=False,
+        verbose=False,
+        dry_run=False,
+    )
+
+    await __main__.async_main(args)
+    assert spec.generation.auto_palette is True
+
+
+@pytest.mark.asyncio
+async def test_max_colors_flag_sets_config(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    base = tmp_path / "base.png"
+    base.write_bytes(b"png")
+
+    spec = _make_spec()
+    monkeypatch.setattr(__main__, "load_config", lambda _path: spec)
+
+    class DummyWorkflow:
+        async def __aenter__(self) -> "DummyWorkflow":
+            return self
+
+        async def __aexit__(self, *_args: object) -> None:
+            return None
+
+        async def run(self, **_kwargs: object) -> Path:
+            return Path("output/test_hero_spritesheet.png")
+
+    async def fake_create_workflow(**_kwargs: object) -> DummyWorkflow:
+        return DummyWorkflow()
+
+    monkeypatch.setattr(__main__, "create_workflow", fake_create_workflow)
+
+    args = Namespace(
+        config=tmp_path / "config.yaml",
+        base_image=base,
+        output=None,
+        auto_palette=False,
+        max_colors=12,
+        debug=False,
+        verbose=False,
+        dry_run=False,
+    )
+
+    await __main__.async_main(args)
+    assert spec.generation.max_palette_colors == 12
+
+
+@pytest.mark.asyncio
+async def test_dry_run_auto_palette_shows_source(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    spec = _make_spec()
+    monkeypatch.setattr(__main__, "load_config", lambda _path: spec)
+
+    args = Namespace(
+        config=tmp_path / "config.yaml",
+        base_image=None,
+        output=None,
+        auto_palette=True,
+        max_colors=16,
+        debug=False,
+        verbose=False,
+        dry_run=True,
+    )
+
+    assert await __main__.async_main(args) == 0
+    assert "palette: auto (from base image)" in capsys.readouterr().out
+
+
+@pytest.mark.asyncio
+async def test_preprocessor_created_for_workflow(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    base = tmp_path / "base.png"
+    base.write_bytes(b"png")
+
+    spec = _make_spec()
+    monkeypatch.setattr(__main__, "load_config", lambda _path: spec)
+
+    workflow_kwargs: dict[str, object] = {}
+
+    class DummyWorkflow:
+        async def __aenter__(self) -> "DummyWorkflow":
+            return self
+
+        async def __aexit__(self, *_args: object) -> None:
+            return None
+
+        async def run(self, **_kwargs: object) -> Path:
+            return Path("output/test_hero_spritesheet.png")
+
+    async def fake_create_workflow(**kwargs: object) -> DummyWorkflow:
+        workflow_kwargs.update(kwargs)
+        return DummyWorkflow()
+
+    monkeypatch.setattr(__main__, "create_workflow", fake_create_workflow)
+
+    args = Namespace(
+        config=tmp_path / "config.yaml",
+        base_image=base,
+        output=None,
+        auto_palette=True,
+        max_colors=16,
+        debug=False,
+        verbose=False,
+        dry_run=False,
+    )
+
+    assert await __main__.async_main(args) == 0
+    assert workflow_kwargs["preprocessor"] is __main__.preprocess_reference
+
+
+@pytest.mark.asyncio
+async def test_run_spriteforge_returns_path(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    config = tmp_path / "config.yaml"
+    _write_minimal_config(config)
+    base = tmp_path / "base.png"
+    base.write_bytes(b"png")
+
+    monkeypatch.setattr("spriteforge.app.load_config", lambda _path: _make_spec())
+
+    class DummyWorkflow:
+        async def __aenter__(self) -> "DummyWorkflow":
+            return self
+
+        async def __aexit__(self, *_args: object) -> None:
+            return None
+
+        async def run(self, **kwargs: object) -> Path:
+            return kwargs["output_path"]  # type: ignore[return-value]
+
+    async def fake_create_workflow(**_kwargs: object) -> DummyWorkflow:
+        return DummyWorkflow()
+
+    monkeypatch.setattr("spriteforge.app.create_workflow", fake_create_workflow)
+
+    result = await run_spriteforge(config_path=config, base_image_path=base)
+    assert result == Path("output/test_hero_spritesheet.png")
+
+
+@pytest.mark.asyncio
+async def test_run_spriteforge_missing_config(tmp_path: Path) -> None:
+    base = tmp_path / "base.png"
+    base.write_bytes(b"png")
+
+    with pytest.raises(FileNotFoundError):
+        await run_spriteforge(
+            config_path=tmp_path / "missing.yaml",
+            base_image_path=base,
+        )
