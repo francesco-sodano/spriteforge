@@ -137,7 +137,6 @@ class SpriteForgeWorkflow:
         Safe to call multiple times.
         """
         await self.row_processor.close()
-        await self.row_processor.frame_generator.close()
 
         # Close owned credential (only if created by factory)
         if hasattr(self, "_owned_credential") and self._owned_credential is not None:  # type: ignore[has-type]

@@ -47,6 +47,7 @@ class RowProcessor:
         """Close resources owned by row processing."""
         if self._closed:
             return
+        await self.frame_generator.close()
         if hasattr(self.gate_checker, "_chat") and hasattr(
             self.gate_checker._chat, "close"
         ):
