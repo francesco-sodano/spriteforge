@@ -57,14 +57,16 @@ Uses fixed retry-rate assumptions from `budget.py`:
 - **20%** of frames retry once
 - **5%** of rows fail Gate 3A once and trigger row-level regeneration
 
-These are not guarantees; they are planning defaults.
+These are hardcoded planning defaults used by `estimate_calls()` (`_REF_RETRY_RATE`,
+`_FRAME_RETRY_RATE`, `_ROW_RETRY_RATE`). They are not runtime knobs in YAML.
 
 ### Maximum
 
 Worst-case approximation with retry limits:
 
 - Stage 1 reference generation retried up to 3 times per row
-- Each frame retried up to per-row retry budget (`budget.max_retries_per_row`) or default frame retry cap
+- Each frame retried up to per-row retry budget (`budget.max_retries_per_row`) or
+  default frame retry cap (**10 attempts**, `RetryConfig.max_retries`)
 - Gate volumes scale with those retries
 
 Use this to understand upper-bound risk, not typical spend.
