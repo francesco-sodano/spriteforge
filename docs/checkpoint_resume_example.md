@@ -18,6 +18,17 @@ SpriteForge supports checkpoint/resume for long-running generation pipelines. If
 
 ## Usage
 
+### CLI
+
+```bash
+# Use default checkpoint location: .spriteforge/checkpoints/<character_name>
+spriteforge generate configs/theron.yaml --resume
+
+# Or provide an explicit checkpoint directory
+spriteforge generate configs/theron.yaml --resume \
+    --checkpoint-dir output/.spriteforge_checkpoint
+```
+
 ### Programmatic API
 
 ```python
@@ -98,7 +109,8 @@ result = await workflow.run(base_ref, output_path)
 ## Notes
 
 - Checkpoints are **per-spritesheet** — use unique directories for different characters
-- Default suggested location: `{output_dir}/.spriteforge_checkpoint/`
+- CLI default checkpoint directory: `.spriteforge/checkpoints/<character_name>` when `--resume` is used
+- Programmatic suggested location: `{output_dir}/.spriteforge_checkpoint/`
 - Each checkpoint is ~50-100KB (PNG + JSON metadata)
 - Checkpoints are **not** portable between different configs or base images
 - If you modify the config or base image, delete the checkpoint directory and start fresh

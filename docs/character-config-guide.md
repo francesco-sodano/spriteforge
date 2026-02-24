@@ -152,7 +152,7 @@ If you prefer to have the palette extracted automatically from the base referenc
 ```yaml
 generation:
   auto_palette: true
-  max_palette_colors: 12  # optional, default: 16
+  max_palette_colors: 12  # optional, valid range: 2-23 (default: 16)
 ```
 
 When `auto_palette` is `true`, the `palette` section is optional (though it can still serve as a fallback).
@@ -275,6 +275,10 @@ generation:
 | `gate_model` | `"gpt-5-mini"` | Azure AI Foundry deployment name for verification gates |
 | `labeling_model` | `"gpt-5-nano"` | Azure AI Foundry deployment name for semantic palette labeling |
 | `reference_model` | `"gpt-image-1.5"` | Azure AI Foundry deployment name for Stage 1 reference generation |
+| `gate_3a_max_retries` | `2` | Retries for row-level Gate 3A coherence failures |
+| `fallback_regen_frames` | `2` | Trailing frames to regenerate when Gate 3A feedback is non-specific |
+| `compact_grid_context` | `false` | RLE-compress anchor/previous grid context to reduce token usage |
+| `budget` | `null` | Optional LLM call budget controls (`max_llm_calls`, retries, warnings, token tracking) |
 
 ---
 
@@ -324,7 +328,7 @@ spec = load_config("configs/my_character.yaml")
 print(f"Character: {spec.character.name}")
 print(f"Animations: {len(spec.animations)}")
 if spec.palette is not None:
-  print(f"Palette colors: {len(spec.palette.colors) + 1}")  # + outline
+    print(f"Palette colors: {len(spec.palette.colors) + 1}")  # + outline
 else:
     print("Palette: auto (no explicit palette defined)")
 print(f"Sheet size: {spec.sheet_width}x{spec.sheet_height}")

@@ -31,7 +31,7 @@ Pipeline:
 ## Azure + testing rules
 
 - Auth: `DefaultAzureCredential` for **all** providers (chat, gates, image generation) — no API keys
-- Env vars: `AZURE_AI_PROJECT_ENDPOINT` (chat/vision), `AZURE_OPENAI_GPT_IMAGE_ENDPOINT` (image generation base URL)
+- Env vars: `AZURE_AI_PROJECT_ENDPOINT` or `AZURE_OPENAI_ENDPOINT` (chat/vision), `AZURE_OPENAI_GPT_IMAGE_ENDPOINT` (image generation base URL)
 - GPT-Image-1.5 uses Entra ID bearer tokens via `get_bearer_token_provider` (scope: `https://cognitiveservices.azure.com/.default`)
 - Integration tests:
   - mark with `@pytest.mark.integration`

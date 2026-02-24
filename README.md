@@ -28,6 +28,12 @@ cd spriteforge
 uv sync --group dev
 ```
 
+Create a local environment file before running generation:
+
+```bash
+cp .env.example .env
+```
+
 ## Quick Start
 
 Start from `configs/template.yaml` (or an example in `configs/examples/`), then run:
