@@ -25,6 +25,7 @@ from spriteforge.models import (
 from spriteforge.palette import build_palette_map
 from spriteforge.preprocessor import PreprocessResult
 from spriteforge.providers._base import ProviderError, ReferenceProvider
+from spriteforge.row_processor import RowProcessor
 from spriteforge.retry import RetryManager
 from spriteforge.workflow import SpriteForgeWorkflow
 
@@ -221,12 +222,12 @@ def _build_workflow(
 
 
 class TestExtractReferenceFrame:
-    """Tests for SpriteForgeWorkflow._extract_reference_frame()."""
+    """Tests for RowProcessor._extract_reference_frame()."""
 
     def test_extract_reference_frame_first(self) -> None:
         """Frame 0 from strip → correct crop coordinates."""
         strip = _make_strip_image(num_frames=6, frame_width=64, frame_height=64)
-        result = SpriteForgeWorkflow._extract_reference_frame(
+        result = RowProcessor._extract_reference_frame(
             strip, frame_index=0, frame_width=64, frame_height=64
         )
         # Should produce valid PNG bytes
@@ -236,7 +237,7 @@ class TestExtractReferenceFrame:
     def test_extract_reference_frame_last(self) -> None:
         """Last frame from strip → correct crop."""
         strip = _make_strip_image(num_frames=6, frame_width=64, frame_height=64)
-        result = SpriteForgeWorkflow._extract_reference_frame(
+        result = RowProcessor._extract_reference_frame(
             strip, frame_index=5, frame_width=64, frame_height=64
         )
         img = Image.open(io.BytesIO(result))
@@ -246,7 +247,7 @@ class TestExtractReferenceFrame:
         """Index beyond strip width → ValueError."""
         strip = _make_strip_image(num_frames=3, frame_width=64, frame_height=64)
         with pytest.raises(ValueError, match="out of bounds"):
-            SpriteForgeWorkflow._extract_reference_frame(
+            RowProcessor._extract_reference_frame(
                 strip, frame_index=3, frame_width=64, frame_height=64
             )
 
@@ -254,7 +255,7 @@ class TestExtractReferenceFrame:
         """Negative index → ValueError."""
         strip = _make_strip_image(num_frames=3, frame_width=64, frame_height=64)
         with pytest.raises(ValueError, match="out of bounds"):
-            SpriteForgeWorkflow._extract_reference_frame(
+            RowProcessor._extract_reference_frame(
                 strip, frame_index=-1, frame_width=64, frame_height=64
             )
 
