@@ -1879,7 +1879,7 @@ async def test_workflow_single_row_integration(
     This test is expensive (API calls) and slow (~2-5 minutes), so it only
     generates a minimal spritesheet (1 animation row, 2 frames).
 
-    Auto-skips when AZURE_AI_PROJECT_ENDPOINT is not set or credentials unavailable.
+    Auto-skips when no chat endpoint env var is set or credentials unavailable.
     """
     from spriteforge.providers import AzureChatProvider, GPTImageProvider
 
@@ -2421,7 +2421,7 @@ async def test_create_workflow_real_azure(
     model deployments for grid generation, gate verification, and
     reference generation.
 
-    Auto-skips when AZURE_AI_PROJECT_ENDPOINT is not set or credentials unavailable.
+    Auto-skips when no chat endpoint env var is set or credentials unavailable.
     """
     from spriteforge.config import load_config
     from spriteforge.workflow import create_workflow

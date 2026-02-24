@@ -53,7 +53,10 @@ async def main() -> None:
     except Exception as e:
         print(f"✗ Could not create workflow: {e}")
         print("\nNote: This example requires Azure AI Foundry credentials.")
-        print("Set AZURE_AI_PROJECT_ENDPOINT environment variable to run.")
+        print(
+            "Set AZURE_AI_PROJECT_ENDPOINT or AZURE_OPENAI_ENDPOINT "
+            "environment variable to run."
+        )
         return
 
 

@@ -1,7 +1,7 @@
-"""Grid generator — Stage 2 pixel-precise generation with Claude Opus 4.6.
+"""Grid generator — Stage 2 pixel-precise generation with chat models.
 
 Translates rough reference frames into structured JSON grids of
-palette symbols using Claude Opus 4.6 with vision input via Azure AI Foundry.
+palette symbols using chat vision input via Azure AI Foundry / Azure OpenAI.
 Grid dimensions are configurable (default 64×64) via ``context.frame_width`` and
 ``context.frame_height`` passed from the character configuration.
 """
@@ -139,7 +139,7 @@ def _build_system_prompt(
 
 
 class GridGenerator:
-    """Generates pixel-precise palette-indexed grids using Claude Opus 4.6.
+    """Generates pixel-precise palette-indexed grids using chat deployments.
 
     Uses a ``ChatProvider`` to call the LLM with vision input,
     translating rough reference frames into structured JSON grids.
@@ -161,6 +161,18 @@ class GridGenerator:
         """Close the underlying chat provider."""
         if hasattr(self._chat, "close"):
             await self._chat.close()
+
+    def get_last_usage(self) -> dict[str, int] | None:
+        """Return token usage from the most recent chat call, if available."""
+        usage = getattr(self._chat, "last_usage", None)
+        if not isinstance(usage, dict):
+            return None
+        prompt_tokens = int(usage.get("prompt_tokens", 0))
+        completion_tokens = int(usage.get("completion_tokens", 0))
+        return {
+            "prompt_tokens": prompt_tokens,
+            "completion_tokens": completion_tokens,
+        }
 
     # ------------------------------------------------------------------
     # Public generation methods

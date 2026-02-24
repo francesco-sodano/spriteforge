@@ -79,13 +79,13 @@ def test_help_flag(
         __main__.main()
     assert exc.value.code == 0
     out = capsys.readouterr().out
-    assert "--config" in out
-    assert "--base-image" in out
-    assert "--auto-palette" in out
+    assert "generate" in out
+    assert "validate" in out
+    assert "estimate" in out
 
 
 def test_missing_config(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr("sys.argv", ["spriteforge"])
+    monkeypatch.setattr("sys.argv", ["spriteforge", "generate"])
     with pytest.raises(SystemExit) as exc:
         __main__.main()
     assert exc.value.code == 2

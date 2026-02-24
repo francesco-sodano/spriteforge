@@ -41,7 +41,7 @@ class FrameGenerator:
         """Initialize the frame generator.
 
         Args:
-            grid_generator: Stage 2 grid generator (Claude Opus 4.6).
+            grid_generator: Stage 2 grid generator.
             gate_checker: LLM-based verification gate checker.
             programmatic_checker: Fast deterministic grid checks.
             retry_manager: Retry and escalation engine.
@@ -63,6 +63,28 @@ class FrameGenerator:
         self._closed = True
         await self.grid_generator.close()
 
+    def _record_usage(self, usage: dict[str, int] | None) -> None:
+        """Record token usage in the call tracker when available."""
+        if self.call_tracker is None or not usage:
+            return
+        self.call_tracker.record_tokens(
+            int(usage.get("prompt_tokens", 0)),
+            int(usage.get("completion_tokens", 0)),
+        )
+
+    def _record_usage_from_grid_generator(self) -> None:
+        """Record token usage from the last grid generation call."""
+        usage_getter = getattr(self.grid_generator, "get_last_usage", None)
+        if callable(usage_getter):
+            self._record_usage(usage_getter())
+
+    def _record_usage_from_gate_verdicts(self, verdicts: list[GateVerdict]) -> None:
+        """Record token usage from gate verdict metadata."""
+        for verdict in verdicts:
+            usage = verdict.details.get("token_usage")
+            if isinstance(usage, dict):
+                self._record_usage(usage)
+
     async def generate_verified_frame(
         self,
         reference_frame: bytes,
@@ -75,7 +97,7 @@ class FrameGenerator:
     ) -> list[str]:
         """Generate a single frame with full verification and retry loop.
 
-        1. Generate frame via GridGenerator (Claude Opus 4.6)
+        1. Generate frame via GridGenerator
         2. Run programmatic checks (fast-fail)
         3. Render grid to PNG
         4. Run LLM gates (Gate 0, Gate 1, optionally Gate 2) in parallel
@@ -131,6 +153,7 @@ class FrameGenerator:
                 temperature=temperature,
                 additional_guidance=guidance,
             )
+            self._record_usage_from_grid_generator()
 
             # Programmatic checks (fast-fail)
             prog_verdicts = self.programmatic_checker.run_all(grid, context)
@@ -155,6 +178,7 @@ class FrameGenerator:
                 animation=animation,
                 is_anchor=is_anchor,
             )
+            self._record_usage_from_gate_verdicts(llm_verdicts)
 
             llm_failures = [v for v in llm_verdicts if not v.passed]
             if llm_failures:

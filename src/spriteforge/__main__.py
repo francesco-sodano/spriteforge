@@ -6,6 +6,7 @@ import argparse
 import asyncio
 import logging
 import sys
+import warnings
 from pathlib import Path
 
 from pydantic import ValidationError
@@ -18,11 +19,26 @@ from spriteforge.workflow import create_workflow
 
 logger = logging.getLogger("spriteforge")
 
+_LEGACY_SHIM_MESSAGE = (
+    "spriteforge.__main__ argparse helpers are deprecated. "
+    "Use the Click CLI (spriteforge.cli) or spriteforge.app.run_spriteforge."
+)
+_LEGACY_WARNING_EMITTED = False
+
+
+def _warn_legacy_shim() -> None:
+    """Emit a deprecation warning for legacy argparse shims once."""
+    global _LEGACY_WARNING_EMITTED  # noqa: PLW0603
+    if _LEGACY_WARNING_EMITTED:
+        return
+    _LEGACY_WARNING_EMITTED = True
+    warnings.warn(_LEGACY_SHIM_MESSAGE, DeprecationWarning, stacklevel=2)
+
 
 def _max_colors(value: str) -> int:
     parsed = int(value)
-    if parsed < 2 or parsed > 64:
-        raise argparse.ArgumentTypeError("--max-colors must be between 2 and 64")
+    if parsed < 2 or parsed > 23:
+        raise argparse.ArgumentTypeError("--max-colors must be between 2 and 23")
     return parsed
 
 
@@ -32,7 +48,11 @@ def _default_output_path(character_name: str) -> Path:
 
 
 def build_parser() -> argparse.ArgumentParser:
-    """Build and return the CLI argument parser."""
+    """Build and return the legacy argparse parser.
+
+    Deprecated compatibility shim. Prefer the Click CLI in ``spriteforge.cli``.
+    """
+    _warn_legacy_shim()
     parser = argparse.ArgumentParser(
         prog="spriteforge",
         description=(
@@ -68,7 +88,7 @@ def build_parser() -> argparse.ArgumentParser:
         "--max-colors",
         type=_max_colors,
         default=16,
-        help="Maximum palette colors for auto-extraction (2-64)",
+        help="Maximum palette colors for auto-extraction (2-23)",
     )
     parser.add_argument(
         "--debug",
@@ -90,7 +110,11 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def configure_logging(verbose: bool) -> None:
-    """Configure logging based on verbosity level."""
+    """Configure logging based on verbosity level.
+
+    Deprecated compatibility shim. Prefer CLI-managed logging setup.
+    """
+    _warn_legacy_shim()
     setup_logging(level=logging.DEBUG if verbose else logging.INFO, verbose=verbose)
 
 
@@ -99,7 +123,11 @@ def _progress_callback(stage_name: str, current: int, total: int) -> None:
 
 
 async def async_main(args: argparse.Namespace) -> int:
-    """Async main entry point."""
+    """Legacy argparse async entry point.
+
+    Deprecated compatibility shim retained for tests and external callers.
+    """
+    _warn_legacy_shim()
     try:
         spec = load_config(args.config)
 
@@ -163,11 +191,10 @@ async def async_main(args: argparse.Namespace) -> int:
 
 
 def main() -> None:
-    """CLI entry point. Parses args and runs the async pipeline."""
-    parser = build_parser()
-    args = parser.parse_args()
-    configure_logging(args.verbose)
-    raise SystemExit(asyncio.run(async_main(args)))
+    """CLI entry point delegating to the canonical Click-based CLI."""
+    from spriteforge.cli import main as click_main
+
+    click_main()
 
 
 if __name__ == "__main__":

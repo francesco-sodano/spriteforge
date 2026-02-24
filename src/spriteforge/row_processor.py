@@ -53,6 +53,18 @@ class RowProcessor:
         if hasattr(self.reference_provider, "close"):
             await self.reference_provider.close()
 
+    def _record_usage_from_verdict(self, verdict: GateVerdict) -> None:
+        """Record token usage from gate verdict metadata when available."""
+        if self.call_tracker is None:
+            return
+        usage = verdict.details.get("token_usage")
+        if not isinstance(usage, dict):
+            return
+        self.call_tracker.record_tokens(
+            int(usage.get("prompt_tokens", 0)),
+            int(usage.get("completion_tokens", 0)),
+        )
+
     async def process_anchor_row(
         self,
         base_reference: bytes,
@@ -210,6 +222,7 @@ class RowProcessor:
             verdict = await self.gate_checker.gate_3a(
                 row_strip_bytes, ref_strip_bytes, animation
             )
+            self._record_usage_from_verdict(verdict)
             if verdict.passed:
                 return
 
@@ -292,6 +305,7 @@ class RowProcessor:
             verdict = await self.gate_checker.gate_minus_1(
                 strip_bytes, base_reference, animation
             )
+            self._record_usage_from_verdict(verdict)
             if verdict.passed:
                 return strip
             logger.warning(

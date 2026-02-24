@@ -34,7 +34,7 @@ This guide explains how to create a YAML configuration file for a new SpriteForg
    asyncio.run(main())
    ```
 
-Note: a CLI entry point is still pending (see `tests/test_app.py`, issue #10).
+CLI commands are available for `validate`, `estimate`, and `generate` via `spriteforge`.
 
 For complete runnable examples, see:
 - `configs/examples/simple_enemy.yaml` — A goblin with 5 animations and 5 colors.
@@ -323,8 +323,8 @@ from spriteforge.config import load_config
 spec = load_config("configs/my_character.yaml")
 print(f"Character: {spec.character.name}")
 print(f"Animations: {len(spec.animations)}")
-if "P1" in spec.palettes:
-    print(f"Palette colors: {len(spec.palettes['P1'].colors)}")
+if spec.palette is not None:
+  print(f"Palette colors: {len(spec.palette.colors) + 1}")  # + outline
 else:
     print("Palette: auto (no explicit palette defined)")
 print(f"Sheet size: {spec.sheet_width}x{spec.sheet_height}")

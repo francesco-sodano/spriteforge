@@ -444,3 +444,51 @@ class TestCallTracking:
             if call[0][0] == "gate_check"
         ]
         assert len(gate_check_calls) == 3
+
+    @pytest.mark.asyncio
+    async def test_call_tracker_records_tokens_from_generation_and_gates(
+        self,
+        sample_context: FrameContext,
+    ) -> None:
+        """CallTracker records token usage from grid generation and gates."""
+        call_tracker = MagicMock()
+        call_tracker.increment = MagicMock()
+        call_tracker.record_tokens = MagicMock()
+
+        grid_generator = AsyncMock(spec=GridGenerator)
+        grid_generator.generate_frame = AsyncMock(return_value=_make_sprite_grid())
+        grid_generator.get_last_usage = MagicMock(
+            return_value={"prompt_tokens": 11, "completion_tokens": 7}
+        )
+
+        gate_checker = AsyncMock(spec=LLMGateChecker)
+        gate_checker.gate_0 = AsyncMock(
+            return_value=GateVerdict(
+                gate_name="gate_0",
+                passed=True,
+                confidence=0.9,
+                feedback="ok",
+                details={
+                    "token_usage": {"prompt_tokens": 5, "completion_tokens": 3}
+                },
+            )
+        )
+        gate_checker.gate_1 = AsyncMock(return_value=_passing_verdict("gate_1"))
+        gate_checker.gate_2 = AsyncMock(return_value=_passing_verdict("gate_2"))
+
+        frame_gen = _build_frame_generator(
+            grid_generator=grid_generator,
+            gate_checker=gate_checker,
+            call_tracker=call_tracker,
+        )
+
+        await frame_gen.generate_verified_frame(
+            reference_frame=_TINY_PNG,
+            context=sample_context,
+            frame_index=0,
+            is_anchor=True,
+            base_reference=_TINY_PNG,
+        )
+
+        call_tracker.record_tokens.assert_any_call(11, 7)
+        call_tracker.record_tokens.assert_any_call(5, 3)

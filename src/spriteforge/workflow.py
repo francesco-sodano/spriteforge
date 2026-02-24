@@ -2,7 +2,7 @@
 
 Ties all pipeline stages together using plain async Python (``asyncio``):
 Stage 1 (reference generation via GPT-Image-1.5) → Gate -1 (reference QC) →
-Stage 2 (per-frame grid generation via Claude Opus 4.6, with verification
+Stage 2 (per-frame grid generation via configured chat deployment, with verification
 gates and retry loops) → Row assembly → Gate 3A (row coherence) →
 Final spritesheet assembly.
 
@@ -78,9 +78,8 @@ class SpriteForgeWorkflow:
     concurrency cap (``max_concurrent_rows``) to respect API rate
     limits and memory constraints.
 
-    Both AI models (GPT-Image-1.5 for reference generation, Claude Opus 4.6
-    for grid generation and verification) are accessed through the same
-    Azure AI Foundry project.
+    Uses GPT-Image-1.5 for reference generation and configurable chat
+    deployments for grid generation and verification.
     """
 
     def __init__(
@@ -515,13 +514,14 @@ async def create_workflow(
     - reference_model → GPTImageProvider
 
     Chat providers share the same Azure credential instance to avoid
-    multiple token fetches. GPTImageProvider uses API key authentication
-    and reads credentials from environment variables.
+    multiple token fetches. GPTImageProvider also uses Entra ID bearer
+    token authentication.
 
     Args:
         config: Spritesheet specification with model deployment names.
-        project_endpoint: Azure AI Foundry endpoint. Falls back to
-            AZURE_AI_PROJECT_ENDPOINT env var if not provided.
+        project_endpoint: Azure endpoint for chat model calls. Accepts either
+            Azure AI Foundry project endpoint or Azure OpenAI endpoint.
+            Falls back to environment variables when not provided.
         credential: Optional shared Azure credential. If not provided,
             a DefaultAzureCredential will be created and managed by
             the workflow (closed when workflow.close() is called).
@@ -557,18 +557,19 @@ async def create_workflow(
     from spriteforge.providers.azure_chat import AzureChatProvider
     from spriteforge.providers.gpt_image import GPTImageProvider
 
-    # Resolve endpoint — prefer AZURE_OPENAI_ENDPOINT, fall back to
-    # AZURE_AI_PROJECT_ENDPOINT (legacy) or AZURE_OPENAI_GPT_IMAGE_ENDPOINT
+    # Resolve endpoint — prefer explicit arg, then Foundry env, then OpenAI env.
+    # GPT image endpoint is retained as a compatibility fallback.
     endpoint = (
         project_endpoint
-        or os.environ.get("AZURE_OPENAI_ENDPOINT", "")
         or os.environ.get("AZURE_AI_PROJECT_ENDPOINT", "")
+        or os.environ.get("AZURE_OPENAI_ENDPOINT", "")
         or os.environ.get("AZURE_OPENAI_GPT_IMAGE_ENDPOINT", "")
     )
     if not endpoint:
         raise ProviderError(
             "No Azure OpenAI endpoint configured. "
-            "Set AZURE_OPENAI_ENDPOINT or pass project_endpoint."
+            "Set AZURE_AI_PROJECT_ENDPOINT or AZURE_OPENAI_ENDPOINT, "
+            "or pass project_endpoint."
         )
 
     # Create or reuse credential

@@ -369,7 +369,7 @@ def parse_verdict_response(response_text: str, gate_name: str) -> GateVerdict:
 
 
 class LLMGateChecker:
-    """Vision-based quality checks using Claude Opus 4.6.
+    """Vision-based quality checks using configured chat deployments.
 
     Each gate sends images as vision input and receives a structured
     JSON verdict. All gates use temperature 0.0 for deterministic judgment.
@@ -424,7 +424,19 @@ class LLMGateChecker:
             temperature=0.0,
             response_format="json_object",
         )
+        usage = getattr(self._chat, "last_usage", None)
         verdict = parse_verdict_response(response_text, gate_name)
+
+        if isinstance(usage, dict):
+            prompt_tokens = int(usage.get("prompt_tokens", 0))
+            completion_tokens = int(usage.get("completion_tokens", 0))
+            verdict.details = {
+                **verdict.details,
+                "token_usage": {
+                    "prompt_tokens": prompt_tokens,
+                    "completion_tokens": completion_tokens,
+                },
+            }
 
         # Format gate name for logging
         if gate_name == "gate_minus_1":

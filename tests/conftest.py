@@ -10,7 +10,7 @@ import pytest
 from dotenv import load_dotenv
 
 # Auto-load .env from project root (gitignored — never pushed to GitHub).
-# This provides AZURE_AI_PROJECT_ENDPOINT and other env vars for integration tests.
+# This provides Azure endpoint env vars and other settings for integration tests.
 _PROJECT_ROOT = Path(__file__).resolve().parent.parent
 load_dotenv(_PROJECT_ROOT / ".env", override=False)
 
@@ -29,7 +29,7 @@ def _azure_credentials_available() -> bool:
 
     Returns True when:
     0. Integration tests are explicitly enabled, AND
-    1. The AZURE_AI_PROJECT_ENDPOINT env var is set, AND
+    1. The AZURE_AI_PROJECT_ENDPOINT or AZURE_OPENAI_ENDPOINT env var is set, AND
     2. The AZURE_OPENAI_GPT_IMAGE_ENDPOINT env var is set, AND
     3. DefaultAzureCredential can obtain a token.
     """
@@ -40,7 +40,9 @@ def _azure_credentials_available() -> bool:
         "on",
     ):
         return False
-    endpoint = os.environ.get("AZURE_AI_PROJECT_ENDPOINT", "")
+    endpoint = os.environ.get("AZURE_AI_PROJECT_ENDPOINT", "") or os.environ.get(
+        "AZURE_OPENAI_ENDPOINT", ""
+    )
     if not endpoint:
         return False
     gpt_image_endpoint = os.environ.get("AZURE_OPENAI_GPT_IMAGE_ENDPOINT", "")
@@ -77,7 +79,8 @@ def pytest_collection_modifyitems(
     skip_marker = pytest.mark.skip(
         reason=(
             "Integration test skipped: set SPRITEFORGE_RUN_INTEGRATION=1 and "
-            "ensure AZURE_AI_PROJECT_ENDPOINT and AZURE_OPENAI_GPT_IMAGE_ENDPOINT "
+            "ensure AZURE_AI_PROJECT_ENDPOINT or AZURE_OPENAI_ENDPOINT, and "
+            "AZURE_OPENAI_GPT_IMAGE_ENDPOINT "
             "are set and DefaultAzureCredential can authenticate."
         )
     )
@@ -93,10 +96,12 @@ def pytest_collection_modifyitems(
 
 @pytest.fixture(scope="session")
 def azure_project_endpoint() -> str:
-    """Return the Azure AI Foundry project endpoint from the environment."""
-    endpoint = os.environ.get("AZURE_AI_PROJECT_ENDPOINT", "")
+    """Return chat endpoint from environment (Foundry or Azure OpenAI)."""
+    endpoint = os.environ.get("AZURE_AI_PROJECT_ENDPOINT", "") or os.environ.get(
+        "AZURE_OPENAI_ENDPOINT", ""
+    )
     if not endpoint:
-        pytest.skip("AZURE_AI_PROJECT_ENDPOINT not set")
+        pytest.skip("AZURE_AI_PROJECT_ENDPOINT or AZURE_OPENAI_ENDPOINT not set")
     return endpoint
 
 

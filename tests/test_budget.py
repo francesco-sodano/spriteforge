@@ -468,16 +468,14 @@ class TestEstimateCalls:
                 description="Test character",
             ),
             generation=GenerationConfig(),
-            palettes={
-                "P1": PaletteConfig(
-                    name="P1",
-                    transparent_symbol=".",
-                    outline=PaletteColor(element="Outline", symbol="O", r=0, g=0, b=0),
-                    colors=[
-                        PaletteColor(element="Skin", symbol="s", r=255, g=200, b=150),
-                    ],
-                )
-            },
+            palette=PaletteConfig(
+                name="P1",
+                transparent_symbol=".",
+                outline=PaletteColor(element="Outline", symbol="O", r=0, g=0, b=0),
+                colors=[
+                    PaletteColor(element="Skin", symbol="s", r=255, g=200, b=150),
+                ],
+            ),
             animations=[
                 AnimationDef(name="idle", row=0, frames=4, timing_ms=150),
             ],

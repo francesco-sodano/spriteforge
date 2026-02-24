@@ -5,8 +5,8 @@
 # This file + a base reference image is all SpriteForge needs.
 #
 # Usage:
-#   python -m spriteforge --config configs/my_character.yaml \
-#                          --base-image assets/my_character_ref.png
+#   spriteforge generate configs/my_character.yaml \
+#     --base-image assets/my_character_ref.png
 # ============================================================
 
 # --- Character Metadata ---
@@ -151,7 +151,7 @@ generation:
 
   # Maximum colors to extract when auto_palette is true (excluding transparent).
   # Includes 1 outline + (max_palette_colors - 1) character colors.
-  # Valid range: 2–64. Default: 16.
+  # Valid range: 2–23. Default: 16.
   # max_palette_colors: 16
 
   # --- Model Deployment Names (Azure AI Foundry) ---

@@ -39,7 +39,7 @@ dev = [
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 markers = [
-    "integration: tests that require live Azure AI Foundry access (DefaultAzureCredential + AZURE_AI_PROJECT_ENDPOINT)",
+    "integration: tests that require live Azure access (DefaultAzureCredential + AZURE_AI_PROJECT_ENDPOINT or AZURE_OPENAI_ENDPOINT)",
 ]
 
 [tool.pytest-asyncio]

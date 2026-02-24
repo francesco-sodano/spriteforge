@@ -17,7 +17,7 @@ SpriteForge generates game-ready 2D pixel-art spritesheets from a base character
 - Python 3.12
 - Azure authentication via `DefaultAzureCredential`
 - Environment variables:
-  - `AZURE_AI_PROJECT_ENDPOINT`
+  - `AZURE_AI_PROJECT_ENDPOINT` **or** `AZURE_OPENAI_ENDPOINT` (chat/gate endpoint)
   - `AZURE_OPENAI_GPT_IMAGE_ENDPOINT`
 
 ## Installation
