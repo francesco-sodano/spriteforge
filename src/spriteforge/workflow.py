@@ -45,6 +45,30 @@ from spriteforge.row_processor import RowProcessor
 logger = get_logger("workflow")
 
 
+async def assemble_final_spritesheet(
+    row_images: dict[int, bytes],
+    config: SpritesheetSpec,
+    output_path: Path,
+    checkpoint_manager: CheckpointManager | None = None,
+    progress_callback: Callable[[str, int, int], None] | None = None,
+) -> Path:
+    """Assemble row strips into final spritesheet and finalize run state."""
+    if progress_callback:
+        progress_callback("assembly", 0, 1)
+
+    assemble_spritesheet(row_images, config, output_path=output_path)
+
+    logger.info("Spritesheet saved: %s", output_path)
+
+    if checkpoint_manager is not None:
+        checkpoint_manager.cleanup()
+
+    if progress_callback:
+        progress_callback("assembly", 1, 1)
+
+    return output_path
+
+
 class SpriteForgeWorkflow:
     """Orchestrates the full spritesheet generation pipeline.
 
@@ -498,22 +522,13 @@ class SpriteForgeWorkflow:
                 len(remaining_animations),
             )
 
-        # ---- Assemble final spritesheet ----
-        if progress_callback:
-            progress_callback("assembly", 0, 1)
-
-        assemble_spritesheet(row_images, self.config, output_path=out)
-
-        logger.info("Spritesheet saved: %s", out)
-
-        # Clean up checkpoints after successful assembly
-        if self.checkpoint_manager is not None:
-            self.checkpoint_manager.cleanup()
-
-        if progress_callback:
-            progress_callback("assembly", 1, 1)
-
-        return out
+        return await assemble_final_spritesheet(
+            row_images=row_images,
+            config=self.config,
+            output_path=out,
+            checkpoint_manager=self.checkpoint_manager,
+            progress_callback=progress_callback,
+        )
 
     # ------------------------------------------------------------------
     # Helpers
