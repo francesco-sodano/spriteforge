@@ -196,7 +196,7 @@ class SpriteForgeWorkflow:
                 "or enable auto_palette with a preprocessor."
             )
         palette = self.config.palette
-        palette_map = build_palette_map(palette)
+        palette_map = dict(self.palette_map)
 
         logger.info(
             "Starting spritesheet generation for '%s' (%d rows)",
