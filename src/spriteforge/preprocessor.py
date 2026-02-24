@@ -62,6 +62,18 @@ _GOLDEN_L_MAX: float = 0.75
 SYMBOL_POOL: list[str] = list("sheavbcdgiklmnprtuwxyz")
 
 
+def _unpack_rgba(raw: bytes) -> list[tuple[int, int, int, int]]:
+    """Unpack raw RGBA bytes into a list of (R, G, B, A) tuples.
+
+    Args:
+        raw: Raw bytes of an RGBA image (4 bytes per pixel).
+
+    Returns:
+        List of (R, G, B, A) tuples, one per pixel.
+    """
+    return list(zip(raw[0::4], raw[1::4], raw[2::4], raw[3::4]))
+
+
 def _describe_color(rgb: tuple[int, int, int]) -> str:
     """Generate a descriptive name for an RGB color.
 
@@ -493,7 +505,7 @@ def extract_palette_from_image(
 
     # Count unique opaque colors
     raw = image.tobytes()
-    pixels = list(zip(raw[0::4], raw[1::4], raw[2::4], raw[3::4]))
+    pixels = _unpack_rgba(raw)
     opaque_pixels = [(r, g, b) for r, g, b, a in pixels if a > 0]
     unique_opaque = set(opaque_pixels)
 
@@ -508,7 +520,7 @@ def extract_palette_from_image(
 
         # Re-extract opaque colors from quantized image
         raw_q = quantized_rgba.tobytes()
-        pixels_q = list(zip(raw_q[0::4], raw_q[1::4], raw_q[2::4], raw_q[3::4]))
+        pixels_q = _unpack_rgba(raw_q)
         opaque_pixels = [(r, g, b) for r, g, b, a in pixels_q if a > 0]
 
     # Count color frequency
@@ -600,9 +612,7 @@ def preprocess_reference(
 
     # Count original unique opaque colors
     raw_orig = img.tobytes()
-    orig_pixels = list(
-        zip(raw_orig[0::4], raw_orig[1::4], raw_orig[2::4], raw_orig[3::4])
-    )
+    orig_pixels = _unpack_rgba(raw_orig)
     original_color_count = len(set((r, g, b) for r, g, b, a in orig_pixels if a > 0))
 
     # Step 2: Resize
@@ -616,12 +626,7 @@ def preprocess_reference(
     raw_resized = resized.tobytes()
     resized_opaque = [
         (r, g, b)
-        for r, g, b, a in zip(
-            raw_resized[0::4],
-            raw_resized[1::4],
-            raw_resized[2::4],
-            raw_resized[3::4],
-        )
+        for r, g, b, a in _unpack_rgba(raw_resized)
         if a > 0
     ]
     unique_resized = set(resized_opaque)
@@ -641,13 +646,13 @@ def preprocess_reference(
 
     # Count final unique opaque colors
     raw_q = quantized_image.tobytes()
-    q_pixels = list(zip(raw_q[0::4], raw_q[1::4], raw_q[2::4], raw_q[3::4]))
+    q_pixels = _unpack_rgba(raw_q)
     final_color_count = len(set((r, g, b) for r, g, b, a in q_pixels if a > 0))
 
     # Generate PNG bytes
-    buf = io.BytesIO()
-    quantized_image.save(buf, format="PNG")
-    quantized_png_bytes = buf.getvalue()
+    with io.BytesIO() as buf:
+        quantized_image.save(buf, format="PNG")
+        quantized_png_bytes = buf.getvalue()
 
     return PreprocessResult(
         quantized_image=quantized_image,

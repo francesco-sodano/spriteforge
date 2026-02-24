@@ -60,11 +60,8 @@ class FrameGenerator:
         """Close resources owned by frame generation."""
         if self._closed:
             return
-        if hasattr(self.grid_generator, "_chat") and hasattr(
-            self.grid_generator._chat, "close"
-        ):
-            await self.grid_generator._chat.close()
         self._closed = True
+        await self.grid_generator.close()
 
     async def generate_verified_frame(
         self,

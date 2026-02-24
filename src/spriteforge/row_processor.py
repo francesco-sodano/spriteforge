@@ -47,14 +47,11 @@ class RowProcessor:
         """Close resources owned by row processing."""
         if self._closed:
             return
+        self._closed = True
         await self.frame_generator.close()
-        if hasattr(self.gate_checker, "_chat") and hasattr(
-            self.gate_checker._chat, "close"
-        ):
-            await self.gate_checker._chat.close()
+        await self.gate_checker.close()
         if hasattr(self.reference_provider, "close"):
             await self.reference_provider.close()
-        self._closed = True
 
     async def process_anchor_row(
         self,
@@ -319,7 +316,13 @@ class RowProcessor:
             for match in matches:
                 idx = int(match)
                 if idx >= num_frames:
-                    idx = idx - 1
+                    logger.warning(
+                        "Gate 3A feedback references out-of-range frame index %d "
+                        "(num_frames=%d); clamping to last frame.",
+                        idx,
+                        num_frames,
+                    )
+                    idx = num_frames - 1
                 if 0 <= idx < num_frames:
                     indices.append(idx)
             if indices:
@@ -380,6 +383,6 @@ class RowProcessor:
 
         left = frame_index * frame_width
         cropped = reference_strip.crop((left, 0, left + frame_width, frame_height))
-        buf = io.BytesIO()
-        cropped.save(buf, format="PNG")
-        return buf.getvalue()
+        with io.BytesIO() as buf:
+            cropped.save(buf, format="PNG")
+            return buf.getvalue()

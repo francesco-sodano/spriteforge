@@ -103,16 +103,43 @@ class CheckpointManager:
             return None
 
         strip_bytes = png_path.read_bytes()
-        data = json.loads(json_path.read_text())
+
+        try:
+            raw = json.loads(json_path.read_text())
+        except json.JSONDecodeError as exc:
+            logger.error("Checkpoint JSON for row %d is corrupt: %s", row, exc)
+            return None
+
+        if not isinstance(raw, dict):
+            logger.error(
+                "Checkpoint JSON for row %d has unexpected type %s; expected object",
+                row,
+                type(raw).__name__,
+            )
+            return None
+
+        if "grids" not in raw:
+            logger.error("Checkpoint for row %d is missing 'grids' key", row)
+            return None
+
+        grids = raw["grids"]
+        if not isinstance(grids, list) or not all(
+            isinstance(g, list) and all(isinstance(r, str) for r in g)
+            for g in grids
+        ):
+            logger.error(
+                "Checkpoint for row %d has malformed 'grids' value", row
+            )
+            return None
 
         logger.debug(
             "Loaded checkpoint for row %d (%s): %d frames",
             row,
-            data.get("animation_name", "unknown"),
-            len(data["grids"]),
+            raw.get("animation_name", "unknown"),
+            len(grids),
         )
 
-        return strip_bytes, data["grids"]
+        return strip_bytes, grids
 
     def completed_rows(self) -> set[int]:
         """Get the set of row indices that have completed checkpoints.

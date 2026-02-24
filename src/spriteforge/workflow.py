@@ -120,6 +120,10 @@ class SpriteForgeWorkflow:
         self.gate_checker = row_processor.gate_checker
         self.reference_provider = row_processor.reference_provider
         self.grid_generator = row_processor.frame_generator.grid_generator
+        # Owned credential created by factory; None if caller passed their own.
+        # Declared here so the field is always present (no dynamic attr assignment).
+        self._owned_credential: object | None = None
+        self._closed: bool = False
 
     async def __aenter__(self) -> "SpriteForgeWorkflow":
         """Enter the async context manager. Returns self."""
@@ -136,15 +140,19 @@ class SpriteForgeWorkflow:
         If a credential was created by the factory, it will also be closed.
         Safe to call multiple times.
         """
+        if self._closed:
+            return
+        self._closed = True
+
         await self.row_processor.close()
 
         # Close owned credential (only if created by factory)
-        if hasattr(self, "_owned_credential") and self._owned_credential is not None:  # type: ignore[has-type]
+        if self._owned_credential is not None:
             try:
-                await self._owned_credential.close()  # type: ignore[has-type]
-            except Exception:
-                pass
-            self._owned_credential = None  # type: ignore[has-type]
+                await self._owned_credential.close()  # type: ignore[union-attr]
+            except Exception as e:
+                logger.warning("Failed to close credential: %s", e)
+            self._owned_credential = None
 
     # ------------------------------------------------------------------
     # Public entry point
@@ -493,7 +501,7 @@ class SpriteForgeWorkflow:
 async def create_workflow(
     config: SpritesheetSpec,
     project_endpoint: str | None = None,
-    credential: Any | None = None,
+    credential: object | None = None,
     preprocessor: Callable[..., PreprocessResult] | None = None,
     max_concurrent_rows: int = 0,
     checkpoint_dir: str | Path | None = None,
@@ -566,7 +574,7 @@ async def create_workflow(
     # Create or reuse credential
     # If user provided a credential, we don't own it and won't close it
     # If we create one, we'll store it and close it in workflow.close()
-    shared_credential: Any
+    shared_credential: object
     if credential is None:
         from azure.identity.aio import DefaultAzureCredential  # type: ignore[import-untyped,import-not-found]
 
@@ -638,6 +646,6 @@ async def create_workflow(
     )
 
     # Store credential ownership info for cleanup
-    workflow._owned_credential = shared_credential if owns_credential else None  # type: ignore[attr-defined]
+    workflow._owned_credential = shared_credential if owns_credential else None
 
     return workflow

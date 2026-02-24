@@ -99,6 +99,27 @@ def compress_grid_rle(grid: list[str]) -> str:
     return "\n".join(lines)
 
 
+def validate_grid_dimensions(
+    grid: list[str], expected_rows: int, expected_cols: int
+) -> str | None:
+    """Check that *grid* has the expected dimensions.
+
+    Args:
+        grid: The palette-indexed grid to validate.
+        expected_rows: Expected number of rows.
+        expected_cols: Expected number of characters per row.
+
+    Returns:
+        ``None`` if the grid is valid; a human-readable error message otherwise.
+    """
+    if len(grid) != expected_rows:
+        return f"Grid must have {expected_rows} rows, got {len(grid)}."
+    for i, row in enumerate(grid):
+        if len(row) != expected_cols:
+            return f"Row {i} must have {expected_cols} characters, got {len(row)}."
+    return None
+
+
 def parse_json_from_llm(text: str) -> dict[str, Any]:
     """Parse JSON from LLM output, handling common formatting quirks.
 

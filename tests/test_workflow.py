@@ -2283,25 +2283,20 @@ async def test_workflow_close_cleans_all(single_row_config: SpritesheetSpec) -> 
     mock_ref_provider = AsyncMock()
     mock_ref_provider.close = AsyncMock()
 
-    mock_grid_gen = AsyncMock()
-    mock_grid_gen._chat = mock_grid_provider
-
-    mock_gate_checker = AsyncMock()
-    mock_gate_checker._chat = mock_gate_provider
-    mock_prog_checker = ProgrammaticChecker()
-    mock_retry_manager = RetryManager()
+    grid_gen = GridGenerator(chat_provider=mock_grid_provider)
+    gate_checker = LLMGateChecker(chat_provider=mock_gate_provider)
 
     frame_generator = FrameGenerator(
-        grid_generator=mock_grid_gen,
-        gate_checker=mock_gate_checker,
-        programmatic_checker=mock_prog_checker,
-        retry_manager=mock_retry_manager,
+        grid_generator=grid_gen,
+        gate_checker=gate_checker,
+        programmatic_checker=ProgrammaticChecker(),
+        retry_manager=RetryManager(),
         generation_config=single_row_config.generation,
     )
     row_processor = RowProcessor(
         config=single_row_config,
         frame_generator=frame_generator,
-        gate_checker=mock_gate_checker,
+        gate_checker=gate_checker,
         reference_provider=mock_ref_provider,
     )
 
@@ -2381,23 +2376,21 @@ async def test_workflow_close_is_idempotent(single_row_config: SpritesheetSpec) 
     mock_ref_provider = AsyncMock()
     mock_ref_provider.close = AsyncMock()
 
-    mock_grid_gen = AsyncMock()
-    mock_grid_gen._chat = mock_grid_provider
-    mock_gate_checker = AsyncMock()
-    mock_gate_checker._chat = mock_gate_provider
+    grid_gen = GridGenerator(chat_provider=mock_grid_provider)
+    gate_checker = LLMGateChecker(chat_provider=mock_gate_provider)
 
     workflow = SpriteForgeWorkflow(
         config=single_row_config,
         row_processor=RowProcessor(
             config=single_row_config,
             frame_generator=FrameGenerator(
-                grid_generator=mock_grid_gen,
-                gate_checker=mock_gate_checker,
+                grid_generator=grid_gen,
+                gate_checker=gate_checker,
                 programmatic_checker=ProgrammaticChecker(),
                 retry_manager=RetryManager(),
                 generation_config=single_row_config.generation,
             ),
-            gate_checker=mock_gate_checker,
+            gate_checker=gate_checker,
             reference_provider=mock_ref_provider,
         ),
     )

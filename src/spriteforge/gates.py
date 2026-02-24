@@ -27,7 +27,7 @@ from spriteforge.prompts.gates import (
     GATE_VERDICT_SCHEMA,
 )
 from spriteforge.providers.chat import ChatProvider
-from spriteforge.utils import image_to_data_url
+from spriteforge.utils import image_to_data_url, validate_grid_dimensions
 
 logger = get_logger("gates")
 
@@ -79,34 +79,14 @@ class ProgrammaticChecker:
         Returns:
             A ``GateVerdict`` indicating pass/fail with feedback.
         """
-        if len(grid) != expected_rows:
+        error = validate_grid_dimensions(grid, expected_rows, expected_cols)
+        if error is not None:
             return GateVerdict(
                 gate_name="programmatic_dimensions",
                 passed=False,
                 confidence=1.0,
-                feedback=(f"Grid has {len(grid)} rows, expected {expected_rows}."),
-                details={
-                    "actual_rows": len(grid),
-                    "expected_rows": expected_rows,
-                },
+                feedback=error,
             )
-
-        for i, row in enumerate(grid):
-            if len(row) != expected_cols:
-                return GateVerdict(
-                    gate_name="programmatic_dimensions",
-                    passed=False,
-                    confidence=1.0,
-                    feedback=(
-                        f"Row {i} has {len(row)} characters, "
-                        f"expected {expected_cols}."
-                    ),
-                    details={
-                        "row_index": i,
-                        "actual_cols": len(row),
-                        "expected_cols": expected_cols,
-                    },
-                )
 
         return GateVerdict(
             gate_name="programmatic_dimensions",
@@ -405,6 +385,11 @@ class LLMGateChecker:
             chat_provider: Chat provider for LLM calls.
         """
         self._chat = chat_provider
+
+    async def close(self) -> None:
+        """Close the underlying chat provider."""
+        if hasattr(self._chat, "close"):
+            await self._chat.close()
 
     # ------------------------------------------------------------------
     # Helper method

@@ -99,26 +99,33 @@ class CallTracker:
         Raises:
             BudgetExhaustedError: If budget limit is exceeded.
         """
+        should_warn = False
+        current = 0
+        max_calls = 0
+
         with self._lock:
             self._count += 1
             current = self._count
+
+            if self._budget is not None and self._budget.max_llm_calls > 0:
+                max_calls = self._budget.max_llm_calls
+                warn_threshold = int(max_calls * self._budget.warn_at_percentage)
+                if current >= warn_threshold and not self._warned:
+                    self._warned = True
+                    should_warn = True
 
         if self._budget is None or self._budget.max_llm_calls == 0:
             # No budget enforced
             return
 
-        max_calls = self._budget.max_llm_calls
-        warn_threshold = int(max_calls * self._budget.warn_at_percentage)
-
-        # Check for warning threshold
-        if current >= warn_threshold and not self._warned:
+        # Emit warning outside lock to avoid holding the lock during I/O
+        if should_warn:
             logger.warning(
                 "Budget warning: %d/%d calls used (%.0f%%)",
                 current,
                 max_calls,
                 (current / max_calls) * 100,
             )
-            self._warned = True
 
         # Check for hard limit
         if current > max_calls:

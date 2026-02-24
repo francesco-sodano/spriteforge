@@ -27,7 +27,7 @@ from spriteforge.prompts.generator import (
     build_frame_prompt,
 )
 from spriteforge.providers.chat import ChatProvider
-from spriteforge.utils import compress_grid_rle, image_to_data_url
+from spriteforge.utils import compress_grid_rle, image_to_data_url, validate_grid_dimensions
 
 logger = get_logger("generator")
 
@@ -80,16 +80,13 @@ def parse_grid_response(
     if not isinstance(grid, list):
         raise GenerationError("'grid' value must be a list of strings")
 
-    if len(grid) != expected_rows:
-        raise GenerationError(f"Grid must have {expected_rows} rows, got {len(grid)}")
-
     for i, row in enumerate(grid):
         if not isinstance(row, str):
             raise GenerationError(f"Grid row {i} is not a string")
-        if len(row) != expected_cols:
-            raise GenerationError(
-                f"Grid row {i} must have {expected_cols} characters, " f"got {len(row)}"
-            )
+
+    dim_error = validate_grid_dimensions(grid, expected_rows, expected_cols)
+    if dim_error is not None:
+        raise GenerationError(dim_error)
 
     return grid
 
@@ -159,6 +156,11 @@ class GridGenerator:
             chat_provider: Chat provider for LLM calls.
         """
         self._chat = chat_provider
+
+    async def close(self) -> None:
+        """Close the underlying chat provider."""
+        if hasattr(self._chat, "close"):
+            await self._chat.close()
 
     # ------------------------------------------------------------------
     # Public generation methods

@@ -831,13 +831,6 @@ dependencies = [
     { name = "rich" },
 ]
 
-[package.optional-dependencies]
-azure = [
-    { name = "aiohttp" },
-    { name = "azure-ai-projects" },
-    { name = "azure-identity" },
-]
-
 [package.dev-dependencies]
 dev = [
     { name = "black" },
@@ -852,11 +845,8 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "aiohttp", specifier = ">=3.10.0" },
-    { name = "aiohttp", marker = "extra == 'azure'", specifier = ">=3.10.0" },
     { name = "azure-ai-projects", specifier = ">=1.0.0b7" },
-    { name = "azure-ai-projects", marker = "extra == 'azure'", specifier = ">=1.0.0b7" },
     { name = "azure-identity", specifier = ">=1.21.0" },
-    { name = "azure-identity", marker = "extra == 'azure'", specifier = ">=1.21.0" },
     { name = "click", specifier = ">=8.0" },
     { name = "openai", specifier = ">=2.0" },
     { name = "pillow", specifier = ">=12.1.1" },
@@ -864,7 +854,6 @@ requires-dist = [
     { name = "pyyaml", specifier = ">=6.0" },
     { name = "rich", specifier = ">=13.0" },
 ]
-provides-extras = ["azure"]
 
 [package.metadata.requires-dev]
 dev = [
