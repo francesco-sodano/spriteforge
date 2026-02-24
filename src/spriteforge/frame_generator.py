@@ -54,6 +54,17 @@ class FrameGenerator:
         self.retry_manager = retry_manager
         self.generation_config = generation_config
         self.call_tracker = call_tracker
+        self._closed = False
+
+    async def close(self) -> None:
+        """Close resources owned by frame generation."""
+        if self._closed:
+            return
+        if hasattr(self.grid_generator, "_chat") and hasattr(
+            self.grid_generator._chat, "close"
+        ):
+            await self.grid_generator._chat.close()
+        self._closed = True
 
     async def generate_verified_frame(
         self,

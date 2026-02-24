@@ -2369,6 +2369,47 @@ async def test_workflow_close_with_owned_credential(
         mock_credential.close.assert_called_once()
 
 
+@pytest.mark.asyncio
+async def test_workflow_close_is_idempotent(single_row_config: SpritesheetSpec) -> None:
+    """Verify close() can be called multiple times without double-closing providers."""
+    from unittest.mock import AsyncMock
+
+    mock_grid_provider = AsyncMock()
+    mock_grid_provider.close = AsyncMock()
+    mock_gate_provider = AsyncMock()
+    mock_gate_provider.close = AsyncMock()
+    mock_ref_provider = AsyncMock()
+    mock_ref_provider.close = AsyncMock()
+
+    mock_grid_gen = AsyncMock()
+    mock_grid_gen._chat = mock_grid_provider
+    mock_gate_checker = AsyncMock()
+    mock_gate_checker._chat = mock_gate_provider
+
+    workflow = SpriteForgeWorkflow(
+        config=single_row_config,
+        row_processor=RowProcessor(
+            config=single_row_config,
+            frame_generator=FrameGenerator(
+                grid_generator=mock_grid_gen,
+                gate_checker=mock_gate_checker,
+                programmatic_checker=ProgrammaticChecker(),
+                retry_manager=RetryManager(),
+                generation_config=single_row_config.generation,
+            ),
+            gate_checker=mock_gate_checker,
+            reference_provider=mock_ref_provider,
+        ),
+    )
+
+    await workflow.close()
+    await workflow.close()
+
+    mock_grid_provider.close.assert_called_once()
+    mock_gate_provider.close.assert_called_once()
+    mock_ref_provider.close.assert_called_once()
+
+
 # ---------------------------------------------------------------------------
 # Integration test: create_workflow with real Azure
 # ---------------------------------------------------------------------------

@@ -132,25 +132,12 @@ class SpriteForgeWorkflow:
     async def close(self) -> None:
         """Clean up all provider resources.
 
-        Closes the grid generator's chat provider, gate checker's chat provider,
-        and reference provider. If a credential was created by the factory,
-        it will also be closed. Safe to call multiple times.
+        Closes resources through the row/frame processor ownership chain.
+        If a credential was created by the factory, it will also be closed.
+        Safe to call multiple times.
         """
-        # Close grid generator's chat provider
-        if hasattr(self.grid_generator, "_chat") and hasattr(
-            self.grid_generator._chat, "close"
-        ):
-            await self.grid_generator._chat.close()
-
-        # Close gate checker's chat provider
-        if hasattr(self.gate_checker, "_chat") and hasattr(
-            self.gate_checker._chat, "close"
-        ):
-            await self.gate_checker._chat.close()
-
-        # Close reference provider
-        if hasattr(self.reference_provider, "close"):
-            await self.reference_provider.close()
+        await self.row_processor.close()
+        await self.row_processor.frame_generator.close()
 
         # Close owned credential (only if created by factory)
         if hasattr(self, "_owned_credential") and self._owned_credential is not None:  # type: ignore[has-type]
