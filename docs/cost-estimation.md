@@ -51,14 +51,20 @@ Assumes every check passes on first attempt:
 
 ### Expected
 
-Uses fixed retry-rate assumptions from `budget.py`:
+Uses retry-rate assumptions from `generation.budget` when configured,
+otherwise defaults from `BudgetConfig`:
 
 - **30%** of rows retry Stage 1 once (reference + Gate -1)
 - **20%** of frames retry once
 - **5%** of rows fail Gate 3A once and trigger row-level regeneration
 
-These are hardcoded planning defaults used by `estimate_calls()` (`_REF_RETRY_RATE`,
-`_FRAME_RETRY_RATE`, `_ROW_RETRY_RATE`). They are not runtime knobs in YAML.
+These map to:
+
+- `generation.budget.expected_reference_retry_rate`
+- `generation.budget.expected_frame_retry_rate`
+- `generation.budget.expected_row_retry_rate`
+
+They affect estimation only (planning), not runtime gate/retry execution behavior.
 
 ### Maximum
 

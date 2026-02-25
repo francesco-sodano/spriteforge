@@ -52,6 +52,28 @@ Important defaults:
 - Gate 3A retries: controlled by `generation.gate_3a_max_retries` (default `2`).
 - If Gate 3A feedback does not identify specific frames, fallback regenerates the last `generation.fallback_regen_frames` frames (default `2`).
 
+Retry tier config safety:
+
+- Custom `RetryConfig` ranges are validated at creation time and must be contiguous,
+  ordered 1-based ranges (`soft -> guided -> constrained`) with no gaps.
+
+## Timeout and Failure Semantics
+
+- External model requests are wrapped with per-call timeout protection via
+  `generation.request_timeout_seconds` (default `120.0`).
+- Timeout coverage includes:
+  - Stage 1 reference strip generation calls
+  - Stage 2 grid generation calls
+  - LLM gate checks (Gate -1/0/1/2/3A)
+- Gate 3A problematic frame parsing supports both single-frame references
+  (`"Frame 3"`) and list-style phrasing (for example `"frames 2, 5, and 7"`).
+
+## Budget Enforcement Semantics
+
+- In `strict` budget mode, the call tracker rejects requests once
+  `max_llm_calls` is reached.
+- In `best_effort` mode, generation continues after budget exceedance with warning logs.
+
 ## Anchor Frame and Identity Lock
 
 `Row 0 / Frame 0` is the anchor frame:
@@ -78,7 +100,7 @@ This keeps recovery policy/decision logic separate from row execution plumbing i
 - **Anchor row first**: row 0 runs before any parallel work.
 - **Non-anchor rows parallelized**: remaining rows run via `asyncio.gather`.
 - **Optional concurrency cap**: `max_concurrent_rows` uses a semaphore when > 0.
-- **Per-frame gate parallelism**: gates 0/1/2 are evaluated concurrently for a generated frame.
+- **Per-frame gate evaluation**: Gate 0 runs first; if it passes, Gates 1 and 2 run concurrently when applicable.
 
 ## Checkpoint and Resume Flow
 

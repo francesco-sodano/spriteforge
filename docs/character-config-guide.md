@@ -196,7 +196,7 @@ animations:
 | `timing_ms` | **Yes** | Milliseconds per frame (higher = slower) |
 | `hit_frame` | No | Frame index where an attack connects |
 | `prompt_context` | No* | Visual description for AI generation |
-| `frame_descriptions` | No | Per-frame pose descriptions (length must equal `frames`) |
+| `frame_descriptions` | No | Per-frame pose descriptions (length must be <= `frames`) |
 
 \* Strongly recommended for quality. Empty `prompt_context` degrades output.
 
@@ -277,7 +277,25 @@ generation:
 | `gate_3a_max_retries` | `2` | Retries for row-level Gate 3A coherence failures |
 | `fallback_regen_frames` | `2` | Trailing frames to regenerate when Gate 3A feedback is non-specific |
 | `compact_grid_context` | `false` | RLE-compress anchor/previous grid context to reduce token usage |
+| `max_image_bytes` | `4000000` | Max image payload bytes for multimodal model requests |
+| `request_timeout_seconds` | `120.0` | Per-request timeout (seconds) for external model calls |
+| `max_anchor_regenerations` | `0` | Max anchor-row regeneration attempts for cascade recovery |
+| `anchor_regen_failure_ratio` | `1.0` | Failed-row ratio threshold to trigger anchor regeneration |
+| `allow_absolute_output_path` | `false` | Allow writing output outside workspace-relative paths |
 | `budget` | `null` | Optional LLM call budget controls (`max_llm_calls`, retries, warnings, token tracking) |
+
+### Budget Enforcement Modes
+
+When `generation.budget.max_llm_calls` is set:
+
+- `enforcement_mode: strict` blocks calls at the limit (no over-limit provider call).
+- `enforcement_mode: best_effort` allows continuation and logs warnings after the limit.
+
+For estimate planning, you can optionally tune:
+
+- `expected_reference_retry_rate`
+- `expected_frame_retry_rate`
+- `expected_row_retry_rate`
 
 ---
 

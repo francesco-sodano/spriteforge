@@ -7,6 +7,7 @@ SpriteForge generates game-ready 2D pixel-art spritesheets from a base character
 - **Two-stage generation pipeline** (reference strip + pixel-grid generation)
 - **YAML-driven character definitions** (palette, animations, generation rules)
 - **Verification gates + retry escalation** for quality control
+- **Per-request timeout protection** for external model calls
 - **Deterministic grid-to-PNG rendering** for stable output
 - **Automatic spritesheet assembly** with transparent PNG output
 - **CLI commands for generate, validate, and estimate**
@@ -52,6 +53,13 @@ spriteforge generate configs/examples/simple_enemy.yaml \
 ```
 
 For full YAML authoring details, see the [Character Config Guide](docs/character-config-guide.md).
+
+### Reliability Defaults
+
+- `generation.request_timeout_seconds` defaults to `120.0` seconds and is applied to
+  Stage 1 reference generation, Stage 2 grid generation, and LLM gate checks.
+- Budget strict mode now blocks calls at the configured limit (`max_llm_calls`),
+  so over-limit provider calls are prevented instead of allowing one extra call.
 
 ## Documentation
 
