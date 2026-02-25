@@ -14,6 +14,8 @@ completed rows, loading their saved outputs directly.
 from __future__ import annotations
 
 import json
+import os
+import threading
 from pathlib import Path
 from typing import Any
 
@@ -53,7 +55,20 @@ class CheckpointManager:
         self.checkpoint_dir = Path(checkpoint_dir)
         self.checkpoint_dir.mkdir(parents=True, exist_ok=True)
         self._corrupt_rows: set[int] = set()
+        self._lock = threading.RLock()
         logger.info("Checkpoint directory: %s", self.checkpoint_dir)
+
+    def _atomic_write_bytes(self, path: Path, data: bytes) -> None:
+        """Atomically write bytes to a path using same-directory temp file."""
+        tmp_path = path.with_name(
+            f".{path.name}.tmp-{os.getpid()}-{threading.get_ident()}"
+        )
+        tmp_path.write_bytes(data)
+        tmp_path.replace(path)
+
+    def _atomic_write_text(self, path: Path, text: str) -> None:
+        """Atomically write text to a path using same-directory temp file."""
+        self._atomic_write_bytes(path, text.encode("utf-8"))
 
     def save_row(
         self,
@@ -70,19 +85,20 @@ class CheckpointManager:
             strip_bytes: PNG bytes of the rendered row strip.
             grids: List of frame grids (each grid is a list of 64 strings).
         """
-        # Save PNG
-        png_path = self.checkpoint_dir / f"row_{row:03d}.png"
-        png_path.write_bytes(strip_bytes)
+        with self._lock:
+            # Save PNG
+            png_path = self.checkpoint_dir / f"row_{row:03d}.png"
+            self._atomic_write_bytes(png_path, strip_bytes)
 
-        # Save metadata + grids as JSON
-        json_path = self.checkpoint_dir / f"row_{row:03d}.json"
-        data: dict[str, Any] = {
-            "version": self.CHECKPOINT_VERSION,
-            "row": row,
-            "animation_name": animation_name,
-            "grids": grids,
-        }
-        json_path.write_text(json.dumps(data, indent=2))
+            # Save metadata + grids as JSON
+            json_path = self.checkpoint_dir / f"row_{row:03d}.json"
+            data: dict[str, Any] = {
+                "version": self.CHECKPOINT_VERSION,
+                "row": row,
+                "animation_name": animation_name,
+                "grids": grids,
+            }
+            self._atomic_write_text(json_path, json.dumps(data, indent=2))
 
         logger.debug(
             "Saved checkpoint for row %d (%s): %d frames",
@@ -100,63 +116,65 @@ class CheckpointManager:
         Returns:
             Tuple of (strip_bytes, grids) if checkpoint exists, else None.
         """
-        png_path = self.checkpoint_dir / f"row_{row:03d}.png"
-        json_path = self.checkpoint_dir / f"row_{row:03d}.json"
+        with self._lock:
+            png_path = self.checkpoint_dir / f"row_{row:03d}.png"
+            json_path = self.checkpoint_dir / f"row_{row:03d}.json"
 
-        if not png_path.exists() or not json_path.exists():
-            return None
+            if not png_path.exists() or not json_path.exists():
+                return None
 
-        strip_bytes = png_path.read_bytes()
+            strip_bytes = png_path.read_bytes()
 
-        try:
-            raw = json.loads(json_path.read_text())
-        except json.JSONDecodeError as exc:
-            logger.error("Checkpoint JSON for row %d is corrupt: %s", row, exc)
-            self._corrupt_rows.add(row)
-            return None
+            try:
+                raw = json.loads(json_path.read_text())
+            except json.JSONDecodeError as exc:
+                logger.error("Checkpoint JSON for row %d is corrupt: %s", row, exc)
+                self._corrupt_rows.add(row)
+                return None
 
-        if not isinstance(raw, dict):
-            logger.error(
-                "Checkpoint JSON for row %d has unexpected type %s; expected object",
+            if not isinstance(raw, dict):
+                logger.error(
+                    "Checkpoint JSON for row %d has unexpected type %s; expected object",
+                    row,
+                    type(raw).__name__,
+                )
+                self._corrupt_rows.add(row)
+                return None
+
+            version = int(raw.get("version", 0))
+            if version > self.CHECKPOINT_VERSION:
+                logger.error(
+                    "Checkpoint for row %d has unsupported version %d (max supported %d)",
+                    row,
+                    version,
+                    self.CHECKPOINT_VERSION,
+                )
+                self._corrupt_rows.add(row)
+                return None
+
+            if "grids" not in raw:
+                logger.error("Checkpoint for row %d is missing 'grids' key", row)
+                self._corrupt_rows.add(row)
+                return None
+
+            grids = raw["grids"]
+            if not isinstance(grids, list) or not all(
+                isinstance(g, list) and all(isinstance(r, str) for r in g)
+                for g in grids
+            ):
+                logger.error("Checkpoint for row %d has malformed 'grids' value", row)
+                self._corrupt_rows.add(row)
+                return None
+
+            logger.debug(
+                "Loaded checkpoint for row %d (%s): %d frames",
                 row,
-                type(raw).__name__,
+                raw.get("animation_name", "unknown"),
+                len(grids),
             )
-            self._corrupt_rows.add(row)
-            return None
+            self._corrupt_rows.discard(row)
 
-        version = int(raw.get("version", 0))
-        if version > self.CHECKPOINT_VERSION:
-            logger.error(
-                "Checkpoint for row %d has unsupported version %d (max supported %d)",
-                row,
-                version,
-                self.CHECKPOINT_VERSION,
-            )
-            self._corrupt_rows.add(row)
-            return None
-
-        if "grids" not in raw:
-            logger.error("Checkpoint for row %d is missing 'grids' key", row)
-            self._corrupt_rows.add(row)
-            return None
-
-        grids = raw["grids"]
-        if not isinstance(grids, list) or not all(
-            isinstance(g, list) and all(isinstance(r, str) for r in g) for g in grids
-        ):
-            logger.error("Checkpoint for row %d has malformed 'grids' value", row)
-            self._corrupt_rows.add(row)
-            return None
-
-        logger.debug(
-            "Loaded checkpoint for row %d (%s): %d frames",
-            row,
-            raw.get("animation_name", "unknown"),
-            len(grids),
-        )
-        self._corrupt_rows.discard(row)
-
-        return strip_bytes, grids
+            return strip_bytes, grids
 
     def completed_rows(self) -> set[int]:
         """Get the set of row indices that have completed checkpoints.
@@ -164,30 +182,31 @@ class CheckpointManager:
         Returns:
             Set of row indices (0-based) that have both PNG and JSON files.
         """
-        completed: set[int] = set()
+        with self._lock:
+            completed: set[int] = set()
 
-        # Look for row_NNN.json files
-        for json_path in self.checkpoint_dir.iterdir():
-            if not json_path.is_file():
-                continue
-            if not json_path.name.lower().startswith("row_"):
-                continue
-            if json_path.suffix.lower() != ".json":
-                continue
-            # Extract row number from filename
-            try:
-                row_num = int(json_path.stem.split("_")[1])
-                # Verify PNG exists too
-                png_matches = list(self.checkpoint_dir.glob(f"row_{row_num:03d}.*"))
-                has_png = any(
-                    p.is_file() and p.suffix.lower() == ".png" for p in png_matches
-                )
-                if has_png:
-                    completed.add(row_num)
-            except (ValueError, IndexError):
-                logger.warning("Skipping invalid checkpoint file: %s", json_path)
+            # Look for row_NNN.json files
+            for json_path in self.checkpoint_dir.iterdir():
+                if not json_path.is_file():
+                    continue
+                if not json_path.name.lower().startswith("row_"):
+                    continue
+                if json_path.suffix.lower() != ".json":
+                    continue
+                # Extract row number from filename
+                try:
+                    row_num = int(json_path.stem.split("_")[1])
+                    # Verify PNG exists too
+                    png_matches = list(self.checkpoint_dir.glob(f"row_{row_num:03d}.*"))
+                    has_png = any(
+                        p.is_file() and p.suffix.lower() == ".png" for p in png_matches
+                    )
+                    if has_png:
+                        completed.add(row_num)
+                except (ValueError, IndexError):
+                    logger.warning("Skipping invalid checkpoint file: %s", json_path)
 
-        return completed
+            return completed
 
     @property
     def corrupt_rows(self) -> set[int]:
@@ -200,27 +219,30 @@ class CheckpointManager:
         This should be called after the final spritesheet is successfully
         assembled and saved.
         """
-        if not self.checkpoint_dir.exists():
-            return
+        with self._lock:
+            if not self.checkpoint_dir.exists():
+                return
 
-        # Remove all checkpoint files
-        file_count = 0
-        for file_path in self.checkpoint_dir.iterdir():
-            if file_path.is_file():
-                file_path.unlink()
-                file_count += 1
+            # Remove all checkpoint files
+            file_count = 0
+            for file_path in self.checkpoint_dir.iterdir():
+                if file_path.is_file():
+                    file_path.unlink()
+                    file_count += 1
 
-        logger.info(
-            "Cleaned up %d checkpoint files from %s", file_count, self.checkpoint_dir
-        )
-
-        # Remove the checkpoint directory if empty
-        try:
-            self.checkpoint_dir.rmdir()
-            logger.debug("Removed checkpoint directory: %s", self.checkpoint_dir)
-        except OSError:
-            # Directory not empty (might have subdirs or other files)
-            logger.debug(
-                "Checkpoint directory not empty, skipping removal: %s",
+            logger.info(
+                "Cleaned up %d checkpoint files from %s",
+                file_count,
                 self.checkpoint_dir,
             )
+
+            # Remove the checkpoint directory if empty
+            try:
+                self.checkpoint_dir.rmdir()
+                logger.debug("Removed checkpoint directory: %s", self.checkpoint_dir)
+            except OSError:
+                # Directory not empty (might have subdirs or other files)
+                logger.debug(
+                    "Checkpoint directory not empty, skipping removal: %s",
+                    self.checkpoint_dir,
+                )

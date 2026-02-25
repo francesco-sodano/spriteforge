@@ -362,6 +362,40 @@ class TestPreprocessReference:
             f"{list(unmatched)[:5]}..."
         )
 
+    def test_preprocess_reference_semantic_labels_toggle(self, tmp_path: Path) -> None:
+        """semantic_labels flag controls descriptive naming in auto palette."""
+        img = _make_few_color_image(width=64, height=64, num_colors=6)
+        path = tmp_path / "ref_semantic_toggle.png"
+        _save_rgba(img, path)
+
+        descriptive = preprocess_reference(str(path), semantic_labels=True)
+        generic = preprocess_reference(str(path), semantic_labels=False)
+
+        descriptive_names = [c.element for c in descriptive.palette.colors]
+        generic_names = [c.element for c in generic.palette.colors]
+
+        assert any(not name.startswith("Color ") for name in descriptive_names)
+        assert all(name.startswith("Color ") for name in generic_names)
+
+    def test_extract_palette_ignores_transparent_background_rgb_pollution(self) -> None:
+        """Transparent background must not consume palette slots as black RGB."""
+        img = Image.new("RGBA", (64, 64), (0, 0, 0, 0))
+
+        # Small opaque islands with explicit colors.
+        for x in range(8):
+            for y in range(8):
+                img.putpixel((x, y), (220, 30, 30, 255))
+                img.putpixel((x + 12, y), (30, 220, 30, 255))
+
+        # With mostly transparent pixels, extraction should only include opaque colors.
+        palette = extract_palette_from_image(img, max_colors=16)
+        extracted_rgbs = {
+            (palette.outline.r, palette.outline.g, palette.outline.b),
+            *((c.r, c.g, c.b) for c in palette.colors),
+        }
+
+        assert extracted_rgbs == {(220, 30, 30), (30, 220, 30)}
+
 
 # ---------------------------------------------------------------------------
 # _assign_symbols

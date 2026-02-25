@@ -10,6 +10,7 @@ from unittest.mock import AsyncMock, MagicMock, call
 import pytest
 from PIL import Image
 
+from spriteforge.errors import GenerationError
 from spriteforge.models import AnimationDef, CharacterConfig
 from spriteforge.providers import (
     AzureChatProvider,
@@ -953,6 +954,106 @@ class TestAzureChatProviderResponseFormat:
         assert "response_format" not in call_kwargs
         assert call_kwargs["model"] == "test-model"
         assert call_kwargs["temperature"] == 1.0
+
+
+class TestAzureChatProviderFailureSemantics:
+    """Tests for Azure provider failure paths that must surface as GenerationError."""
+
+    @pytest.mark.asyncio
+    async def test_rate_limit_429_raises_generation_error(self) -> None:
+        provider = AzureChatProvider(
+            azure_endpoint="https://example.openai.azure.com",
+            model_deployment_name="test-model",
+            credential=AsyncMock(),
+        )
+        mock_client = AsyncMock()
+        mock_client.chat.completions.create = AsyncMock(
+            side_effect=RuntimeError("429 Too Many Requests")
+        )
+        provider._client = mock_client
+
+        with pytest.raises(
+            GenerationError, match="Azure chat completion failed"
+        ) as exc:
+            await provider.chat(messages=[{"role": "user", "content": "hi"}])
+
+        assert "429" in str(exc.value)
+
+    @pytest.mark.asyncio
+    async def test_expired_credential_raises_generation_error(self) -> None:
+        provider = AzureChatProvider(
+            azure_endpoint="https://example.openai.azure.com",
+            model_deployment_name="test-model",
+            credential=AsyncMock(),
+        )
+        mock_client = AsyncMock()
+        mock_client.chat.completions.create = AsyncMock(
+            side_effect=RuntimeError("401 Unauthorized: token expired")
+        )
+        provider._client = mock_client
+
+        with pytest.raises(
+            GenerationError, match="Azure chat completion failed"
+        ) as exc:
+            await provider.chat(messages=[{"role": "user", "content": "hi"}])
+
+        assert "token expired" in str(exc.value)
+
+    @pytest.mark.asyncio
+    async def test_transient_5xx_raises_generation_error(self) -> None:
+        provider = AzureChatProvider(
+            azure_endpoint="https://example.openai.azure.com",
+            model_deployment_name="test-model",
+            credential=AsyncMock(),
+        )
+        mock_client = AsyncMock()
+        mock_client.chat.completions.create = AsyncMock(
+            side_effect=RuntimeError("503 Service Unavailable")
+        )
+        provider._client = mock_client
+
+        with pytest.raises(
+            GenerationError, match="Azure chat completion failed"
+        ) as exc:
+            await provider.chat(messages=[{"role": "user", "content": "hi"}])
+
+        assert "503" in str(exc.value)
+
+    @pytest.mark.asyncio
+    async def test_unsupported_temperature_retries_without_temperature(self) -> None:
+        provider = AzureChatProvider(
+            azure_endpoint="https://example.openai.azure.com",
+            model_deployment_name="test-model",
+            credential=AsyncMock(),
+        )
+        mock_client = AsyncMock()
+
+        mock_message = MagicMock()
+        mock_message.content = "ok"
+        mock_choice = MagicMock()
+        mock_choice.message = mock_message
+        mock_response = MagicMock()
+        mock_response.choices = [mock_choice]
+
+        mock_client.chat.completions.create = AsyncMock(
+            side_effect=[
+                RuntimeError("temperature is unsupported for this deployment"),
+                mock_response,
+            ]
+        )
+        provider._client = mock_client
+
+        result = await provider.chat(
+            messages=[{"role": "user", "content": "hi"}],
+            temperature=0.2,
+        )
+
+        assert result == "ok"
+        assert mock_client.chat.completions.create.call_count == 2
+        first_call = mock_client.chat.completions.create.call_args_list[0].kwargs
+        second_call = mock_client.chat.completions.create.call_args_list[1].kwargs
+        assert "temperature" in first_call
+        assert "temperature" not in second_call
 
 
 # ---------------------------------------------------------------------------

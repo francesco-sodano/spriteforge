@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import threading
+import time
 from pathlib import Path
 
 import pytest
@@ -298,3 +300,97 @@ class TestCheckpointManager:
         assert len(grids2) == 2
         assert len(grids2_again) == 2
         assert grids2 == grids2_again
+
+    def test_save_row_serialized_by_lock(self, tmp_path: Path) -> None:
+        """Concurrent save_row calls for same row are serialized by manager lock."""
+        manager = CheckpointManager(tmp_path / "checkpoints")
+        grids = [_make_grid()]
+
+        original_write_bytes = manager._atomic_write_bytes
+        first_entered = threading.Event()
+        allow_first_to_finish = threading.Event()
+        call_count = 0
+        call_count_lock = threading.Lock()
+
+        def blocked_first_write(path: Path, data: bytes) -> None:
+            nonlocal call_count
+            with call_count_lock:
+                call_count += 1
+                current = call_count
+            if current == 1:
+                first_entered.set()
+                assert allow_first_to_finish.wait(timeout=2.0)
+            original_write_bytes(path, data)
+
+        manager._atomic_write_bytes = blocked_first_write  # type: ignore[method-assign]
+
+        excs: list[BaseException] = []
+
+        def worker() -> None:
+            try:
+                manager.save_row(0, "idle", _TINY_PNG, grids)
+            except BaseException as exc:  # pragma: no cover - assertion aid
+                excs.append(exc)
+
+        t1 = threading.Thread(target=worker)
+        t2 = threading.Thread(target=worker)
+
+        t1.start()
+        assert first_entered.wait(timeout=2.0)
+        t2.start()
+
+        # While first call is blocked inside save_row, second should be blocked on lock.
+        time.sleep(0.05)
+        with call_count_lock:
+            observed_while_blocked = call_count
+        assert observed_while_blocked == 1
+
+        allow_first_to_finish.set()
+        t1.join(timeout=2.0)
+        t2.join(timeout=2.0)
+
+        assert not excs
+        with call_count_lock:
+            assert call_count == 4  # 2 saves × (PNG + JSON)
+
+        loaded = manager.load_row(0)
+        assert loaded is not None
+        loaded_bytes, loaded_grids = loaded
+        assert loaded_bytes == _TINY_PNG
+        assert loaded_grids == grids
+
+    def test_concurrent_save_and_load_never_marks_corrupt(self, tmp_path: Path) -> None:
+        """Concurrent save/load operations should not produce false corruption flags."""
+        manager = CheckpointManager(tmp_path / "checkpoints")
+        stop = threading.Event()
+        excs: list[BaseException] = []
+
+        def writer() -> None:
+            try:
+                for _ in range(100):
+                    manager.save_row(0, "idle", _TINY_PNG, [_make_grid()])
+            except BaseException as exc:  # pragma: no cover - assertion aid
+                excs.append(exc)
+            finally:
+                stop.set()
+
+        def reader() -> None:
+            try:
+                while not stop.is_set():
+                    loaded = manager.load_row(0)
+                    if loaded is not None:
+                        _strip, grids = loaded
+                        assert len(grids) == 1
+            except BaseException as exc:  # pragma: no cover - assertion aid
+                excs.append(exc)
+
+        t_write = threading.Thread(target=writer)
+        t_read = threading.Thread(target=reader)
+        t_write.start()
+        t_read.start()
+
+        t_write.join(timeout=5.0)
+        t_read.join(timeout=5.0)
+
+        assert not excs
+        assert manager.corrupt_rows == set()

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import io
 import os
 from pathlib import Path
@@ -631,6 +632,86 @@ class TestRunFullPipeline:
         # 2 rows: 14*64 x 2*64
         assert output_img.width == 14 * 64
         assert output_img.height == 2 * 64
+
+
+class TestRunLargeScaleConcurrency:
+    """Large-scale workflow tests for row/frame volume and concurrency branching."""
+
+    @pytest.mark.asyncio
+    async def test_large_scale_with_concurrency_cap(
+        self,
+        sample_palette: PaletteConfig,
+        tmp_path: Path,
+    ) -> None:
+        animations: list[AnimationDef] = []
+        for row in range(21):
+            animations.append(
+                AnimationDef(
+                    name=f"anim_{row}",
+                    row=row,
+                    frames=14,
+                    timing_ms=100,
+                    prompt_context=f"Animation {row}",
+                )
+            )
+
+        config = SpritesheetSpec(
+            character=CharacterConfig(
+                name="ScaleChar",
+                frame_width=64,
+                frame_height=64,
+                spritesheet_columns=14,
+            ),
+            animations=animations,
+            palette=sample_palette,
+            generation=GenerationConfig(),
+        )
+
+        reference_provider = AsyncMock(spec=ReferenceProvider)
+        reference_provider.generate_row_strip = AsyncMock(
+            return_value=_make_strip_image(14)
+        )
+        reference_provider.close = AsyncMock()
+
+        wf = _build_workflow(
+            config,
+            sample_palette,
+            reference_provider=reference_provider,
+        )
+        wf.max_concurrent_rows = 4
+
+        active_rows = 0
+        max_active_rows = 0
+        active_rows_lock = asyncio.Lock()
+
+        async def mocked_process_row(*args: Any, **kwargs: Any) -> list[list[str]]:
+            nonlocal active_rows, max_active_rows
+            animation = args[1]
+            async with active_rows_lock:
+                active_rows += 1
+                max_active_rows = max(max_active_rows, active_rows)
+            try:
+                await asyncio.sleep(0.01)
+                return [_make_sprite_grid() for _ in range(animation.frames)]
+            finally:
+                async with active_rows_lock:
+                    active_rows -= 1
+
+        wf.row_processor.process_row = mocked_process_row  # type: ignore[method-assign]
+
+        ref_img = Image.new("RGBA", (64, 64), (100, 100, 100, 255))
+        ref_path = tmp_path / "ref.png"
+        ref_img.save(str(ref_path))
+        out_path = tmp_path / "out_large_scale.png"
+
+        result = await wf.run(ref_path, out_path)
+
+        assert result == out_path
+        assert out_path.exists()
+        output_img = Image.open(str(out_path))
+        assert output_img.width == 14 * 64
+        assert output_img.height == 21 * 64
+        assert max_active_rows <= 4
 
 
 class TestPrevFramePassedToGenerator:
