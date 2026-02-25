@@ -10,6 +10,7 @@ import asyncio
 import logging
 import sys
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -34,6 +35,7 @@ from spriteforge import (
     validate_config,
 )
 from spriteforge.errors import SpriteForgeError
+from spriteforge.observability import write_run_summary
 
 console = Console()
 
@@ -46,12 +48,12 @@ class _ProgressState:
     task_id: TaskID | None = None
 
 
-def _setup_logging(verbose: bool) -> None:
+def _setup_logging(verbose: bool, json_logs: bool = False) -> None:
     """Configure logging based on verbose flag."""
     if verbose:
-        setup_logging(level=logging.DEBUG)
+        setup_logging(level=logging.DEBUG, json_logs=json_logs)
     else:
-        setup_logging(level=logging.INFO)
+        setup_logging(level=logging.INFO, json_logs=json_logs)
 
 
 @click.group()
@@ -102,6 +104,16 @@ def main() -> None:
     is_flag=True,
     help="Enable detailed logging",
 )
+@click.option(
+    "--json-logs",
+    is_flag=True,
+    help="Emit structured JSON logs to stderr",
+)
+@click.option(
+    "--run-summary",
+    type=click.Path(path_type=Path),
+    help="Write run metrics JSON to this path",
+)
 def generate(
     config_path: Path,
     output: Path | None,
@@ -110,6 +122,8 @@ def generate(
     resume: bool,
     checkpoint_dir: Path | None,
     verbose: bool,
+    json_logs: bool,
+    run_summary: Path | None,
 ) -> None:
     """Generate a spritesheet from a character configuration.
 
@@ -130,7 +144,7 @@ def generate(
             --resume \\
             --verbose
     """
-    _setup_logging(verbose)
+    _setup_logging(verbose, json_logs=json_logs)
 
     try:
         # Load configuration
@@ -189,6 +203,7 @@ def generate(
                 max_concurrent_rows=max_concurrent_rows,
                 checkpoint_dir=checkpoint_dir,
                 verbose=verbose,
+                run_summary_path=run_summary,
             )
         )
 
@@ -212,6 +227,7 @@ async def _run_generation(
     max_concurrent_rows: int,
     checkpoint_dir: Path | None,
     verbose: bool,
+    run_summary_path: Path | None,
 ) -> None:
     """Run the generation workflow with progress display."""
     total_rows = len(config.animations)
@@ -236,6 +252,22 @@ async def _run_generation(
 
         # Track current stage
         state = _ProgressState()
+        metrics_getter: Any = None
+
+        def _row_stage_description(current: int, total: int) -> str:
+            retry_text = ""
+            gate_text = ""
+            if callable(metrics_getter):
+                metrics = metrics_getter()
+                retries = int(metrics.get("retries_total", 0))
+                last_failed_gate = metrics.get("last_failed_gate")
+                retry_text = f" retries:{retries}"
+                if isinstance(last_failed_gate, str) and last_failed_gate:
+                    gate_text = f" last_fail:{last_failed_gate}"
+            return (
+                f"[cyan]Generating rows...{current}/{total}"
+                f"{retry_text}{gate_text}"
+            )
 
         def progress_callback(stage_name: str, current: int, total: int) -> None:
             """Update progress based on stage."""
@@ -251,7 +283,11 @@ async def _run_generation(
                     progress.start_task(row_task)
                     state.stage_name = "row"
                     state.task_id = row_task
-                progress.update(row_task, completed=current)
+                progress.update(
+                    row_task,
+                    completed=current,
+                    description=_row_stage_description(current, total),
+                )
 
         # Create workflow
         with console.status("[bold blue]Creating workflow..."):
@@ -260,6 +296,7 @@ async def _run_generation(
                 max_concurrent_rows=max_concurrent_rows,
                 checkpoint_dir=checkpoint_dir,
             ) as workflow:
+                metrics_getter = workflow.get_run_metrics_snapshot
                 # Run generation
                 result = await workflow.run(
                     base_reference_path=base_reference_path,
@@ -267,8 +304,32 @@ async def _run_generation(
                     progress_callback=progress_callback,
                 )
 
+                metrics_snapshot = workflow.get_run_metrics_snapshot()
+
+                if run_summary_path is not None:
+                    payload = {
+                        "character": config.character.name,
+                        "output_path": str(result),
+                        "generated_at": datetime.now(timezone.utc).isoformat(),
+                        "metrics": metrics_snapshot,
+                    }
+                    write_run_summary(run_summary_path, payload)
+                    console.print(
+                        f"[bold green]✓[/] Run summary written: [bold]{run_summary_path}[/]"
+                    )
+
         console.print()
         console.print(f"[bold green]✓[/] Spritesheet generated: [bold]{result}[/]")
+        if metrics_snapshot:
+            token_usage = metrics_snapshot.get("token_usage", {})
+            total_tokens = int(token_usage.get("total_tokens", 0))
+            console.print(
+                "  Metrics: "
+                f"calls={metrics_snapshot.get('llm_calls_total', 0)} "
+                f"retries={metrics_snapshot.get('retries_total', 0)} "
+                f"tokens={total_tokens} "
+                f"last_failed_gate={metrics_snapshot.get('last_failed_gate') or 'none'}"
+            )
 
 
 @main.command()

@@ -18,6 +18,7 @@ from spriteforge.models import (
     PaletteConfig,
     SpritesheetSpec,
 )
+from spriteforge.observability import RunMetricsCollector
 from spriteforge.providers._base import ProviderError, ReferenceProvider
 from spriteforge.prompts.providers import build_reference_prompt
 from spriteforge.renderer import frame_to_png_bytes, render_frame, render_row_strip
@@ -35,12 +36,14 @@ class RowProcessor:
         gate_checker: LLMGateChecker,
         reference_provider: ReferenceProvider,
         call_tracker: Any | None = None,
+        metrics_collector: RunMetricsCollector | None = None,
     ) -> None:
         self.config = config
         self.frame_generator = frame_generator
         self.gate_checker = gate_checker
         self.reference_provider = reference_provider
         self.call_tracker = call_tracker
+        self.metrics_collector = metrics_collector
         self._closed = False
 
     async def close(self) -> None:
@@ -64,6 +67,12 @@ class RowProcessor:
             int(usage.get("prompt_tokens", 0)),
             int(usage.get("completion_tokens", 0)),
         )
+
+    def _record_gate_verdict(self, verdict: GateVerdict) -> None:
+        """Record gate pass/fail metrics when collector exists."""
+        if self.metrics_collector is None:
+            return
+        self.metrics_collector.record_gate_verdict(verdict)
 
     async def process_anchor_row(
         self,
@@ -223,6 +232,7 @@ class RowProcessor:
                 row_strip_bytes, ref_strip_bytes, animation
             )
             self._record_usage_from_verdict(verdict)
+            self._record_gate_verdict(verdict)
             if verdict.passed:
                 return
 
@@ -306,6 +316,7 @@ class RowProcessor:
                 strip_bytes, base_reference, animation
             )
             self._record_usage_from_verdict(verdict)
+            self._record_gate_verdict(verdict)
             if verdict.passed:
                 return strip
             logger.warning(

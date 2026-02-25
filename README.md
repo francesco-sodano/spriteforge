@@ -10,6 +10,8 @@ SpriteForge generates game-ready 2D pixel-art spritesheets from a base character
 - **Deterministic grid-to-PNG rendering** for stable output
 - **Automatic spritesheet assembly** with transparent PNG output
 - **CLI commands for generate, validate, and estimate**
+- **Optional structured JSON logs** for log aggregation
+- **Run summary JSON export** with retries, gate outcomes, and token usage
 - **Optional auto-palette extraction** from base references
 
 ## Requirements
@@ -42,6 +44,11 @@ Start from `configs/template.yaml` (or an example in `configs/examples/`), then 
 spriteforge validate configs/examples/simple_enemy.yaml
 spriteforge estimate configs/examples/simple_enemy.yaml
 spriteforge generate configs/examples/simple_enemy.yaml
+
+# Observability-focused run
+spriteforge generate configs/examples/simple_enemy.yaml \
+  --json-logs \
+  --run-summary output/simple_enemy_run_summary.json
 ```
 
 For full YAML authoring details, see the [Character Config Guide](docs/character-config-guide.md).

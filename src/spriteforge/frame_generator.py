@@ -13,6 +13,7 @@ from spriteforge.errors import RetryExhaustedError
 from spriteforge.gates import GateVerdict, LLMGateChecker, ProgrammaticChecker
 from spriteforge.generator import GridGenerator
 from spriteforge.models import AnimationDef, FrameContext, GenerationConfig
+from spriteforge.observability import RunMetricsCollector
 from spriteforge.renderer import frame_to_png_bytes, render_frame
 from spriteforge.retry import RetryManager
 
@@ -37,6 +38,7 @@ class FrameGenerator:
         retry_manager: RetryManager,
         generation_config: GenerationConfig,
         call_tracker: Any | None = None,
+        metrics_collector: RunMetricsCollector | None = None,
     ) -> None:
         """Initialize the frame generator.
 
@@ -54,6 +56,7 @@ class FrameGenerator:
         self.retry_manager = retry_manager
         self.generation_config = generation_config
         self.call_tracker = call_tracker
+        self.metrics_collector = metrics_collector
         self._closed = False
 
     async def close(self) -> None:
@@ -84,6 +87,13 @@ class FrameGenerator:
             usage = verdict.details.get("token_usage")
             if isinstance(usage, dict):
                 self._record_usage(usage)
+
+    def _record_gate_verdicts(self, verdicts: list[GateVerdict]) -> None:
+        """Record gate verdict pass/fail metrics when collector exists."""
+        if self.metrics_collector is None:
+            return
+        for verdict in verdicts:
+            self.metrics_collector.record_gate_verdict(verdict)
 
     async def generate_verified_frame(
         self,
@@ -157,6 +167,7 @@ class FrameGenerator:
 
             # Programmatic checks (fast-fail)
             prog_verdicts = self.programmatic_checker.run_all(grid, context)
+            self._record_gate_verdicts(prog_verdicts)
             prog_failures = [v for v in prog_verdicts if not v.passed]
             if prog_failures:
                 retry_ctx = self.retry_manager.record_failure(
@@ -179,6 +190,7 @@ class FrameGenerator:
                 is_anchor=is_anchor,
             )
             self._record_usage_from_gate_verdicts(llm_verdicts)
+            self._record_gate_verdicts(llm_verdicts)
 
             llm_failures = [v for v in llm_verdicts if not v.passed]
             if llm_failures:

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import logging
 import os
 import tempfile
@@ -177,6 +178,34 @@ class TestSetupLogging:
         ]
         assert len(stream_handlers) == 1
         assert stream_handlers[0].stream is sys.stderr
+
+    def test_json_logs_formatter_emits_json(self) -> None:
+        """json_logs=True configures a formatter that outputs JSON objects."""
+        setup_logging(json_logs=True)
+        logger = logging.getLogger("spriteforge")
+        stream_handlers = [
+            h
+            for h in logger.handlers
+            if isinstance(h, logging.StreamHandler)
+            and not isinstance(h, logging.FileHandler)
+        ]
+        assert len(stream_handlers) == 1
+
+        record = logging.LogRecord(
+            name="spriteforge.test",
+            level=logging.INFO,
+            pathname=__file__,
+            lineno=1,
+            msg="hello",
+            args=(),
+            exc_info=None,
+        )
+        payload = json.loads(stream_handlers[0].formatter.format(record))
+
+        assert payload["level"] == "INFO"
+        assert payload["logger"] == "spriteforge.test"
+        assert payload["message"] == "hello"
+        assert "timestamp" in payload
 
 
 class TestFormatStrings:

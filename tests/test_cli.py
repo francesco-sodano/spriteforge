@@ -72,6 +72,8 @@ def test_generate_help(cli_runner: CliRunner) -> None:
     assert "--output" in result.output
     assert "--base-image" in result.output
     assert "--verbose" in result.output
+    assert "--json-logs" in result.output
+    assert "--run-summary" in result.output
 
 
 def test_generate_missing_config(cli_runner: CliRunner) -> None:

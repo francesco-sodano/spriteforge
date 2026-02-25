@@ -14,6 +14,7 @@ the next attempt.
 from __future__ import annotations
 
 from enum import Enum
+from typing import Protocol
 
 from pydantic import BaseModel
 
@@ -26,6 +27,13 @@ from spriteforge.prompts.retry import (
 )
 
 logger = get_logger("retry")
+
+
+class RetryMetricsSink(Protocol):
+    """Protocol for retry metrics collection."""
+
+    def record_retry(self, tier: str) -> None:
+        """Record a retry attempt for the given tier."""
 
 # ---------------------------------------------------------------------------
 # Retry tier
@@ -116,6 +124,7 @@ class RetryManager:
         config: RetryConfig | None = None,
         frame_width: int = 64,
         frame_height: int = 64,
+        metrics_sink: RetryMetricsSink | None = None,
     ) -> None:
         """Initialize with optional custom configuration.
 
@@ -128,6 +137,7 @@ class RetryManager:
         self._config = config or RetryConfig()
         self._frame_width = frame_width
         self._frame_height = frame_height
+        self._metrics_sink = metrics_sink
 
     # -- tier & temperature -------------------------------------------------
 
@@ -226,6 +236,8 @@ class RetryManager:
                 tier.value,
                 temperature,
             )
+            if self._metrics_sink is not None:
+                self._metrics_sink.record_retry(tier.value)
         else:
             logger.error(
                 "All %d retries exhausted for %s",
