@@ -106,10 +106,21 @@ class AnchorRecoveryPolicy:
 def _resolve_output_path(output_path: str | Path, allow_absolute: bool) -> Path:
     """Resolve output path with optional absolute-path policy enforcement."""
     out = Path(output_path)
-    _ = allow_absolute
-    return (
-        out.resolve() if out.is_absolute() else (Path.cwd().resolve() / out).resolve()
-    )
+    if out.is_absolute() and not allow_absolute:
+        raise ValueError(
+            "Absolute output paths are disabled. "
+            "Set generation.allow_absolute_output_path=true to allow them."
+        )
+    if out.is_absolute():
+        return out.resolve()
+
+    if ".." in out.parts and not allow_absolute:
+        raise ValueError(
+            "Relative output paths must not contain parent-directory traversal "
+            "segments ('..') when generation.allow_absolute_output_path is false"
+        )
+
+    return (Path.cwd().resolve() / out).resolve()
 
 
 async def assemble_final_spritesheet(
@@ -345,6 +356,7 @@ class SpriteForgeWorkflow:
                 frame_width=self.config.character.frame_width,
                 frame_height=self.config.character.frame_height,
                 max_colors=self.config.generation.max_palette_colors,
+                semantic_labels=self.config.generation.semantic_labels,
             )
             quantized_reference = preprocess_result.quantized_png_bytes
 

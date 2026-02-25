@@ -334,20 +334,33 @@ def parse_verdict_response(response_text: str, gate_name: str) -> GateVerdict:
 
     try:
         data: Any = json.loads(text)
-    except json.JSONDecodeError:
+    except json.JSONDecodeError as exc:
+        logger.warning(
+            "Gate verdict parse fallback for %s: invalid JSON (%s). Raw response prefix: %r",
+            gate_name,
+            exc,
+            response_text[:200],
+        )
         return GateVerdict(
             gate_name=gate_name,
             passed=False,
             confidence=0.0,
             feedback=f"Failed to parse gate response as JSON: {response_text[:200]}",
+            details={"parser_fallback": "json_decode_error"},
         )
 
     if not isinstance(data, dict):
+        logger.warning(
+            "Gate verdict parse fallback for %s: response was not a JSON object. Raw response prefix: %r",
+            gate_name,
+            response_text[:200],
+        )
         return GateVerdict(
             gate_name=gate_name,
             passed=False,
             confidence=0.0,
             feedback=f"Gate response is not a JSON object: {response_text[:200]}",
+            details={"parser_fallback": "non_object_json"},
         )
 
     passed = bool(data.get("passed", False))

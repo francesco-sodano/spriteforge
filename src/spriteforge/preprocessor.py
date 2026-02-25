@@ -525,6 +525,7 @@ def extract_palette_from_image(
     max_colors: int = 16,
     outline_color: tuple[int, int, int] | None = None,
     semantic_labels: list[str] | None = None,
+    use_descriptive_names: bool = False,
 ) -> PaletteConfig:
     """Extract a PaletteConfig from a PIL Image.
 
@@ -536,6 +537,9 @@ def extract_palette_from_image(
         outline_color: Optional forced outline color. If None, uses darkest.
         semantic_labels: Optional semantic labels for colors (excluding outline).
             If provided and length matches, these are used instead of "Color N".
+        use_descriptive_names: When True and semantic_labels is not provided,
+            use descriptive color names (for example, "Dark Brown") instead
+            of generic "Color N" names.
 
     Returns:
         A PaletteConfig with auto-assigned symbols.
@@ -590,8 +594,15 @@ def extract_palette_from_image(
 
         outline_index = min(range(len(colors)), key=lambda i: _luminance(colors[i]))
 
+    labels = semantic_labels
+    if labels is None and use_descriptive_names:
+        entries = list(zip(colors, coverage, range(len(colors))))
+        remaining = [entry for i, entry in enumerate(entries) if i != outline_index]
+        remaining.sort(key=lambda entry: entry[1], reverse=True)
+        labels = [_describe_color(color) for color, _count, _orig_idx in remaining]
+
     # Assign symbols
-    assignments = _assign_symbols(colors, coverage, outline_index, semantic_labels)
+    assignments = _assign_symbols(colors, coverage, outline_index, labels)
 
     # Build PaletteConfig
     outline_entry = assignments[0]  # Always first (outline)
@@ -624,6 +635,7 @@ def preprocess_reference(
     frame_height: int = 64,
     max_colors: int = 16,
     outline_color: tuple[int, int, int] | None = None,
+    semantic_labels: bool = True,
 ) -> PreprocessResult:
     """Preprocess a base reference image for the generation pipeline.
 
@@ -642,6 +654,8 @@ def preprocess_reference(
             Does not count the transparent color.
         outline_color: Optional forced outline color (R, G, B).
             If None, the darkest color in the image is used.
+        semantic_labels: When True, use descriptive color names in the
+            auto-generated palette. When False, use generic "Color N" names.
 
     Returns:
         PreprocessResult with quantized image and auto-generated palette.
@@ -681,7 +695,12 @@ def preprocess_reference(
     # Step 4: Extract palette from the already-quantized image
     # This guarantees the palette symbols match the quantized image pixels exactly,
     # avoiding the double-quantization inconsistency.
-    palette = extract_palette_from_image(quantized_image, max_colors, outline_color)
+    palette = extract_palette_from_image(
+        quantized_image,
+        max_colors,
+        outline_color,
+        use_descriptive_names=semantic_labels,
+    )
 
     # Count final unique opaque colors
     raw_q = quantized_image.tobytes()

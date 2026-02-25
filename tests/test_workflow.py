@@ -169,6 +169,8 @@ def _build_workflow(
     preprocessor: Any = None,
 ) -> SpriteForgeWorkflow:
     """Build a SpriteForgeWorkflow with mock dependencies."""
+    config.generation.allow_absolute_output_path = True
+
     if reference_provider is None:
         reference_provider = AsyncMock(spec=ReferenceProvider)
         reference_provider.generate_row_strip = AsyncMock(
@@ -770,6 +772,7 @@ class TestRunWithPreprocessorAutoPalette:
         await wf.run(ref_path, out_path)
 
         mock_preprocessor.assert_called_once()
+        assert mock_preprocessor.call_args.kwargs["semantic_labels"] is True
         # Config should NOT have been mutated — palette stays original
         assert wf.config.palette.name == "P1"
 
@@ -803,8 +806,32 @@ class TestRunWithPreprocessorManualPalette:
 
         await wf.run(ref_path, out_path)
 
+        mock_preprocessor.assert_called_once()
+        assert mock_preprocessor.call_args.kwargs["semantic_labels"] is True
         # Original palette should remain (auto_palette=False by default)
         assert wf.config.palette.name == "P1"
+
+
+class TestOutputPathPolicy:
+    """Output path enforcement follows allow_absolute_output_path."""
+
+    @pytest.mark.asyncio
+    async def test_absolute_output_disallowed_by_default(
+        self,
+        single_row_config: SpritesheetSpec,
+        sample_palette: PaletteConfig,
+        tmp_path: Path,
+    ) -> None:
+        single_row_config.generation.allow_absolute_output_path = False
+        wf = _build_workflow(single_row_config, sample_palette)
+        wf.config.generation.allow_absolute_output_path = False
+
+        ref_img = Image.new("RGBA", (64, 64), (100, 100, 100, 255))
+        ref_path = tmp_path / "ref.png"
+        ref_img.save(str(ref_path))
+
+        with pytest.raises(ValueError, match="Absolute output paths are disabled"):
+            await wf.run(ref_path, tmp_path / "abs_out.png")
 
 
 class TestRunWithoutPreprocessor:

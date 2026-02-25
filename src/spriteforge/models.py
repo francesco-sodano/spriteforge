@@ -215,6 +215,9 @@ class GenerationConfig(BaseModel):
             is enabled.  Default 16 (1 outline + 15 character colors).
             Limited to 23 (1 outline symbol + 22 available symbols in
             SYMBOL_POOL; '.' transparent symbol is implicit).
+        semantic_labels: When True, auto-palette extraction assigns
+            descriptive color names (e.g., "Dark Brown"). When False,
+            extracted colors use generic names ("Color N").
         grid_model: Azure AI Foundry model deployment name for Stage 2 grid
             generation (needs strong spatial reasoning).
         gate_model: Azure AI Foundry model deployment name for verification

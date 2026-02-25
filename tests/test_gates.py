@@ -464,6 +464,24 @@ class TestParseVerdictResponse:
         verdict = parse_verdict_response("This is not JSON at all", "gate_0")
         assert verdict.passed is False
         assert verdict.confidence == 0.0
+        assert verdict.details.get("parser_fallback") == "json_decode_error"
+
+    def test_parse_verdict_invalid_logs_gate_name(
+        self, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        """Fallback logging includes the gate identifier for diagnostics."""
+        with caplog.at_level("WARNING"):
+            parse_verdict_response("not-json", "gate_2")
+
+        assert "gate_2" in caplog.text
+        assert "parse fallback" in caplog.text.lower()
+
+    def test_parse_verdict_non_object_defaults_to_fail(self) -> None:
+        """JSON arrays are rejected and fail closed with fallback details."""
+        verdict = parse_verdict_response('["not", "an", "object"]', "gate_1")
+        assert verdict.passed is False
+        assert verdict.confidence == 0.0
+        assert verdict.details.get("parser_fallback") == "non_object_json"
 
 
 # ---------------------------------------------------------------------------

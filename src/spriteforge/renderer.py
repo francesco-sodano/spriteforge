@@ -6,6 +6,7 @@ import io
 
 from PIL import Image
 
+from spriteforge.errors import RenderError
 from spriteforge.models import FrameContext
 
 
@@ -29,7 +30,7 @@ def render_frame(
 
     Raises:
         ValueError: If grid dimensions do not match expected size.
-        KeyError: If a symbol in the grid is not found in context.palette_map.
+        RenderError: If a symbol in the grid is not found in context.palette_map.
     """
     frame_width = context.frame_width
     frame_height = context.frame_height
@@ -48,7 +49,7 @@ def render_frame(
     for y, row in enumerate(grid):
         for x, symbol in enumerate(row):
             if symbol not in palette_map:
-                raise KeyError(f"Unknown palette symbol {symbol!r} at ({x}, {y})")
+                raise RenderError(f"Unknown palette symbol {symbol!r} at ({x}, {y})")
             r, g, b, a = palette_map[symbol]
             buf[offset] = r
             buf[offset + 1] = g

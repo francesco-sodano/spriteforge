@@ -15,6 +15,7 @@ from spriteforge.models import (
     PaletteConfig,
 )
 from spriteforge.palette import build_palette_map
+from spriteforge.errors import RenderError
 from spriteforge.renderer import (
     frame_to_png_bytes,
     render_frame,
@@ -122,11 +123,11 @@ class TestRenderFrame:
             render_frame(grid, context)
 
     def test_render_frame_unknown_symbol(self, simple_palette: PaletteConfig) -> None:
-        """Grid with 'X' not in palette → KeyError."""
+        """Grid with 'X' not in palette → RenderError."""
         context = _make_context(simple_palette)
         grid = _make_grid(".")
         grid[0] = "X" + "." * 63
-        with pytest.raises(KeyError, match="Unknown palette symbol"):
+        with pytest.raises(RenderError, match="Unknown palette symbol"):
             render_frame(grid, context)
 
 
