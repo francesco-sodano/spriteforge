@@ -285,6 +285,44 @@ class TestRowProcessorTimeouts:
         assert ref_provider.generate_row_strip.call_count == 2
         assert gate_checker.gate_minus_1.call_count == 2
 
+    @pytest.mark.asyncio
+    async def test_gate_3a_timeout_retries_and_recovers(
+        self,
+        sample_config: SpritesheetSpec,
+        sample_palette: PaletteConfig,
+    ) -> None:
+        gate_checker = AsyncMock(spec=LLMGateChecker)
+        gate_checker.gate_minus_1 = AsyncMock(
+            return_value=_passing_verdict("gate_minus_1")
+        )
+        gate_checker.gate_3a = AsyncMock(
+            side_effect=[
+                GateError("gate_3a request timed out after 0.1s"),
+                _passing_verdict("gate_3a"),
+            ]
+        )
+
+        ref_provider = AsyncMock(spec=ReferenceProvider)
+        ref_provider.generate_row_strip = AsyncMock(return_value=_make_strip_image(3))
+
+        row_processor = _build_row_processor(
+            sample_config,
+            reference_provider=ref_provider,
+            gate_checker=gate_checker,
+        )
+        palette_map = build_palette_map(sample_palette)
+
+        _, _, frame_grids = await row_processor.process_anchor_row(
+            base_reference=_TINY_PNG,
+            animation=sample_config.animations[0],
+            palette=sample_palette,
+            palette_map=palette_map,
+            quantized_reference=None,
+        )
+
+        assert len(frame_grids) == sample_config.animations[0].frames
+        assert gate_checker.gate_3a.call_count == 2
+
 
 class TestRowProcessorFrameSequencing:
     @pytest.mark.asyncio

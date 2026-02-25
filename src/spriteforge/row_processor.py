@@ -229,9 +229,26 @@ class RowProcessor:
 
             if self.call_tracker:
                 self.call_tracker.increment("gate_3a")
-            verdict = await self.gate_checker.gate_3a(
-                row_strip_bytes, ref_strip_bytes, animation
-            )
+            try:
+                verdict = await self.gate_checker.gate_3a(
+                    row_strip_bytes, ref_strip_bytes, animation
+                )
+            except GateError as exc:
+                if "timed out" not in str(exc).lower():
+                    raise
+                logger.warning(
+                    "Gate 3A timed out for %s (attempt %d/%d): %s",
+                    animation.name,
+                    retry_attempt + 1,
+                    max_retries + 1,
+                    str(exc),
+                )
+                if retry_attempt >= max_retries:
+                    raise GateError(
+                        f"Gate 3A (row coherence) timed out for "
+                        f"'{animation.name}' after {max_retries + 1} attempts: {exc}"
+                    ) from exc
+                continue
             self._record_usage_from_verdict(verdict)
             self._record_gate_verdict(verdict)
             if verdict.passed:
