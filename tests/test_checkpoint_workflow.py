@@ -137,6 +137,7 @@ def sample_config(sample_palette: PaletteConfig) -> SpritesheetSpec:
             grid_model="gpt-5.2",
             gate_model="gpt-5-mini",
             reference_model="gpt-image-1.5",
+            allow_absolute_output_path=True,
         ),
         base_image_path="fake.png",
     )
