@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import asyncio
 from collections.abc import Awaitable, Callable
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, cast
 
@@ -43,6 +44,63 @@ from spriteforge.retry import RetryManager
 from spriteforge.row_processor import RowProcessor
 
 logger = get_logger("workflow")
+
+
+@dataclass(frozen=True)
+class CredentialHandle:
+    """Credential plus explicit ownership metadata.
+
+    When ``owned_by_workflow`` is True, the workflow is responsible for
+    closing the credential during ``SpriteForgeWorkflow.close()``.
+    """
+
+    credential: object
+    owned_by_workflow: bool
+
+
+@dataclass(frozen=True)
+class AnchorRecoveryDecision:
+    """Decision result for whether anchor regeneration should run."""
+
+    should_regenerate_anchor: bool
+    failure_ratio: float
+
+
+@dataclass
+class AnchorRecoveryState:
+    """Mutable state for anchor regeneration attempts."""
+
+    attempts: int = 0
+
+
+class AnchorRecoveryPolicy:
+    """Encapsulates cascade-failure policy for anchor regeneration."""
+
+    def __init__(
+        self,
+        max_anchor_regenerations: int,
+        failure_ratio_threshold: float,
+    ) -> None:
+        self.max_anchor_regenerations = max_anchor_regenerations
+        self.failure_ratio_threshold = failure_ratio_threshold
+
+    def decide(
+        self,
+        failed_rows: list[tuple[int, str, Exception]],
+        total_non_anchor_rows: int,
+        current_attempts: int,
+    ) -> AnchorRecoveryDecision:
+        """Return whether to regenerate anchor based on current failures."""
+        failure_ratio = len(failed_rows) / total_non_anchor_rows
+        should_regenerate = (
+            self.max_anchor_regenerations > current_attempts
+            and failure_ratio >= self.failure_ratio_threshold
+            and all(idx >= 1 for idx, _name, _exc in failed_rows)
+        )
+        return AnchorRecoveryDecision(
+            should_regenerate_anchor=should_regenerate,
+            failure_ratio=failure_ratio,
+        )
 
 
 def _resolve_output_path(output_path: str | Path, allow_absolute: bool) -> Path:
@@ -99,6 +157,7 @@ class SpriteForgeWorkflow:
         preprocessor: Callable[..., PreprocessResult] | None = None,
         checkpoint_manager: CheckpointManager | None = None,
         max_concurrent_rows: int = 0,
+        credential_handle: CredentialHandle | None = None,
     ) -> None:
         """Initialize the workflow with all required components.
 
@@ -114,6 +173,10 @@ class SpriteForgeWorkflow:
             max_concurrent_rows: Maximum number of rows to process in
                 parallel after the anchor row.  ``0`` (default) means
                 unlimited — all remaining rows run concurrently.
+            credential_handle: Optional credential handle with explicit
+                ownership metadata. When provided with
+                ``owned_by_workflow=True``, the credential is closed
+                during ``close()``.
         """
         self.config = config
         self.row_processor = row_processor
@@ -128,9 +191,7 @@ class SpriteForgeWorkflow:
         self.gate_checker = row_processor.gate_checker
         self.reference_provider = row_processor.reference_provider
         self.grid_generator = row_processor.frame_generator.grid_generator
-        # Owned credential created by factory; None if caller passed their own.
-        # Declared here so the field is always present (no dynamic attr assignment).
-        self._owned_credential: object | None = None
+        self._credential_handle = credential_handle
         self._closed: bool = False
 
     async def __aenter__(self) -> "SpriteForgeWorkflow":
@@ -145,7 +206,8 @@ class SpriteForgeWorkflow:
         """Clean up all provider resources.
 
         Closes resources through the row/frame processor ownership chain.
-        If a credential was created by the factory, it will also be closed.
+        Also closes the factory-created credential when ownership is explicit
+        via ``CredentialHandle(owned_by_workflow=True)``.
         Safe to call multiple times.
         """
         if self._closed:
@@ -155,13 +217,65 @@ class SpriteForgeWorkflow:
         await self.row_processor.close()
 
         # Close owned credential (only if created by factory)
-        if self._owned_credential is not None:
+        if (
+            self._credential_handle is not None
+            and self._credential_handle.owned_by_workflow
+        ):
             try:
-                owned_credential = cast(Any, self._owned_credential)
+                owned_credential = cast(Any, self._credential_handle.credential)
                 await owned_credential.close()
             except Exception as e:
                 logger.warning("Failed to close credential: %s", e)
-            self._owned_credential = None
+        self._credential_handle = None
+
+    async def _regenerate_anchor_row(
+        self,
+        base_reference: bytes,
+        anchor_animation: AnimationDef,
+        palette: PaletteConfig,
+        palette_map: dict[str, tuple[int, int, int, int]],
+        quantized_reference: bytes | None,
+        row_images: dict[int, bytes],
+    ) -> tuple[list[str], bytes]:
+        """Regenerate anchor row and persist row-0 artifacts/checkpoint."""
+        anchor_grid, anchor_rendered, row0_grids = (
+            await self.row_processor.process_anchor_row(
+                base_reference,
+                anchor_animation,
+                palette,
+                palette_map,
+                quantized_reference=quantized_reference,
+            )
+        )
+        anchor_render_context = self.row_processor._build_frame_context(
+            palette=palette,
+            palette_map=palette_map,
+            animation=anchor_animation,
+            anchor_grid=anchor_grid,
+            anchor_rendered=None,
+            quantized_reference=None,
+        )
+        row0_strip = render_row_strip(row0_grids, anchor_render_context)
+        row_images[anchor_animation.row] = frame_to_png_bytes(row0_strip)
+        if self.checkpoint_manager is not None:
+            self.checkpoint_manager.save_row(
+                row=anchor_animation.row,
+                animation_name=anchor_animation.name,
+                strip_bytes=row_images[anchor_animation.row],
+                grids=row0_grids,
+            )
+        return anchor_grid, anchor_rendered
+
+    @staticmethod
+    def _reset_non_anchor_progress(
+        animations: list[AnimationDef],
+        row_images: dict[int, bytes],
+        anchor_row: int,
+    ) -> set[int]:
+        """Clear non-anchor outputs and return updated completed row set."""
+        for anim in animations[1:]:
+            row_images.pop(anim.row, None)
+        return {anchor_row}
 
     # ------------------------------------------------------------------
     # Public entry point
@@ -335,8 +449,11 @@ class SpriteForgeWorkflow:
         remaining_animations = list(enumerate(self.config.animations[1:], start=1))
 
         if remaining_animations:
-            anchor_regen_attempts = 0
-            max_anchor_regenerations = self.config.generation.max_anchor_regenerations
+            anchor_recovery = AnchorRecoveryPolicy(
+                max_anchor_regenerations=self.config.generation.max_anchor_regenerations,
+                failure_ratio_threshold=self.config.generation.anchor_regen_failure_ratio,
+            )
+            anchor_recovery_state = AnchorRecoveryState()
 
             while True:
                 semaphore: asyncio.Semaphore | None = None
@@ -490,15 +607,13 @@ class SpriteForgeWorkflow:
                     failed_summary,
                 )
 
-                failure_ratio = len(failed_rows) / len(remaining_animations)
-                should_regen_anchor = (
-                    max_anchor_regenerations > anchor_regen_attempts
-                    and failure_ratio
-                    >= self.config.generation.anchor_regen_failure_ratio
-                    and all(idx >= 1 for idx, _name, _exc in failed_rows)
+                recovery_decision = anchor_recovery.decide(
+                    failed_rows=failed_rows,
+                    total_non_anchor_rows=len(remaining_animations),
+                    current_attempts=anchor_recovery_state.attempts,
                 )
 
-                if not should_regen_anchor:
+                if not recovery_decision.should_regenerate_anchor:
                     # Raise an error that includes information about partial success
                     raise RowGenerationError(
                         f"Failed to generate {len(failed_rows)} of "
@@ -507,49 +622,33 @@ class SpriteForgeWorkflow:
                         f"See logs for details."
                     )
 
-                anchor_regen_attempts += 1
+                anchor_recovery_state.attempts += 1
                 logger.warning(
                     "Regenerating anchor row due to cascade failures "
                     "(%d/%d failed, ratio=%.2f, attempt %d/%d).",
                     len(failed_rows),
                     len(remaining_animations),
-                    failure_ratio,
-                    anchor_regen_attempts,
-                    max_anchor_regenerations,
+                    recovery_decision.failure_ratio,
+                    anchor_recovery_state.attempts,
+                    anchor_recovery.max_anchor_regenerations,
                 )
 
                 # Regenerate only anchor row, then retry remaining rows.
-                anchor_grid, anchor_rendered, row0_grids = (
-                    await self.row_processor.process_anchor_row(
-                        base_reference,
-                        anchor_animation,
-                        palette,
-                        palette_map,
-                        quantized_reference=quantized_reference,
-                    )
-                )
-                anchor_render_context = self.row_processor._build_frame_context(
+                anchor_grid, anchor_rendered = await self._regenerate_anchor_row(
+                    base_reference=base_reference,
+                    anchor_animation=anchor_animation,
                     palette=palette,
                     palette_map=palette_map,
-                    animation=anchor_animation,
-                    anchor_grid=anchor_grid,
-                    anchor_rendered=None,
-                    quantized_reference=None,
+                    quantized_reference=quantized_reference,
+                    row_images=row_images,
                 )
-                row0_strip = render_row_strip(row0_grids, anchor_render_context)
-                row_images[anchor_animation.row] = frame_to_png_bytes(row0_strip)
-                if self.checkpoint_manager is not None:
-                    self.checkpoint_manager.save_row(
-                        row=anchor_animation.row,
-                        animation_name=anchor_animation.name,
-                        strip_bytes=row_images[anchor_animation.row],
-                        grids=row0_grids,
-                    )
 
                 # Previously generated non-anchor outputs may encode identity drift.
-                for anim in self.config.animations[1:]:
-                    row_images.pop(anim.row, None)
-                completed_rows = {anchor_animation.row}
+                completed_rows = self._reset_non_anchor_progress(
+                    animations=self.config.animations,
+                    row_images=row_images,
+                    anchor_row=anchor_animation.row,
+                )
 
         return await self.assembler(
             row_images=row_images,
@@ -644,18 +743,26 @@ async def create_workflow(
             "or pass project_endpoint."
         )
 
-    # Create or reuse credential
-    # If user provided a credential, we don't own it and won't close it
-    # If we create one, we'll store it and close it in workflow.close()
+    # Create or reuse credential.
+    # Explicit ownership contract:
+    # - caller-provided credential => caller closes it
+    # - factory-created credential => workflow closes it
     shared_credential: object
+    credential_handle: CredentialHandle
     if credential is None:
         from azure.identity.aio import DefaultAzureCredential  # type: ignore[import-untyped,import-not-found]
 
         shared_credential = DefaultAzureCredential()
-        owns_credential = True
+        credential_handle = CredentialHandle(
+            credential=shared_credential,
+            owned_by_workflow=True,
+        )
     else:
         shared_credential = credential
-        owns_credential = False
+        credential_handle = CredentialHandle(
+            credential=shared_credential,
+            owned_by_workflow=False,
+        )
 
     # Create tiered chat providers
     default_deployments = {
@@ -736,9 +843,7 @@ async def create_workflow(
         preprocessor=preprocessor,
         checkpoint_manager=checkpoint_manager,
         max_concurrent_rows=max_concurrent_rows,
+        credential_handle=credential_handle,
     )
-
-    # Store credential ownership info for cleanup
-    workflow._owned_credential = shared_credential if owns_credential else None
 
     return workflow
