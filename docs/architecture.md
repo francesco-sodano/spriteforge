@@ -63,6 +63,16 @@ Important defaults:
 
 This is the main mechanism keeping one character identity coherent across all animations.
 
+### Anchor Cascade Recovery
+
+When many non-anchor rows fail in the same pass, the workflow treats it as a likely identity-anchor drift and runs a targeted recovery cycle:
+
+1. Evaluate failures using `AnchorRecoveryPolicy`.
+2. If the failed-row ratio is at or above `generation.anchor_regen_failure_ratio` and retry budget remains (`generation.max_anchor_regenerations`), regenerate only row 0.
+3. Clear non-anchor in-memory row outputs and retry non-anchor rows against the new anchor.
+
+This keeps recovery policy/decision logic separate from row execution plumbing inside `SpriteForgeWorkflow.run()`.
+
 ## Concurrency Model
 
 - **Anchor row first**: row 0 runs before any parallel work.
@@ -118,6 +128,16 @@ By default, these map to:
 - `gpt-image-1.5` (reference)
 - `gpt-5.2` (grid generation)
 - `gpt-5-mini` (gates)
+
+### Credential Ownership Contract
+
+`create_workflow()` now wires credential lifecycle using an explicit handle:
+
+- If you pass `credential=...`, credential ownership remains with the caller (workflow does **not** close it).
+- If you omit `credential`, the factory creates `DefaultAzureCredential` and marks it as workflow-owned.
+- `SpriteForgeWorkflow.close()` (or `async with`) closes workflow-owned credentials plus provider resources.
+
+This makes resource ownership visible at construction time and avoids implicit cleanup conventions.
 
 ## Where to Start as a Contributor
 

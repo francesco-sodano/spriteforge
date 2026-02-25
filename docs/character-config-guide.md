@@ -19,20 +19,19 @@ This guide explains how to create a YAML configuration file for a new SpriteForg
 
    async def main() -> None:
      spec = load_config("configs/my_character.yaml")
-     workflow = await create_workflow(config=spec)
-     try:
+     async with await create_workflow(config=spec) as workflow:
        output_path = Path("output") / f"{spec.character.name}_spritesheet.png"
        result = await workflow.run(
          base_reference_path=spec.base_image_path,
          output_path=output_path,
        )
        print(f"Saved: {result}")
-     finally:
-       await workflow.close()
 
 
    asyncio.run(main())
    ```
+
+  Note: if you pass a custom `credential=...` to `create_workflow()`, you keep ownership of that credential; otherwise SpriteForge creates and closes `DefaultAzureCredential` for you.
 
 CLI commands are available for `validate`, `estimate`, and `generate` via `spriteforge`.
 

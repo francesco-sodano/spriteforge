@@ -38,25 +38,26 @@ from spriteforge import create_workflow, load_config
 
 async def main() -> None:
     config = load_config("configs/theron.yaml")
-    
+
     # Enable checkpointing by providing a checkpoint directory
-    workflow = await create_workflow(
+    async with await create_workflow(
         config=config,
         checkpoint_dir="output/.spriteforge_checkpoint"  # Enable checkpoints
-    )
-    
-    try:
+    ) as workflow:
         output_path = Path("output") / f"{config.character.name}_spritesheet.png"
         result_path = await workflow.run(
             base_reference_path=config.base_image_path,
             output_path=output_path,
         )
         print(f"Saved: {result_path}")
-    finally:
-        await workflow.close()
 
 asyncio.run(main())
 ```
+
+Credential ownership note:
+
+- Pass `credential=...` to `create_workflow()` when you manage credential lifecycle externally.
+- Omit `credential` to let the workflow create and close `DefaultAzureCredential` automatically.
 
 ### Checkpoint Directory Structure
 
