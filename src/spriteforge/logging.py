@@ -7,10 +7,13 @@ Uses Python's built-in logging module — no external dependencies.
 from __future__ import annotations
 
 import logging
+import os
 import sys
+import threading
 
 DEFAULT_FORMAT = "%(levelname)-5s | %(name)-12s | %(message)s"
 VERBOSE_FORMAT = "%(asctime)s | %(levelname)-5s | %(name)-12s | %(message)s"
+_SETUP_LOCK = threading.Lock()
 
 
 def setup_logging(
@@ -29,23 +32,43 @@ def setup_logging(
         verbose: If True, include timestamps in output.
         log_file: Optional file path to write logs to (in addition to stderr).
     """
-    logger = logging.getLogger("spriteforge")
-    logger.setLevel(level)
+    with _SETUP_LOCK:
+        logger = logging.getLogger("spriteforge")
+        logger.setLevel(level)
 
-    # Remove existing handlers to avoid duplicates on repeated calls
-    logger.handlers.clear()
+        # Console handler
+        fmt = VERBOSE_FORMAT if verbose else DEFAULT_FORMAT
+        stream_handlers = [
+            h
+            for h in logger.handlers
+            if isinstance(h, logging.StreamHandler)
+            and not isinstance(h, logging.FileHandler)
+            and getattr(h, "stream", None) is sys.stderr
+        ]
+        if stream_handlers:
+            stream_handler = stream_handlers[0]
+            for extra in stream_handlers[1:]:
+                logger.removeHandler(extra)
+        else:
+            stream_handler = logging.StreamHandler(sys.stderr)
+            logger.addHandler(stream_handler)
+        stream_handler.setFormatter(logging.Formatter(fmt))
 
-    # Console handler
-    fmt = VERBOSE_FORMAT if verbose else DEFAULT_FORMAT
-    handler = logging.StreamHandler(sys.stderr)
-    handler.setFormatter(logging.Formatter(fmt))
-    logger.addHandler(handler)
-
-    # Optional file handler
-    if log_file:
-        file_handler = logging.FileHandler(log_file)
-        file_handler.setFormatter(logging.Formatter(VERBOSE_FORMAT))
-        logger.addHandler(file_handler)
+        # Optional file handler
+        if log_file:
+            target = os.path.abspath(str(log_file))
+            file_handlers = [
+                h
+                for h in logger.handlers
+                if isinstance(h, logging.FileHandler)
+                and getattr(h, "baseFilename", None) == target
+            ]
+            if file_handlers:
+                file_handler = file_handlers[0]
+            else:
+                file_handler = logging.FileHandler(log_file)
+                logger.addHandler(file_handler)
+            file_handler.setFormatter(logging.Formatter(VERBOSE_FORMAT))
 
 
 def get_logger(name: str) -> logging.Logger:

@@ -29,7 +29,7 @@ from spriteforge.prompts.generator import (
 from spriteforge.providers.chat import ChatProvider
 from spriteforge.utils import (
     compress_grid_rle,
-    image_to_data_url,
+    image_to_data_url_limited,
     validate_grid_dimensions,
 )
 
@@ -317,11 +317,21 @@ class GridGenerator:
                 {"type": "text", "text": user_text},
                 {
                     "type": "image_url",
-                    "image_url": {"url": image_to_data_url(base_reference)},
+                    "image_url": {
+                        "url": image_to_data_url_limited(
+                            base_reference,
+                            max_bytes=generation.max_image_bytes,
+                        )
+                    },
                 },
                 {
                     "type": "image_url",
-                    "image_url": {"url": image_to_data_url(reference_frame)},
+                    "image_url": {
+                        "url": image_to_data_url_limited(
+                            reference_frame,
+                            max_bytes=generation.max_image_bytes,
+                        )
+                    },
                 },
             ]
 
@@ -330,7 +340,10 @@ class GridGenerator:
                     {
                         "type": "image_url",
                         "image_url": {
-                            "url": image_to_data_url(context.quantized_reference)
+                            "url": image_to_data_url_limited(
+                                context.quantized_reference,
+                                max_bytes=generation.max_image_bytes,
+                            )
                         },
                     }
                 )
@@ -355,11 +368,21 @@ class GridGenerator:
                 {"type": "text", "text": user_text},
                 {
                     "type": "image_url",
-                    "image_url": {"url": image_to_data_url(reference_frame)},
+                    "image_url": {
+                        "url": image_to_data_url_limited(
+                            reference_frame,
+                            max_bytes=generation.max_image_bytes,
+                        )
+                    },
                 },
                 {
                     "type": "image_url",
-                    "image_url": {"url": image_to_data_url(context.anchor_rendered)},
+                    "image_url": {
+                        "url": image_to_data_url_limited(
+                            context.anchor_rendered,
+                            max_bytes=generation.max_image_bytes,
+                        )
+                    },
                 },
             ]
 
@@ -367,7 +390,12 @@ class GridGenerator:
                 content.append(
                     {
                         "type": "image_url",
-                        "image_url": {"url": image_to_data_url(prev_frame_rendered)},
+                        "image_url": {
+                            "url": image_to_data_url_limited(
+                                prev_frame_rendered,
+                                max_bytes=generation.max_image_bytes,
+                            )
+                        },
                     }
                 )
 

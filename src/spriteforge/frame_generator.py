@@ -192,10 +192,13 @@ class FrameGenerator:
 
         # Exhausted all retries
         # Get the tier for the last attempt to include in error message
-        last_attempt = retry_ctx.current_attempt
-        last_tier = self.retry_manager.get_tier(
-            min(last_attempt, self.retry_manager._config.constrained_range[1])
-        )
+        last_attempt = max(1, retry_ctx.current_attempt)
+        try:
+            last_tier = self.retry_manager.get_tier(last_attempt)
+        except ValueError:
+            last_tier = self.retry_manager.get_tier(
+                self.retry_manager._config.constrained_range[0]
+            )
         raise RetryExhaustedError(
             f"Frame {frame_id} failed verification after "
             f"{retry_ctx.max_attempts} attempts. "
@@ -229,10 +232,18 @@ class FrameGenerator:
         ):
             frame_desc = animation.frame_descriptions[frame_index]
 
-        gates: list[Any] = [
-            self.gate_checker.gate_0(frame_rendered, reference_frame, frame_desc),
-        ]
-        gate_count = 1
+        if self.call_tracker:
+            self.call_tracker.increment("gate_check")
+        gate_0_verdict = await self.gate_checker.gate_0(
+            frame_rendered,
+            reference_frame,
+            frame_desc,
+        )
+        if not gate_0_verdict.passed:
+            return [gate_0_verdict]
+
+        gates: list[Any] = []
+        gate_count = 0
 
         if anchor_rendered is not None and not is_anchor:
             gates.append(
@@ -246,9 +257,13 @@ class FrameGenerator:
             )
             gate_count += 1
 
-        # Track gate calls
+        # Track gate calls (Gate 0 was already counted above)
         if self.call_tracker:
             for _ in range(gate_count):
                 self.call_tracker.increment("gate_check")
 
-        return list(await asyncio.gather(*gates))
+        if not gates:
+            return [gate_0_verdict]
+
+        remaining = list(await asyncio.gather(*gates))
+        return [gate_0_verdict, *remaining]

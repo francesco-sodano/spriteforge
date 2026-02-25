@@ -15,7 +15,7 @@ from spriteforge.errors import GenerationError
 from spriteforge.logging import get_logger
 from spriteforge.models import PaletteColor, PaletteConfig
 from spriteforge.providers.chat import ChatProvider
-from spriteforge.utils import image_to_data_url
+from spriteforge.utils import image_to_data_url_limited
 
 logger = get_logger(__name__)
 
@@ -26,31 +26,31 @@ logger = get_logger(__name__)
 # ---------------------------------------------------------------------------
 
 # Lightness thresholds (HLS 'l' value, range 0–1)
-_NEAR_BLACK_L: float = 0.1      # Below this → "Near Black"
-_NEAR_WHITE_L: float = 0.9      # Above this → "Near White"
-_DARK_L: float = 0.3            # Below this → "Dark" qualifier
-_MID_L: float = 0.6             # Below this → no qualifier; above → "Light"
-_DARK_GRAY_L: float = 0.3       # Dark gray boundary (low saturation)
-_GRAY_L: float = 0.6            # Gray/Light Gray boundary (low saturation)
+_NEAR_BLACK_L: float = 0.1  # Below this → "Near Black"
+_NEAR_WHITE_L: float = 0.9  # Above this → "Near White"
+_DARK_L: float = 0.3  # Below this → "Dark" qualifier
+_MID_L: float = 0.6  # Below this → no qualifier; above → "Light"
+_DARK_GRAY_L: float = 0.3  # Dark gray boundary (low saturation)
+_GRAY_L: float = 0.6  # Gray/Light Gray boundary (low saturation)
 
 # Saturation thresholds
-_LOW_SATURATION: float = 0.15   # Below this → grayscale naming
-_BROWN_MIN_S: float = 0.3       # Minimum saturation to call something brown
-_GOLDEN_MIN_S: float = 0.5      # Minimum saturation for "Golden Yellow"
+_LOW_SATURATION: float = 0.15  # Below this → grayscale naming
+_BROWN_MIN_S: float = 0.3  # Minimum saturation to call something brown
+_GOLDEN_MIN_S: float = 0.5  # Minimum saturation for "Golden Yellow"
 
 # Hue bucket boundaries (in degrees, hue ∈ [0, 360))
-_HUE_RED_MAX: float = 15.0      # 0–15° → Red
-_HUE_ORANGE_MAX: float = 45.0   # 15–45° → Orange
-_HUE_YELLOW_MAX: float = 70.0   # 45–70° → Yellow
-_HUE_GREEN_MAX: float = 150.0   # 70–150° → Green
-_HUE_CYAN_MAX: float = 190.0    # 150–190° → Cyan
-_HUE_BLUE_MAX: float = 260.0    # 190–260° → Blue
+_HUE_RED_MAX: float = 15.0  # 0–15° → Red
+_HUE_ORANGE_MAX: float = 45.0  # 15–45° → Orange
+_HUE_YELLOW_MAX: float = 70.0  # 45–70° → Yellow
+_HUE_GREEN_MAX: float = 150.0  # 70–150° → Green
+_HUE_CYAN_MAX: float = 190.0  # 150–190° → Cyan
+_HUE_BLUE_MAX: float = 260.0  # 190–260° → Blue
 _HUE_PURPLE_MAX: float = 320.0  # 260–320° → Purple
-_HUE_RED_MIN: float = 345.0     # 320–360° → Pink; ≥345° wraps back to Red
+_HUE_RED_MIN: float = 345.0  # 320–360° → Pink; ≥345° wraps back to Red
 
 # Brown special-case thresholds (Yellow/Orange + low luminance)
-_BROWN_MAX_L: float = 0.5       # l < 0.5 for brown check
-_DARK_BROWN_L: float = 0.35     # l < 0.35 → "Brown"; else → "Dark Brown"
+_BROWN_MAX_L: float = 0.5  # l < 0.5 for brown check
+_DARK_BROWN_L: float = 0.35  # l < 0.35 → "Brown"; else → "Dark Brown"
 
 # Golden Yellow special-case luminance range
 _GOLDEN_L_MIN: float = 0.45
@@ -190,7 +190,10 @@ async def label_palette_colors_with_llm(
     )
 
     # Prepare the vision message
-    image_data_url = image_to_data_url(quantized_png_bytes)
+    image_data_url = image_to_data_url_limited(
+        quantized_png_bytes,
+        max_bytes=4_000_000,
+    )
     messages = [
         {
             "role": "user",
@@ -419,6 +422,7 @@ def _quantize_opaque_only(
     image: Image.Image,
     alpha: Image.Image,
     max_colors: int,
+    max_sample_pixels: int = 1_000_000,
 ) -> Image.Image:
     """Quantize an RGBA image considering only opaque pixels.
 
@@ -457,22 +461,61 @@ def _quantize_opaque_only(
 
     n_opaque = len(opaque_indices)
 
+    sampled_for_palette = False
+    if n_opaque > max_sample_pixels:
+        step = max(1, n_opaque // max_sample_pixels)
+        sampled_indices = opaque_indices[::step][:max_sample_pixels]
+        sampled_rgb = bytearray()
+        for pixel_idx in sampled_indices:
+            base = pixel_idx * 4
+            sampled_rgb.extend(raw[base : base + 3])
+        opaque_rgb_for_palette = bytes(sampled_rgb)
+        sampled_for_palette = True
+        logger.warning(
+            "Opaque pixel count (%d) exceeds sampling threshold (%d); "
+            "sampling %d pixels for quantization.",
+            n_opaque,
+            max_sample_pixels,
+            len(sampled_indices),
+        )
+    else:
+        opaque_rgb_for_palette = bytes(opaque_rgb)
+
     # Build a 1×N RGB image of only opaque pixels for quantization
-    opaque_img = Image.frombytes("RGB", (n_opaque, 1), bytes(opaque_rgb))
+    opaque_img = Image.frombytes(
+        "RGB",
+        (len(opaque_rgb_for_palette) // 3, 1),
+        opaque_rgb_for_palette,
+    )
     quantized_p = opaque_img.quantize(
         colors=max_colors, method=Image.Quantize.MEDIANCUT
     )
-    quantized_rgb_data = quantized_p.convert("RGB").tobytes()
+    if sampled_for_palette:
+        full_rgb = image.convert("RGB")
+        quantized_rgb_data = (
+            full_rgb.quantize(palette=quantized_p).convert("RGB").tobytes()
+        )
+    else:
+        quantized_rgb_data = quantized_p.convert("RGB").tobytes()
 
     # Reconstruct RGBA output: start with fully transparent
     out = bytearray(width * height * 4)
-    for j, pixel_idx in enumerate(opaque_indices):
-        base_out = pixel_idx * 4
-        base_q = j * 3
-        out[base_out] = quantized_rgb_data[base_q]
-        out[base_out + 1] = quantized_rgb_data[base_q + 1]
-        out[base_out + 2] = quantized_rgb_data[base_q + 2]
-        out[base_out + 3] = alpha_data[pixel_idx]
+    if sampled_for_palette:
+        for pixel_idx in opaque_indices:
+            base_out = pixel_idx * 4
+            base_q = pixel_idx * 3
+            out[base_out] = quantized_rgb_data[base_q]
+            out[base_out + 1] = quantized_rgb_data[base_q + 1]
+            out[base_out + 2] = quantized_rgb_data[base_q + 2]
+            out[base_out + 3] = alpha_data[pixel_idx]
+    else:
+        for j, pixel_idx in enumerate(opaque_indices):
+            base_out = pixel_idx * 4
+            base_q = j * 3
+            out[base_out] = quantized_rgb_data[base_q]
+            out[base_out + 1] = quantized_rgb_data[base_q + 1]
+            out[base_out + 2] = quantized_rgb_data[base_q + 2]
+            out[base_out + 3] = alpha_data[pixel_idx]
 
     return Image.frombytes("RGBA", (width, height), bytes(out))
 
@@ -624,11 +667,7 @@ def preprocess_reference(
 
     alpha = resized.getchannel("A")
     raw_resized = resized.tobytes()
-    resized_opaque = [
-        (r, g, b)
-        for r, g, b, a in _unpack_rgba(raw_resized)
-        if a > 0
-    ]
+    resized_opaque = [(r, g, b) for r, g, b, a in _unpack_rgba(raw_resized) if a > 0]
     unique_resized = set(resized_opaque)
     needs_quantize = len(unique_resized) > max_colors
 

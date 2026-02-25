@@ -3,6 +3,9 @@
 from __future__ import annotations
 
 from spriteforge.models import PaletteColor, PaletteConfig
+from spriteforge.logging import get_logger
+
+logger = get_logger("palette")
 
 
 def build_palette_map(
@@ -79,7 +82,6 @@ def swap_palette_grid(
     Raises:
         ValueError: If palettes have mismatched color names.
     """
-    # Build name → symbol maps for both palettes
     from_names = {c.element for c in from_palette.colors}
     to_names = {c.element for c in to_palette.colors}
 
@@ -89,19 +91,28 @@ def swap_palette_grid(
 
     to_by_name: dict[str, str] = {c.element: c.symbol for c in to_palette.colors}
 
-    # Build character swap table (from_symbol → to_symbol)
     swap_table: dict[str, str] = {}
     for color in from_palette.colors:
         swap_table[color.symbol] = to_by_name[color.element]
 
-    # Transparent and outline are preserved (identity mapping)
     swap_table[from_palette.transparent_symbol] = to_palette.transparent_symbol
     swap_table[from_palette.outline.symbol] = to_palette.outline.symbol
 
-    # Apply swap
+    unknown_symbols: set[str] = set()
+    for row in grid:
+        for ch in row:
+            if ch not in swap_table:
+                unknown_symbols.add(ch)
+
     new_grid: list[str] = []
     for row in grid:
         new_row = "".join(swap_table.get(ch, ch) for ch in row)
         new_grid.append(new_row)
+
+    if unknown_symbols:
+        logger.warning(
+            "swap_palette_grid preserved unknown symbols: %s",
+            sorted(unknown_symbols),
+        )
 
     return new_grid

@@ -17,20 +17,6 @@ logger = get_logger("budget")
 
 
 # ---------------------------------------------------------------------------
-# Cost estimation retry rate assumptions
-# ---------------------------------------------------------------------------
-
-# Expected fraction of reference strips that fail Gate -1 on first attempt
-_REF_RETRY_RATE: float = 0.30
-
-# Expected fraction of frames that fail gates on first attempt
-_FRAME_RETRY_RATE: float = 0.20
-
-# Expected fraction of rows that fail Gate 3A on first attempt
-_ROW_RETRY_RATE: float = 0.05
-
-
-# ---------------------------------------------------------------------------
 # Call tracker
 # ---------------------------------------------------------------------------
 
@@ -58,6 +44,7 @@ class CallTracker:
         self._completion_tokens = 0
         self._lock = threading.Lock()
         self._warned = False
+        self._best_effort_budget_exceeded = False
 
     @property
     def count(self) -> int:
@@ -129,6 +116,19 @@ class CallTracker:
 
         # Check for hard limit
         if current > max_calls:
+            mode = self._budget.enforcement_mode
+            if mode == "best_effort":
+                with self._lock:
+                    should_log_best_effort = not self._best_effort_budget_exceeded
+                    self._best_effort_budget_exceeded = True
+                if should_log_best_effort:
+                    logger.warning(
+                        "Budget exceeded in best_effort mode: %d/%d calls. "
+                        "Continuing generation.",
+                        current,
+                        max_calls,
+                    )
+                return
             raise BudgetExhaustedError(
                 f"LLM call budget exhausted: {current} calls made, "
                 f"limit is {max_calls}. Increase budget.max_llm_calls "
@@ -142,6 +142,7 @@ class CallTracker:
             self._prompt_tokens = 0
             self._completion_tokens = 0
             self._warned = False
+            self._best_effort_budget_exceeded = False
 
 
 # ---------------------------------------------------------------------------
@@ -176,10 +177,11 @@ def estimate_calls(config: SpritesheetSpec) -> CallEstimate:
         CallEstimate with min/expected/max call counts and breakdown.
 
     Notes:
-        Assumptions for expected case:
-        - 30% of reference strips fail Gate -1 once (retry)
-        - 20% of frames fail gates once (1 retry per failed frame)
-        - 5% of rows fail Gate 3A once (row regeneration)
+        Assumptions for expected case are taken from ``generation.budget``:
+        - expected_reference_retry_rate
+        - expected_frame_retry_rate
+        - expected_row_retry_rate
+        When budget config is absent, defaults are used.
 
         Per-frame call breakdown:
         - 1 grid generation call (Stage 2)
@@ -235,9 +237,14 @@ def estimate_calls(config: SpritesheetSpec) -> CallEstimate:
     # Assume 20% of frames retry once (2x grid gen, 2x gates)
     # Assume 5% of rows fail Gate 3A (causes row regeneration)
 
-    ref_retry_rate = _REF_RETRY_RATE
-    frame_retry_rate = _FRAME_RETRY_RATE
-    row_retry_rate = _ROW_RETRY_RATE
+    if budget is not None:
+        ref_retry_rate = budget.expected_reference_retry_rate
+        frame_retry_rate = budget.expected_frame_retry_rate
+        row_retry_rate = budget.expected_row_retry_rate
+    else:
+        ref_retry_rate = 0.30
+        frame_retry_rate = 0.20
+        row_retry_rate = 0.05
 
     expected_ref_calls = int(total_rows * (1 + ref_retry_rate * 1))
     expected_gate_minus_1 = int(total_rows * (1 + ref_retry_rate * 1))

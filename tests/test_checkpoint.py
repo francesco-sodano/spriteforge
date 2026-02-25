@@ -91,10 +91,26 @@ class TestCheckpointManager:
         json_path = manager.checkpoint_dir / "row_005.json"
         data = json.loads(json_path.read_text())
 
+        assert data["version"] == CheckpointManager.CHECKPOINT_VERSION
         assert data["row"] == 5
         assert data["animation_name"] == "walk"
         assert len(data["grids"]) == 2
         assert data["grids"][0] == grids[0]
+
+    def test_completed_rows_case_insensitive_extensions(self, tmp_path: Path) -> None:
+        manager = CheckpointManager(tmp_path / "checkpoints")
+        manager.save_row(3, "walk", _TINY_PNG, [_make_grid()])
+
+        # Simulate external tool writing upper-case extension variants.
+        (manager.checkpoint_dir / "row_003.json").rename(
+            manager.checkpoint_dir / "row_003.JSON"
+        )
+        (manager.checkpoint_dir / "row_003.png").rename(
+            manager.checkpoint_dir / "row_003.PNG"
+        )
+
+        completed = manager.completed_rows()
+        assert completed == {3}
 
     def test_load_row_success(self, tmp_path: Path) -> None:
         """Test that load_row returns saved data."""

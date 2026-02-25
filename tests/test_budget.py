@@ -174,6 +174,14 @@ class TestCallTracker:
             tracker.increment()
         assert tracker.count == 1000
 
+    def test_tracker_best_effort_mode_does_not_raise(self) -> None:
+        budget = BudgetConfig(max_llm_calls=2, enforcement_mode="best_effort")
+        tracker = CallTracker(budget)
+        tracker.increment()
+        tracker.increment()
+        tracker.increment()
+        assert tracker.count == 3
+
 
 # ---------------------------------------------------------------------------
 # Token tracking tests
@@ -283,6 +291,27 @@ class TestEstimateCalls:
         assert "min" in estimate.breakdown
         assert "expected" in estimate.breakdown
         assert "max" in estimate.breakdown
+
+    def test_estimate_uses_budget_retry_rates(self) -> None:
+        config = SpritesheetSpec(
+            character=CharacterConfig(name="hero"),
+            animations=[AnimationDef(name="idle", row=0, frames=4, timing_ms=100)],
+            generation=GenerationConfig(
+                budget=BudgetConfig(
+                    expected_reference_retry_rate=0.0,
+                    expected_frame_retry_rate=0.0,
+                    expected_row_retry_rate=0.0,
+                )
+            ),
+            palette=PaletteConfig(
+                outline=PaletteColor(element="Outline", symbol="O", r=0, g=0, b=0),
+                colors=[PaletteColor(element="Skin", symbol="s", r=1, g=1, b=1)],
+            ),
+        )
+        est = estimate_calls(config)
+        # With 0 retry rates, expected calls should be close to min calls.
+        assert est.expected_calls >= est.min_calls
+        assert est.expected_calls - est.min_calls <= 2
 
     def test_estimate_multi_row_animation(self) -> None:
         """Estimate for multi-row spritesheet."""

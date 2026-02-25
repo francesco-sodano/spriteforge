@@ -11,7 +11,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 from PIL import Image
 
-from spriteforge.errors import GateError, RetryExhaustedError
+from spriteforge.errors import GateError, RetryExhaustedError, RowGenerationError
 from spriteforge.frame_generator import FrameGenerator
 from spriteforge.gates import GateVerdict, LLMGateChecker, ProgrammaticChecker
 from spriteforge.generator import GenerationError, GridGenerator
@@ -1214,7 +1214,7 @@ class TestGate3aCheckedInProcessRow:
         ref_img.save(str(ref_path))
         out_path = tmp_path / "out.png"
 
-        with pytest.raises(GateError, match="Failed to generate"):
+        with pytest.raises(RowGenerationError, match="Failed to generate"):
             await wf.run(ref_path, out_path)
 
         # Gate 3A was called twice (anchor row + second row, no retries)
@@ -1780,7 +1780,7 @@ class TestParallelRowGracefulFailure:
         out_path = tmp_path / "out.png"
 
         # Should fail overall, but report partial success
-        with pytest.raises(GateError, match="Failed to generate 1 of 1.*rows"):
+        with pytest.raises(RowGenerationError, match="Failed to generate 1 of 1.*rows"):
             await wf.run(ref_path, out_path)
 
         # Gate 3A should have been called for both rows
@@ -1855,7 +1855,7 @@ class TestParallelRowGracefulFailure:
         out_path = tmp_path / "out.png"
 
         # Should fail but report 1 successful non-anchor row
-        with pytest.raises(GateError, match="Successfully generated rows: 1"):
+        with pytest.raises(RowGenerationError, match="Successfully generated rows: 1"):
             await wf.run(ref_path, out_path)
 
         # All three rows should have attempted Gate 3A

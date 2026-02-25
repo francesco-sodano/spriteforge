@@ -10,7 +10,7 @@ from PIL import Image
 
 from spriteforge.errors import GateError
 from spriteforge.frame_generator import FrameGenerator
-from spriteforge.gates import LLMGateChecker
+from spriteforge.gates import GateVerdict, LLMGateChecker
 from spriteforge.logging import get_logger
 from spriteforge.models import (
     AnimationDef,

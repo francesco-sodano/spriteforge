@@ -6,9 +6,11 @@ Contains helpers used across multiple modules to avoid code duplication.
 from __future__ import annotations
 
 import base64
+import hashlib
 import io
 import json
 import re
+from functools import lru_cache
 from typing import Any
 
 from PIL import Image
@@ -42,8 +44,48 @@ def image_to_data_url(image: Image.Image | bytes, media_type: str = "image/png")
     Returns:
         A data URL string: ``data:{media_type};base64,{encoded_data}``
     """
-    b64 = image_to_base64(image)
-    return f"data:{media_type};base64,{b64}"
+    return image_to_data_url_limited(image=image, media_type=media_type)
+
+
+@lru_cache(maxsize=256)
+def _cached_data_url(media_type: str, digest: str, raw: bytes) -> str:
+    encoded = base64.b64encode(raw).decode("ascii")
+    return f"data:{media_type};base64,{encoded}"
+
+
+def image_to_data_url_limited(
+    image: Image.Image | bytes,
+    media_type: str = "image/png",
+    max_bytes: int | None = None,
+) -> str:
+    """Convert an image to a base64 data URL with optional payload limit.
+
+    Args:
+        image: PIL Image object or raw PNG bytes.
+        media_type: MIME type for the data URL.
+        max_bytes: Optional byte limit. Raises ValueError when exceeded.
+
+    Returns:
+        Data URL string.
+
+    Raises:
+        ValueError: If raw image bytes exceed ``max_bytes``.
+    """
+    if isinstance(image, Image.Image):
+        buf = io.BytesIO()
+        image.save(buf, format="PNG")
+        raw = buf.getvalue()
+    else:
+        raw = image
+
+    if max_bytes is not None and len(raw) > max_bytes:
+        raise ValueError(
+            f"Image payload is too large ({len(raw)} bytes); "
+            f"max allowed is {max_bytes} bytes."
+        )
+
+    digest = hashlib.sha256(raw).hexdigest()
+    return _cached_data_url(media_type, digest, raw)
 
 
 def strip_code_fences(text: str) -> str:

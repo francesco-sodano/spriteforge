@@ -151,3 +151,13 @@ class TestSwapPaletteGrid:
         grid = ["..OOsshh..", "OOsshh..OO"]
         result = swap_palette_grid(grid, simple_palette, alt_palette)
         assert result == ["..OOSSHH..", "OOSSHH..OO"]
+
+    def test_swap_palette_grid_unknown_symbol_warns(
+        self,
+        simple_palette: PaletteConfig,
+        alt_palette: PaletteConfig,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        result = swap_palette_grid(["s?"], simple_palette, alt_palette)
+        assert result == ["S?"]
+        assert "unknown symbols" in caplog.text

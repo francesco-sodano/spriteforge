@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
@@ -112,10 +112,10 @@ class AnimationDef(BaseModel):
 
     @model_validator(mode="after")
     def _validate_animation_constraints(self) -> "AnimationDef":
-        if self.frame_descriptions and len(self.frame_descriptions) != self.frames:
+        if len(self.frame_descriptions) > self.frames:
             raise ValueError(
                 f"frame_descriptions length ({len(self.frame_descriptions)}) "
-                f"must equal frames ({self.frames})"
+                f"must be <= frames ({self.frames})"
             )
         if self.hit_frame is not None and self.hit_frame >= self.frames:
             raise ValueError(
@@ -177,12 +177,25 @@ class BudgetConfig(BaseModel):
             percentage (0.0–1.0). Default 0.8 (80%).
         track_tokens: When True, accumulate prompt/completion token counts
             reported by the API alongside call counts. Default False.
+        enforcement_mode: Budget behavior when max_llm_calls is exceeded.
+            - "strict": raise BudgetExhaustedError (default)
+            - "best_effort": continue generation and emit warnings
+        expected_reference_retry_rate: Assumed reference-strip retry rate for
+            cost estimation.
+        expected_frame_retry_rate: Assumed frame-level retry rate for
+            cost estimation.
+        expected_row_retry_rate: Assumed row-level retry rate for
+            cost estimation.
     """
 
     max_llm_calls: int = Field(default=0, ge=0)
     max_retries_per_row: int = Field(default=0, ge=0)
     warn_at_percentage: float = Field(default=0.8, ge=0.0, le=1.0)
     track_tokens: bool = Field(default=False)
+    enforcement_mode: Literal["strict", "best_effort"] = "strict"
+    expected_reference_retry_rate: float = Field(default=0.30, ge=0.0, le=1.0)
+    expected_frame_retry_rate: float = Field(default=0.20, ge=0.0, le=1.0)
+    expected_row_retry_rate: float = Field(default=0.05, ge=0.0, le=1.0)
 
 
 class GenerationConfig(BaseModel):
@@ -220,6 +233,16 @@ class GenerationConfig(BaseModel):
             (anchor grid, previous-frame grid) is RLE-compressed to reduce
             token usage. Default False (full grid text).
         budget: Optional budget constraints for LLM call tracking and limits.
+        max_image_bytes: Maximum image byte size allowed when converting to
+            data URLs for multimodal requests.
+        max_anchor_regenerations: Maximum times the workflow may regenerate
+            the anchor row when downstream failures indicate likely anchor
+            identity drift.
+        anchor_regen_failure_ratio: Trigger threshold for anchor regeneration.
+            Example: 1.0 means all non-anchor rows must fail before
+            regeneration is attempted.
+        allow_absolute_output_path: When True, allow writing output outside
+            workspace-relative paths. Default False for safer behavior.
     """
 
     style: str = "Modern HD pixel art (Dead Cells / Owlboy style)"
@@ -237,6 +260,10 @@ class GenerationConfig(BaseModel):
     gate_3a_max_retries: int = Field(default=2, ge=0)
     fallback_regen_frames: int = Field(default=2, ge=1)
     compact_grid_context: bool = False
+    max_image_bytes: int = Field(default=4_000_000, ge=1024)
+    max_anchor_regenerations: int = Field(default=0, ge=0)
+    anchor_regen_failure_ratio: float = Field(default=1.0, ge=0.0, le=1.0)
+    allow_absolute_output_path: bool = False
     budget: BudgetConfig | None = None
 
     @field_validator("facing")
@@ -245,6 +272,13 @@ class GenerationConfig(BaseModel):
         if v.lower() not in ("right", "left"):
             raise ValueError(f"facing must be 'right' or 'left', got {v!r}")
         return v.lower()
+
+    @field_validator("grid_model", "gate_model", "labeling_model", "reference_model")
+    @classmethod
+    def _validate_model_names_non_empty(cls, v: str) -> str:
+        if not v.strip():
+            raise ValueError("model deployment names must be non-empty")
+        return v.strip()
 
 
 class FrameContext(BaseModel):

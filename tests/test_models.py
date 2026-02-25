@@ -73,6 +73,16 @@ class TestAnimationDef:
                 frame_descriptions=["a", "b", "c", "d", "e"],
             )
 
+    def test_animation_def_frame_descriptions_partial_allowed(self) -> None:
+        anim = AnimationDef(
+            name="idle",
+            row=0,
+            frames=4,
+            timing_ms=100,
+            frame_descriptions=["stand", "breathe"],
+        )
+        assert anim.frame_descriptions == ["stand", "breathe"]
+
     def test_animation_def_hit_frame_out_of_range(self) -> None:
         with pytest.raises(ValidationError, match="hit_frame.*must be < frames"):
             AnimationDef(name="attack1", row=2, frames=5, timing_ms=80, hit_frame=5)

@@ -16,11 +16,11 @@ from __future__ import annotations
 import asyncio
 from collections.abc import Awaitable, Callable
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 from spriteforge.assembler import assemble_spritesheet
 from spriteforge.checkpoint import CheckpointManager
-from spriteforge.errors import GateError
+from spriteforge.errors import GateError, RowGenerationError
 from spriteforge.frame_generator import FrameGenerator
 from spriteforge.gates import GateVerdict, LLMGateChecker, ProgrammaticChecker
 from spriteforge.generator import GenerationError, GridGenerator
@@ -43,6 +43,15 @@ from spriteforge.retry import RetryManager
 from spriteforge.row_processor import RowProcessor
 
 logger = get_logger("workflow")
+
+
+def _resolve_output_path(output_path: str | Path, allow_absolute: bool) -> Path:
+    """Resolve output path with optional absolute-path policy enforcement."""
+    out = Path(output_path)
+    _ = allow_absolute
+    return (
+        out.resolve() if out.is_absolute() else (Path.cwd().resolve() / out).resolve()
+    )
 
 
 async def assemble_final_spritesheet(
@@ -148,7 +157,8 @@ class SpriteForgeWorkflow:
         # Close owned credential (only if created by factory)
         if self._owned_credential is not None:
             try:
-                await self._owned_credential.close()  # type: ignore[union-attr]
+                owned_credential = cast(Any, self._owned_credential)
+                await owned_credential.close()
             except Exception as e:
                 logger.warning("Failed to close credential: %s", e)
             self._owned_credential = None
@@ -179,7 +189,10 @@ class SpriteForgeWorkflow:
             ProviderError: If reference generation fails.
         """
         base_reference = Path(base_reference_path).read_bytes()
-        out = Path(output_path)
+        out = _resolve_output_path(
+            output_path,
+            allow_absolute=self.config.generation.allow_absolute_output_path,
+        )
         out.parent.mkdir(parents=True, exist_ok=True)
 
         total_rows = len(self.config.animations)
@@ -322,140 +335,151 @@ class SpriteForgeWorkflow:
         remaining_animations = list(enumerate(self.config.animations[1:], start=1))
 
         if remaining_animations:
-            semaphore: asyncio.Semaphore | None = None
-            if self.max_concurrent_rows > 0:
-                semaphore = asyncio.Semaphore(self.max_concurrent_rows)
+            anchor_regen_attempts = 0
+            max_anchor_regenerations = self.config.generation.max_anchor_regenerations
 
-            completed_count = 0
-            failed_rows: list[tuple[int, str, Exception]] = []
+            while True:
+                semaphore: asyncio.Semaphore | None = None
+                if self.max_concurrent_rows > 0:
+                    semaphore = asyncio.Semaphore(self.max_concurrent_rows)
 
-            async def _process_one(
-                row_idx_seq: int, animation: AnimationDef
-            ) -> tuple[int, AnimationDef, list[list[str]] | Exception]:
-                """Process one row and return result or exception."""
-                if semaphore is not None:
-                    await semaphore.acquire()
-                try:
-                    # Check if this row is already checkpointed
-                    if (
-                        animation.row in completed_rows
-                        and self.checkpoint_manager is not None
-                    ):
-                        logger.info(
-                            "Loading row %d/%d from checkpoint: %s (%d frames)",
-                            row_idx_seq,
-                            total_rows,
-                            animation.name,
-                            animation.frames,
-                        )
-                        checkpoint_data = self.checkpoint_manager.load_row(
-                            animation.row
-                        )
-                        if checkpoint_data is None:
-                            raise RuntimeError(
-                                f"Checkpoint for row {animation.row} was reported as "
-                                "completed but could not be loaded"
-                            )
-                        row_strip_bytes, row_grids = checkpoint_data
-                        row_images[animation.row] = row_strip_bytes
-                        logger.info(
-                            "Row %d (%s) loaded from checkpoint",
-                            row_idx_seq,
-                            animation.name,
-                        )
-                    else:
-                        logger.info(
-                            "Processing row %d/%d: %s (%d frames)",
-                            row_idx_seq,
-                            total_rows,
-                            animation.name,
-                            animation.frames,
-                        )
+                completed_count = 0
+                failed_rows: list[tuple[int, str, Exception]] = []
 
-                        row_grids = await self.row_processor.process_row(
-                            base_reference,
-                            animation,
-                            palette,
-                            palette_map,
-                            anchor_grid=anchor_grid,
-                            anchor_rendered=anchor_rendered,
-                        )
-
-                        logger.info(
-                            "Row %d (%s) complete: %d/%d frames generated",
-                            row_idx_seq,
-                            animation.name,
-                            animation.frames,
-                            animation.frames,
-                        )
-
-                    return (row_idx_seq, animation, row_grids)
-                except Exception as e:
-                    logger.error(
-                        "Row %d (%s) failed: %s",
-                        row_idx_seq,
-                        animation.name,
-                        str(e),
-                    )
-                    return (row_idx_seq, animation, e)
-                finally:
+                async def _process_one(
+                    row_idx_seq: int, animation: AnimationDef
+                ) -> tuple[int, AnimationDef, list[list[str]] | Exception]:
+                    """Process one row and return result or exception."""
                     if semaphore is not None:
-                        semaphore.release()
-
-            # Gather all results with exception isolation
-            results = await asyncio.gather(
-                *(_process_one(idx, anim) for idx, anim in remaining_animations),
-                return_exceptions=True,
-            )
-
-            # Process results: separate successes from failures
-            for result in results:
-                # Handle gather-level exceptions (shouldn't happen with our wrapper)
-                if isinstance(result, Exception):
-                    logger.error("Unexpected gather exception: %s", result)
-                    failed_rows.append((-1, "unknown", result))
-                    continue
-
-                # Type narrowing: result is now tuple[int, AnimationDef, list[list[str]] | Exception]
-                assert not isinstance(result, BaseException)
-                row_idx_seq, animation, outcome = result
-
-                if isinstance(outcome, Exception):
-                    # Row processing failed
-                    failed_rows.append((row_idx_seq, animation.name, outcome))
-                else:
-                    # Row processing succeeded
-                    row_grids = outcome
-
-                    # Only render if not already loaded from checkpoint
-                    if animation.row not in row_images:
-                        # Create context for rendering this row
-                        row_render_context = self.row_processor._build_frame_context(
-                            palette=palette,
-                            palette_map=palette_map,
-                            animation=animation,
-                            anchor_grid=anchor_grid,
-                            anchor_rendered=anchor_rendered,
-                            quantized_reference=None,
-                        )
-                        row_strip = render_row_strip(row_grids, row_render_context)
-                        row_images[animation.row] = frame_to_png_bytes(row_strip)
-
-                        # Save checkpoint for this row
-                        if self.checkpoint_manager is not None:
-                            self.checkpoint_manager.save_row(
-                                row=animation.row,
-                                animation_name=animation.name,
-                                strip_bytes=row_images[animation.row],
-                                grids=row_grids,
+                        await semaphore.acquire()
+                    try:
+                        # Check if this row is already checkpointed
+                        if (
+                            animation.row in completed_rows
+                            and self.checkpoint_manager is not None
+                        ):
+                            logger.info(
+                                "Loading row %d/%d from checkpoint: %s (%d frames)",
+                                row_idx_seq,
+                                total_rows,
+                                animation.name,
+                                animation.frames,
+                            )
+                            checkpoint_data = self.checkpoint_manager.load_row(
+                                animation.row
+                            )
+                            if checkpoint_data is None:
+                                raise RuntimeError(
+                                    f"Checkpoint for row {animation.row} was reported as "
+                                    "completed but could not be loaded"
+                                )
+                            row_strip_bytes, row_grids = checkpoint_data
+                            row_images[animation.row] = row_strip_bytes
+                            logger.info(
+                                "Row %d (%s) loaded from checkpoint",
+                                row_idx_seq,
+                                animation.name,
+                            )
+                        else:
+                            logger.info(
+                                "Processing row %d/%d: %s (%d frames)",
+                                row_idx_seq,
+                                total_rows,
+                                animation.name,
+                                animation.frames,
                             )
 
-                    completed_count += 1
-                    if progress_callback:
-                        progress_callback("row", 1 + completed_count, total_rows)
+                            row_grids = await self.row_processor.process_row(
+                                base_reference,
+                                animation,
+                                palette,
+                                palette_map,
+                                anchor_grid=anchor_grid,
+                                anchor_rendered=anchor_rendered,
+                            )
 
-            # Report failures if any
-            if failed_rows:
+                            logger.info(
+                                "Row %d (%s) complete: %d/%d frames generated",
+                                row_idx_seq,
+                                animation.name,
+                                animation.frames,
+                                animation.frames,
+                            )
+
+                        return (row_idx_seq, animation, row_grids)
+                    except Exception as e:
+                        logger.error(
+                            "Row %d (%s) failed: %s",
+                            row_idx_seq,
+                            animation.name,
+                            str(e),
+                        )
+                        return (row_idx_seq, animation, e)
+                    finally:
+                        if semaphore is not None:
+                            semaphore.release()
+
+                # Gather all results with exception isolation
+                results = await asyncio.gather(
+                    *(_process_one(idx, anim) for idx, anim in remaining_animations),
+                    return_exceptions=True,
+                )
+
+                # Process results: separate successes from failures
+                for result in results:
+                    # Handle gather-level exceptions (shouldn't happen with our wrapper)
+                    if isinstance(result, Exception):
+                        logger.error("Unexpected gather exception: %s", result)
+                        failed_rows.append((-1, "unknown", result))
+                        continue
+
+                    # Type narrowing: result is now tuple[int, AnimationDef, list[list[str]] | Exception]
+                    assert not isinstance(result, BaseException)
+                    row_idx_seq, animation, outcome = result
+
+                    if isinstance(outcome, Exception):
+                        # Row processing failed
+                        failed_rows.append((row_idx_seq, animation.name, outcome))
+                    else:
+                        # Row processing succeeded
+                        row_grids = outcome
+
+                        # Only render if not already loaded from checkpoint
+                        if animation.row not in row_images:
+                            # Create context for rendering this row
+                            row_render_context = (
+                                self.row_processor._build_frame_context(
+                                    palette=palette,
+                                    palette_map=palette_map,
+                                    animation=animation,
+                                    anchor_grid=anchor_grid,
+                                    anchor_rendered=anchor_rendered,
+                                    quantized_reference=None,
+                                )
+                            )
+                            row_strip = render_row_strip(row_grids, row_render_context)
+                            row_images[animation.row] = frame_to_png_bytes(row_strip)
+
+                            # Save checkpoint for this row
+                            if self.checkpoint_manager is not None:
+                                self.checkpoint_manager.save_row(
+                                    row=animation.row,
+                                    animation_name=animation.name,
+                                    strip_bytes=row_images[animation.row],
+                                    grids=row_grids,
+                                )
+
+                        completed_count += 1
+                        if progress_callback:
+                            progress_callback("row", 1 + completed_count, total_rows)
+
+                if not failed_rows:
+                    logger.info(
+                        "All %d non-anchor rows completed successfully",
+                        len(remaining_animations),
+                    )
+                    break
+
                 failed_summary = "\n".join(
                     f"  - Row {idx} ({name}): {exc}" for idx, name, exc in failed_rows
                 )
@@ -466,18 +490,66 @@ class SpriteForgeWorkflow:
                     failed_summary,
                 )
 
-                # Raise an error that includes information about partial success
-                raise GateError(
-                    f"Failed to generate {len(failed_rows)} of "
-                    f"{len(remaining_animations)} non-anchor rows. "
-                    f"Successfully generated rows: {completed_count}. "
-                    f"See logs for details."
+                failure_ratio = len(failed_rows) / len(remaining_animations)
+                should_regen_anchor = (
+                    max_anchor_regenerations > anchor_regen_attempts
+                    and failure_ratio
+                    >= self.config.generation.anchor_regen_failure_ratio
+                    and all(idx >= 1 for idx, _name, _exc in failed_rows)
                 )
 
-            logger.info(
-                "All %d non-anchor rows completed successfully",
-                len(remaining_animations),
-            )
+                if not should_regen_anchor:
+                    # Raise an error that includes information about partial success
+                    raise RowGenerationError(
+                        f"Failed to generate {len(failed_rows)} of "
+                        f"{len(remaining_animations)} non-anchor rows. "
+                        f"Successfully generated rows: {completed_count}. "
+                        f"See logs for details."
+                    )
+
+                anchor_regen_attempts += 1
+                logger.warning(
+                    "Regenerating anchor row due to cascade failures "
+                    "(%d/%d failed, ratio=%.2f, attempt %d/%d).",
+                    len(failed_rows),
+                    len(remaining_animations),
+                    failure_ratio,
+                    anchor_regen_attempts,
+                    max_anchor_regenerations,
+                )
+
+                # Regenerate only anchor row, then retry remaining rows.
+                anchor_grid, anchor_rendered, row0_grids = (
+                    await self.row_processor.process_anchor_row(
+                        base_reference,
+                        anchor_animation,
+                        palette,
+                        palette_map,
+                        quantized_reference=quantized_reference,
+                    )
+                )
+                anchor_render_context = self.row_processor._build_frame_context(
+                    palette=palette,
+                    palette_map=palette_map,
+                    animation=anchor_animation,
+                    anchor_grid=anchor_grid,
+                    anchor_rendered=None,
+                    quantized_reference=None,
+                )
+                row0_strip = render_row_strip(row0_grids, anchor_render_context)
+                row_images[anchor_animation.row] = frame_to_png_bytes(row0_strip)
+                if self.checkpoint_manager is not None:
+                    self.checkpoint_manager.save_row(
+                        row=anchor_animation.row,
+                        animation_name=anchor_animation.name,
+                        strip_bytes=row_images[anchor_animation.row],
+                        grids=row0_grids,
+                    )
+
+                # Previously generated non-anchor outputs may encode identity drift.
+                for anim in self.config.animations[1:]:
+                    row_images.pop(anim.row, None)
+                completed_rows = {anchor_animation.row}
 
         return await self.assembler(
             row_images=row_images,
@@ -586,6 +658,23 @@ async def create_workflow(
         owns_credential = False
 
     # Create tiered chat providers
+    default_deployments = {
+        "grid_model": "gpt-5.2",
+        "gate_model": "gpt-5-mini",
+        "labeling_model": "gpt-5-nano",
+        "reference_model": "gpt-image-1.5",
+    }
+    for key, default_name in default_deployments.items():
+        configured_name = getattr(config.generation, key)
+        if configured_name == default_name:
+            logger.warning(
+                "Using default deployment name for %s: %s. "
+                "Set generation.%s in YAML if your Azure deployment differs.",
+                key,
+                configured_name,
+                key,
+            )
+
     grid_provider = AzureChatProvider(
         azure_endpoint=endpoint,
         model_deployment_name=config.generation.grid_model,
@@ -607,7 +696,10 @@ async def create_workflow(
 
     # Create components
     grid_generator = GridGenerator(chat_provider=grid_provider)
-    gate_checker = LLMGateChecker(chat_provider=gate_provider)
+    gate_checker = LLMGateChecker(
+        chat_provider=gate_provider,
+        max_image_bytes=config.generation.max_image_bytes,
+    )
     programmatic_checker = ProgrammaticChecker()
     retry_manager = RetryManager()
 

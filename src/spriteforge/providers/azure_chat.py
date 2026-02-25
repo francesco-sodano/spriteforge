@@ -191,7 +191,12 @@ class AzureChatProvider(ChatProvider):
                     **kwargs,  # type: ignore[arg-type]
                 )
             else:
-                raise
+                raise GenerationError(
+                    "Azure chat completion failed for deployment "
+                    f"'{self._model_deployment_name}' at endpoint '{self._endpoint}'. "
+                    "Verify generation model deployment names in YAML and endpoint auth. "
+                    f"Original error: {exc}"
+                ) from exc
 
         if (
             not response.choices

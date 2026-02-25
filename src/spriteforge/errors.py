@@ -26,6 +26,10 @@ class GenerationError(SpriteForgeError):
     """Raised when LLM grid generation fails (parse error, API failure)."""
 
 
+class RowGenerationError(SpriteForgeError):
+    """Raised when one or more animation rows fail to generate."""
+
+
 class GateError(SpriteForgeError):
     """Raised when a verification gate encounters an unrecoverable error."""
 

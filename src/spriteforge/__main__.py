@@ -12,7 +12,7 @@ from pathlib import Path
 from pydantic import ValidationError
 
 from spriteforge.config import load_config
-from spriteforge.errors import GenerationError, ProviderError
+from spriteforge.errors import GenerationError, ProviderError, RowGenerationError
 from spriteforge.logging import setup_logging
 from spriteforge.preprocessor import preprocess_reference
 from spriteforge.workflow import create_workflow
@@ -23,15 +23,10 @@ _LEGACY_SHIM_MESSAGE = (
     "spriteforge.__main__ argparse helpers are deprecated. "
     "Use the Click CLI (spriteforge.cli) or spriteforge.app.run_spriteforge."
 )
-_LEGACY_WARNING_EMITTED = False
 
 
 def _warn_legacy_shim() -> None:
     """Emit a deprecation warning for legacy argparse shims once."""
-    global _LEGACY_WARNING_EMITTED  # noqa: PLW0603
-    if _LEGACY_WARNING_EMITTED:
-        return
-    _LEGACY_WARNING_EMITTED = True
     warnings.warn(_LEGACY_SHIM_MESSAGE, DeprecationWarning, stacklevel=2)
 
 
@@ -183,6 +178,7 @@ async def async_main(args: argparse.Namespace) -> int:
         FileNotFoundError,
         ValidationError,
         GenerationError,
+        RowGenerationError,
         ProviderError,
         ValueError,
     ) as exc:

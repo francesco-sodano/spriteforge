@@ -27,7 +27,7 @@ from spriteforge.prompts.gates import (
     GATE_VERDICT_SCHEMA,
 )
 from spriteforge.providers.chat import ChatProvider
-from spriteforge.utils import image_to_data_url, validate_grid_dimensions
+from spriteforge.utils import image_to_data_url_limited, validate_grid_dimensions
 
 logger = get_logger("gates")
 
@@ -235,7 +235,7 @@ class ProgrammaticChecker:
         """
         if expected_foot_row is None:
             expected_foot_row = int(frame_height * FEET_ROW_RATIO)
-        window = max(3, int(frame_height * FEET_WINDOW_RATIO))
+        window = max(1, int(frame_height * FEET_WINDOW_RATIO))
         foot_zone_start = max(0, expected_foot_row - window)
         foot_zone_end = min(len(grid), expected_foot_row + window)
 
@@ -378,13 +378,16 @@ class LLMGateChecker:
     def __init__(
         self,
         chat_provider: ChatProvider,
+        max_image_bytes: int = 4_000_000,
     ) -> None:
         """Initialize the LLM gate checker.
 
         Args:
             chat_provider: Chat provider for LLM calls.
+            max_image_bytes: Maximum image payload size for multimodal calls.
         """
         self._chat = chat_provider
+        self._max_image_bytes = max_image_bytes
 
     async def close(self) -> None:
         """Close the underlying chat provider."""
@@ -416,7 +419,15 @@ class LLMGateChecker:
         content: list[dict[str, Any]] = [{"type": "text", "text": prompt_text}]
         for img in images:
             content.append(
-                {"type": "image_url", "image_url": {"url": image_to_data_url(img)}}
+                {
+                    "type": "image_url",
+                    "image_url": {
+                        "url": image_to_data_url_limited(
+                            img,
+                            max_bytes=self._max_image_bytes,
+                        )
+                    },
+                }
             )
 
         response_text = await self._chat.chat(

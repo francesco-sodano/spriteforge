@@ -198,6 +198,19 @@ def load_config(path: str | Path) -> SpritesheetSpec:
 
     spec = SpritesheetSpec(**spec_kwargs)
 
+    if spec.output_path and not spec.generation.allow_absolute_output_path:
+        output_path = Path(spec.output_path)
+        if output_path.is_absolute():
+            raise ValueError(
+                "Config output_path must be relative when "
+                "generation.allow_absolute_output_path is false"
+            )
+        if ".." in output_path.parts:
+            raise ValueError(
+                "Config output_path must not contain parent-directory traversal "
+                "segments ('..')"
+            )
+
     num_colors = len(spec.palette.colors) if spec.palette else 0
     logger.info(
         "Loaded config: %s (%d animations, %d palette colors)",

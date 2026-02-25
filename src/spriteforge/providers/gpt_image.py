@@ -180,7 +180,10 @@ class GPTImageProvider(ReferenceProvider):
             )
         except Exception as exc:
             logger.error("Reference generation failed: %s", exc)
-            raise ProviderError(f"Image generation failed: {exc}") from exc
+            raise ProviderError(
+                "Image generation failed for deployment "
+                f"'{self._model}' at endpoint '{self._endpoint}': {exc}"
+            ) from exc
 
         try:
             # GPT Image models always return base64-encoded images

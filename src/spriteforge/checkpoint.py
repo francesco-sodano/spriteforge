@@ -41,6 +41,8 @@ class CheckpointManager:
     - Metadata (animation name, row index)
     """
 
+    CHECKPOINT_VERSION = 1
+
     def __init__(self, checkpoint_dir: Path) -> None:
         """Initialize checkpoint manager.
 
@@ -50,6 +52,7 @@ class CheckpointManager:
         """
         self.checkpoint_dir = Path(checkpoint_dir)
         self.checkpoint_dir.mkdir(parents=True, exist_ok=True)
+        self._corrupt_rows: set[int] = set()
         logger.info("Checkpoint directory: %s", self.checkpoint_dir)
 
     def save_row(
@@ -74,6 +77,7 @@ class CheckpointManager:
         # Save metadata + grids as JSON
         json_path = self.checkpoint_dir / f"row_{row:03d}.json"
         data: dict[str, Any] = {
+            "version": self.CHECKPOINT_VERSION,
             "row": row,
             "animation_name": animation_name,
             "grids": grids,
@@ -108,6 +112,7 @@ class CheckpointManager:
             raw = json.loads(json_path.read_text())
         except json.JSONDecodeError as exc:
             logger.error("Checkpoint JSON for row %d is corrupt: %s", row, exc)
+            self._corrupt_rows.add(row)
             return None
 
         if not isinstance(raw, dict):
@@ -116,20 +121,31 @@ class CheckpointManager:
                 row,
                 type(raw).__name__,
             )
+            self._corrupt_rows.add(row)
+            return None
+
+        version = int(raw.get("version", 0))
+        if version > self.CHECKPOINT_VERSION:
+            logger.error(
+                "Checkpoint for row %d has unsupported version %d (max supported %d)",
+                row,
+                version,
+                self.CHECKPOINT_VERSION,
+            )
+            self._corrupt_rows.add(row)
             return None
 
         if "grids" not in raw:
             logger.error("Checkpoint for row %d is missing 'grids' key", row)
+            self._corrupt_rows.add(row)
             return None
 
         grids = raw["grids"]
         if not isinstance(grids, list) or not all(
-            isinstance(g, list) and all(isinstance(r, str) for r in g)
-            for g in grids
+            isinstance(g, list) and all(isinstance(r, str) for r in g) for g in grids
         ):
-            logger.error(
-                "Checkpoint for row %d has malformed 'grids' value", row
-            )
+            logger.error("Checkpoint for row %d has malformed 'grids' value", row)
+            self._corrupt_rows.add(row)
             return None
 
         logger.debug(
@@ -138,6 +154,7 @@ class CheckpointManager:
             raw.get("animation_name", "unknown"),
             len(grids),
         )
+        self._corrupt_rows.discard(row)
 
         return strip_bytes, grids
 
@@ -150,18 +167,32 @@ class CheckpointManager:
         completed: set[int] = set()
 
         # Look for row_NNN.json files
-        for json_path in self.checkpoint_dir.glob("row_*.json"):
+        for json_path in self.checkpoint_dir.iterdir():
+            if not json_path.is_file():
+                continue
+            if not json_path.name.lower().startswith("row_"):
+                continue
+            if json_path.suffix.lower() != ".json":
+                continue
             # Extract row number from filename
             try:
                 row_num = int(json_path.stem.split("_")[1])
                 # Verify PNG exists too
-                png_path = self.checkpoint_dir / f"row_{row_num:03d}.png"
-                if png_path.exists():
+                png_matches = list(self.checkpoint_dir.glob(f"row_{row_num:03d}.*"))
+                has_png = any(
+                    p.is_file() and p.suffix.lower() == ".png" for p in png_matches
+                )
+                if has_png:
                     completed.add(row_num)
             except (ValueError, IndexError):
                 logger.warning("Skipping invalid checkpoint file: %s", json_path)
 
         return completed
+
+    @property
+    def corrupt_rows(self) -> set[int]:
+        """Rows for which checkpoint files were detected as corrupted."""
+        return set(self._corrupt_rows)
 
     def cleanup(self) -> None:
         """Remove all checkpoint files after successful completion.

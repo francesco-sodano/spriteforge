@@ -213,14 +213,14 @@ class RetryManager:
             Updated :class:`RetryContext`.
         """
         new_feedback = [v.feedback for v in verdicts if v.feedback]
-        next_attempt = context.current_attempt + 1
-        if next_attempt < context.max_attempts:
-            # next_attempt is 0-based; get_tier expects 1-based attempt.
-            tier = self.get_tier(next_attempt + 1)
-            temperature = self.get_temperature(next_attempt + 1)
+        completed_attempts = context.current_attempt + 1
+        if completed_attempts < context.max_attempts:
+            next_generation_attempt = completed_attempts + 1
+            tier = self.get_tier(next_generation_attempt)
+            temperature = self.get_temperature(next_generation_attempt)
             logger.info(
                 "Retry %d/%d for %s — %s (temp=%.1f)",
-                next_attempt + 1,
+                next_generation_attempt,
                 context.max_attempts,
                 context.frame_id,
                 tier.value,
@@ -234,7 +234,7 @@ class RetryManager:
             )
         return context.model_copy(
             update={
-                "current_attempt": next_attempt,
+                "current_attempt": completed_attempts,
                 "failure_history": context.failure_history + verdicts,
                 "accumulated_feedback": context.accumulated_feedback + new_feedback,
                 "last_grid": grid if grid is not None else context.last_grid,

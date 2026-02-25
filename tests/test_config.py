@@ -150,12 +150,29 @@ class TestLoadConfig:
                     row: 0
                     frames: 6
                     timing_ms: 150
+                generation:
+                  allow_absolute_output_path: true
                 base_image_path: /tmp/ref.png
                 output_path: /tmp/out.png
             """))
         spec = load_config(cfg)
         assert spec.base_image_path == "/tmp/ref.png"
         assert spec.output_path == "/tmp/out.png"
+
+    def test_absolute_output_path_rejected_by_default(self, config_dir: Path) -> None:
+        cfg = config_dir / "paths_reject.yaml"
+        cfg.write_text(textwrap.dedent("""\
+                character:
+                  name: Test
+                animations:
+                  - name: idle
+                    row: 0
+                    frames: 6
+                    timing_ms: 150
+                output_path: /tmp/out.png
+            """))
+        with pytest.raises(ValueError, match="output_path must be relative"):
+            load_config(cfg)
 
     def test_malformed_yaml_syntax(self, config_dir: Path) -> None:
         cfg = config_dir / "broken.yaml"
@@ -784,10 +801,8 @@ class TestValidateConfig:
         # Should succeed without error
         assert isinstance(warnings, list)
 
-    def test_empty_model_deployment_name_produces_warning(
-        self, config_dir: Path
-    ) -> None:
-        """Empty model deployment name should produce a warning."""
+    def test_empty_model_deployment_name_is_rejected(self, config_dir: Path) -> None:
+        """Empty model deployment names should fail validation."""
         cfg = config_dir / "empty_model.yaml"
         cfg.write_text(textwrap.dedent("""\
                 character:
@@ -801,9 +816,11 @@ class TestValidateConfig:
                   grid_model: ""
                   gate_model: "gpt-5-mini"
             """))
-        warnings = validate_config(cfg, check_base_image=False)
-        assert len(warnings) >= 1
-        assert any("grid_model" in w for w in warnings)
+        with pytest.raises(
+            ValidationError,
+            match="model deployment names must be non-empty",
+        ):
+            validate_config(cfg, check_base_image=False)
 
     def test_non_standard_outline_symbol_produces_warning(
         self, config_dir: Path

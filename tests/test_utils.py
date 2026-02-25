@@ -13,6 +13,7 @@ from spriteforge.utils import (
     compress_grid_rle,
     image_to_base64,
     image_to_data_url,
+    image_to_data_url_limited,
     parse_json_from_llm,
     strip_code_fences,
 )
@@ -66,6 +67,11 @@ class TestImageToDataUrl:
         """Custom media type in URL."""
         url = image_to_data_url(b"\x89PNG", media_type="image/jpeg")
         assert url.startswith("data:image/jpeg;base64,")
+
+    def test_image_to_data_url_limited_rejects_large_payload(self) -> None:
+        png_bytes = _make_png_bytes(64, 64)
+        with pytest.raises(ValueError, match="payload is too large"):
+            image_to_data_url_limited(png_bytes, max_bytes=8)
 
 
 # ---------------------------------------------------------------------------
