@@ -328,9 +328,21 @@ class RowProcessor:
             strip_bytes = frame_to_png_bytes(strip.convert("RGBA"))
             if self.call_tracker:
                 self.call_tracker.increment("gate_minus_1")
-            verdict = await self.gate_checker.gate_minus_1(
-                strip_bytes, base_reference, animation
-            )
+            try:
+                verdict = await self.gate_checker.gate_minus_1(
+                    strip_bytes, base_reference, animation
+                )
+            except GateError as exc:
+                if "timed out" not in str(exc).lower():
+                    raise
+                logger.warning(
+                    "Gate -1 timed out for %s " "(attempt %d/%d): %s",
+                    animation.name,
+                    attempt + 1,
+                    max_ref_retries,
+                    str(exc),
+                )
+                continue
             self._record_usage_from_verdict(verdict)
             self._record_gate_verdict(verdict)
             if verdict.passed:

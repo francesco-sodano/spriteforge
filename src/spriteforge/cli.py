@@ -265,8 +265,7 @@ async def _run_generation(
                 if isinstance(last_failed_gate, str) and last_failed_gate:
                     gate_text = f" last_fail:{last_failed_gate}"
             return (
-                f"[cyan]Generating rows...{current}/{total}"
-                f"{retry_text}{gate_text}"
+                f"[cyan]Generating rows...{current}/{total}" f"{retry_text}{gate_text}"
             )
 
         def progress_callback(stage_name: str, current: int, total: int) -> None:

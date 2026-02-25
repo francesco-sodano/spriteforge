@@ -9,6 +9,7 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 from PIL import Image
 
+from spriteforge.errors import GateError
 from spriteforge.gates import GateVerdict, LLMGateChecker
 from spriteforge.models import (
     AnimationDef,
@@ -252,6 +253,37 @@ class TestRowProcessorTimeouts:
 
         assert strip.size == (64 * 3, 64)
         assert ref_provider.generate_row_strip.call_count == 2
+
+    @pytest.mark.asyncio
+    async def test_gate_minus_1_timeout_retries_and_recovers(
+        self, sample_config: SpritesheetSpec
+    ) -> None:
+        gate_checker = AsyncMock(spec=LLMGateChecker)
+        gate_checker.gate_minus_1 = AsyncMock(
+            side_effect=[
+                GateError("gate_minus_1 request timed out after 0.1s"),
+                _passing_verdict("gate_minus_1"),
+            ]
+        )
+        gate_checker.gate_3a = AsyncMock(return_value=_passing_verdict("gate_3a"))
+
+        ref_provider = AsyncMock(spec=ReferenceProvider)
+        ref_provider.generate_row_strip = AsyncMock(return_value=_make_strip_image(3))
+
+        row_processor = _build_row_processor(
+            sample_config,
+            reference_provider=ref_provider,
+            gate_checker=gate_checker,
+        )
+
+        strip = await row_processor._generate_reference_strip(
+            _TINY_PNG,
+            sample_config.animations[0],
+        )
+
+        assert strip.size == (64 * 3, 64)
+        assert ref_provider.generate_row_strip.call_count == 2
+        assert gate_checker.gate_minus_1.call_count == 2
 
 
 class TestRowProcessorFrameSequencing:

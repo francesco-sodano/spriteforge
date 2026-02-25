@@ -35,6 +35,7 @@ class RetryMetricsSink(Protocol):
     def record_retry(self, tier: str) -> None:
         """Record a retry attempt for the given tier."""
 
+
 # ---------------------------------------------------------------------------
 # Retry tier
 # ---------------------------------------------------------------------------

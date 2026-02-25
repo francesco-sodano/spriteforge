@@ -7,6 +7,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
+from spriteforge.errors import GateError
 from spriteforge.errors import RetryExhaustedError
 from spriteforge.frame_generator import FrameGenerator
 from spriteforge.gates import GateVerdict, LLMGateChecker, ProgrammaticChecker
@@ -194,6 +195,36 @@ class TestGenerateVerifiedFrameRetry:
         assert len(grid) == 64
         assert len(grid[0]) == 64
         # Verify gate_0 was called twice (once failed, once succeeded)
+        assert gate_checker.gate_0.call_count == 2
+
+    @pytest.mark.asyncio
+    async def test_gate_timeout_is_retried(
+        self,
+        sample_context: FrameContext,
+    ) -> None:
+        """Gate timeout should consume a retry attempt and recover if next attempt passes."""
+        gate_checker = AsyncMock(spec=LLMGateChecker)
+        gate_checker.gate_0 = AsyncMock(
+            side_effect=[
+                GateError("gate_0 request timed out after 0.1s"),
+                _passing_verdict("gate_0"),
+            ]
+        )
+        gate_checker.gate_1 = AsyncMock(return_value=_passing_verdict("gate_1"))
+        gate_checker.gate_2 = AsyncMock(return_value=_passing_verdict("gate_2"))
+
+        frame_gen = _build_frame_generator(gate_checker=gate_checker)
+
+        grid = await frame_gen.generate_verified_frame(
+            reference_frame=_TINY_PNG,
+            context=sample_context,
+            frame_index=0,
+            is_anchor=True,
+            base_reference=_TINY_PNG,
+        )
+
+        assert len(grid) == 64
+        assert len(grid[0]) == 64
         assert gate_checker.gate_0.call_count == 2
 
 

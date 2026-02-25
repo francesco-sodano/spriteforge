@@ -9,6 +9,7 @@ from __future__ import annotations
 import asyncio
 from typing import Any
 
+from spriteforge.errors import GateError
 from spriteforge.errors import RetryExhaustedError
 from spriteforge.gates import GateVerdict, LLMGateChecker, ProgrammaticChecker
 from spriteforge.generator import GridGenerator
@@ -95,6 +96,21 @@ class FrameGenerator:
         for verdict in verdicts:
             self.metrics_collector.record_gate_verdict(verdict)
 
+    @staticmethod
+    def _build_gate_timeout_verdict(error: GateError) -> GateVerdict:
+        """Convert a gate timeout error into a retryable failed verdict."""
+        message = str(error)
+        gate_name = "gate_timeout"
+        if message.startswith("gate_"):
+            gate_name = message.split(" ", 1)[0]
+        return GateVerdict(
+            gate_name=gate_name,
+            passed=False,
+            confidence=0.0,
+            feedback=message,
+            details={"error_type": "gate_timeout"},
+        )
+
     async def generate_verified_frame(
         self,
         reference_frame: bytes,
@@ -180,15 +196,25 @@ class FrameGenerator:
             frame_bytes = frame_to_png_bytes(frame_img)
 
             # Run LLM gates in parallel
-            llm_verdicts = await self._run_gates_parallel(
-                frame_rendered=frame_bytes,
-                anchor_rendered=context.anchor_rendered,
-                reference_frame=reference_frame,
-                prev_frame_rendered=prev_frame_rendered,
-                frame_index=frame_index,
-                animation=animation,
-                is_anchor=is_anchor,
-            )
+            try:
+                llm_verdicts = await self._run_gates_parallel(
+                    frame_rendered=frame_bytes,
+                    anchor_rendered=context.anchor_rendered,
+                    reference_frame=reference_frame,
+                    prev_frame_rendered=prev_frame_rendered,
+                    frame_index=frame_index,
+                    animation=animation,
+                    is_anchor=is_anchor,
+                )
+            except GateError as exc:
+                if "timed out" not in str(exc).lower():
+                    raise
+                timeout_verdict = self._build_gate_timeout_verdict(exc)
+                self._record_gate_verdicts([timeout_verdict])
+                retry_ctx = self.retry_manager.record_failure(
+                    retry_ctx, [timeout_verdict], grid=grid
+                )
+                continue
             self._record_usage_from_gate_verdicts(llm_verdicts)
             self._record_gate_verdicts(llm_verdicts)
 

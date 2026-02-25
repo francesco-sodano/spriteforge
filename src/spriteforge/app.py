@@ -46,6 +46,7 @@ async def run_spriteforge(
 
     progress_callback = None
     if debug:
+
         def _debug_progress(stage_name: str, current: int, total: int) -> None:
             logger.debug("Progress %s: %d/%d", stage_name, current, total)
 
