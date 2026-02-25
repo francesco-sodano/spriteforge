@@ -8,6 +8,7 @@ Grid dimensions are configurable (default 64×64) via ``context.frame_width`` an
 
 from __future__ import annotations
 
+import asyncio
 import json
 import re
 from typing import Any
@@ -441,9 +442,21 @@ class GridGenerator:
             {"role": "user", "content": content},
         ]
 
-        response_text = await self._chat.chat(
-            messages, temperature=temperature, response_format="json_object"
-        )
+        timeout_s = generation.request_timeout_seconds
+        try:
+            response_text = await asyncio.wait_for(
+                self._chat.chat(
+                    messages,
+                    temperature=temperature,
+                    response_format="json_object",
+                ),
+                timeout=timeout_s,
+            )
+        except TimeoutError as exc:
+            raise GenerationError(
+                f"Grid generation request timed out after {timeout_s:.1f}s "
+                f"for animation '{animation.name}' frame {frame_index}."
+            ) from exc
         grid = parse_grid_response(
             response_text, expected_rows=frame_height, expected_cols=frame_width
         )

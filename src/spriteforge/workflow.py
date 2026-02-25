@@ -841,6 +841,7 @@ async def create_workflow(
     gate_checker = LLMGateChecker(
         chat_provider=gate_provider,
         max_image_bytes=config.generation.max_image_bytes,
+        request_timeout_seconds=config.generation.request_timeout_seconds,
     )
     programmatic_checker = ProgrammaticChecker()
     metrics_collector = RunMetricsCollector()

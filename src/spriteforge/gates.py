@@ -9,6 +9,7 @@ Gate verdicts carry structured feedback that feeds into the retry engine.
 
 from __future__ import annotations
 
+import asyncio
 import json
 import re
 from typing import Any
@@ -16,6 +17,7 @@ from typing import Any
 from pydantic import BaseModel, Field
 
 from spriteforge.constants import FEET_ROW_RATIO, FEET_WINDOW_RATIO
+from spriteforge.errors import GateError
 from spriteforge.logging import get_logger
 from spriteforge.models import AnimationDef, FrameContext, PaletteConfig
 from spriteforge.prompts.gates import (
@@ -392,15 +394,18 @@ class LLMGateChecker:
         self,
         chat_provider: ChatProvider,
         max_image_bytes: int = 4_000_000,
+        request_timeout_seconds: float = 120.0,
     ) -> None:
         """Initialize the LLM gate checker.
 
         Args:
             chat_provider: Chat provider for LLM calls.
             max_image_bytes: Maximum image payload size for multimodal calls.
+            request_timeout_seconds: Per-request timeout for gate LLM calls.
         """
         self._chat = chat_provider
         self._max_image_bytes = max_image_bytes
+        self._request_timeout_seconds = request_timeout_seconds
 
     async def close(self) -> None:
         """Close the underlying chat provider."""
@@ -443,11 +448,20 @@ class LLMGateChecker:
                 }
             )
 
-        response_text = await self._chat.chat(
-            [{"role": "user", "content": content}],
-            temperature=0.0,
-            response_format="json_object",
-        )
+        try:
+            response_text = await asyncio.wait_for(
+                self._chat.chat(
+                    [{"role": "user", "content": content}],
+                    temperature=0.0,
+                    response_format="json_object",
+                ),
+                timeout=self._request_timeout_seconds,
+            )
+        except TimeoutError as exc:
+            raise GateError(
+                f"{gate_name} request timed out after "
+                f"{self._request_timeout_seconds:.1f}s"
+            ) from exc
         usage = getattr(self._chat, "last_usage", None)
         verdict = parse_verdict_response(response_text, gate_name)
 

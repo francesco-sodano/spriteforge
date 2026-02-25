@@ -238,6 +238,9 @@ class GenerationConfig(BaseModel):
         budget: Optional budget constraints for LLM call tracking and limits.
         max_image_bytes: Maximum image byte size allowed when converting to
             data URLs for multimodal requests.
+        request_timeout_seconds: Per-request timeout (in seconds) applied to
+            external LLM/image provider calls (grid generation, gate checks,
+            and reference strip generation).
         max_anchor_regenerations: Maximum times the workflow may regenerate
             the anchor row when downstream failures indicate likely anchor
             identity drift.
@@ -264,6 +267,7 @@ class GenerationConfig(BaseModel):
     fallback_regen_frames: int = Field(default=2, ge=1)
     compact_grid_context: bool = False
     max_image_bytes: int = Field(default=4_000_000, ge=1024)
+    request_timeout_seconds: float = Field(default=120.0, gt=0)
     max_anchor_regenerations: int = Field(default=0, ge=0)
     anchor_regen_failure_ratio: float = Field(default=1.0, ge=0.0, le=1.0)
     allow_absolute_output_path: bool = False

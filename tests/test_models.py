@@ -315,6 +315,7 @@ class TestGenerationConfig:
         assert gen.feet_row == 56
         assert gen.outline_width == 1
         assert gen.rules == ""
+        assert gen.request_timeout_seconds == 120.0
 
     def test_generation_config_facing_right(self) -> None:
         gen = GenerationConfig(facing="right")
@@ -418,9 +419,16 @@ class TestGenerationConfig:
         assert data["gate_model"] == "test-gate"
         assert data["labeling_model"] == "gpt-5-nano"
         assert data["reference_model"] == "gpt-image-1.5"
-        # Test round-trip
         gen2 = GenerationConfig(**data)
         assert gen2.grid_model == gen.grid_model
         assert gen2.gate_model == gen.gate_model
         assert gen2.labeling_model == gen.labeling_model
         assert gen2.reference_model == gen.reference_model
+
+    def test_generation_config_request_timeout_custom(self) -> None:
+        gen = GenerationConfig(request_timeout_seconds=30.5)
+        assert gen.request_timeout_seconds == 30.5
+
+    def test_generation_config_request_timeout_must_be_positive(self) -> None:
+        with pytest.raises(ValidationError):
+            GenerationConfig(request_timeout_seconds=0)

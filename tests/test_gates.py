@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 from typing import Any
 
 import pytest
 
+from spriteforge.errors import GateError
 from spriteforge.gates import (
     GateVerdict,
     LLMGateChecker,
@@ -696,6 +698,50 @@ class TestLLMGateCheckerResponseFormat:
 
         assert len(mock._call_history) == 1
         assert mock._call_history[0]["response_format"] == "json_object"
+
+
+class TestLLMGateCheckerTimeouts:
+    @pytest.fixture()
+    def valid_verdict_json(self) -> str:
+        return json.dumps(
+            {
+                "passed": True,
+                "confidence": 0.95,
+                "feedback": "Test passed",
+            }
+        )
+
+    @pytest.fixture()
+    def sample_animation(self) -> AnimationDef:
+        return AnimationDef(
+            name="idle",
+            row=0,
+            frames=6,
+            timing_ms=150,
+        )
+
+    @pytest.mark.asyncio
+    async def test_gate_timeout_raises_gate_error(self) -> None:
+        class HangingProvider(MockChatProvider):
+            async def chat(
+                self,
+                messages: list[dict[str, Any]],
+                temperature: float = 1.0,
+                response_format: str | None = None,
+            ) -> str:
+                await asyncio.Event().wait()
+                return ""
+
+        checker = LLMGateChecker(
+            chat_provider=HangingProvider(),
+            request_timeout_seconds=0.01,
+        )
+
+        with pytest.raises(GateError, match="timed out"):
+            await checker.gate_0(
+                rendered_frame=_TINY_PNG,
+                reference_frame=_TINY_PNG,
+            )
 
     @pytest.mark.asyncio
     async def test_gate_0_passes_response_format(

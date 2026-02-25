@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 from typing import Any
 from unittest.mock import patch
@@ -334,6 +335,40 @@ class TestGenerateAnchorFrame:
         image_parts = [p for p in content if p["type"] == "image_url"]
         # base_reference + reference_frame = 2 images
         assert len(image_parts) == 2
+
+    @pytest.mark.asyncio
+    async def test_generate_anchor_frame_times_out(
+        self,
+        sample_palette: PaletteConfig,
+        sample_animation: AnimationDef,
+    ) -> None:
+        class HangingProvider(MockChatProvider):
+            async def chat(
+                self,
+                messages: list[dict[str, Any]],
+                temperature: float = 1.0,
+                response_format: str | None = None,
+            ) -> str:
+                await asyncio.Event().wait()
+                return ""
+
+        generator = GridGenerator(chat_provider=HangingProvider())
+        context = FrameContext(
+            palette=sample_palette,
+            palette_map=build_palette_map(sample_palette),
+            generation=GenerationConfig(request_timeout_seconds=0.01),
+            frame_width=64,
+            frame_height=64,
+            animation=sample_animation,
+            spritesheet_columns=14,
+        )
+
+        with pytest.raises(GenerationError, match="timed out"):
+            await generator.generate_anchor_frame(
+                base_reference=_TINY_PNG,
+                reference_frame=_TINY_PNG,
+                context=context,
+            )
 
     @pytest.mark.asyncio
     async def test_generate_anchor_frame_includes_palette_in_prompt(

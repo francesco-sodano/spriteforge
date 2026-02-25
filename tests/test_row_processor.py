@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock
 
@@ -201,6 +202,56 @@ class TestRowProcessorGate3ARetry:
         assert 0 in generated_frames
         assert 1 in generated_frames
         assert generated_frames.count(2) >= 2
+
+    def test_identify_problematic_frames_handles_list_feedback(
+        self, sample_config: SpritesheetSpec
+    ) -> None:
+        row_processor = _build_row_processor(sample_config)
+        indices = row_processor._identify_problematic_frames(
+            "frames 2, 5, and 7 have jitter",
+            num_frames=8,
+        )
+        assert indices == [2, 5, 7]
+
+
+class TestRowProcessorTimeouts:
+    @pytest.mark.asyncio
+    async def test_reference_strip_timeout_retries_and_recovers(
+        self, sample_config: SpritesheetSpec
+    ) -> None:
+        sample_config.generation.request_timeout_seconds = 0.01
+
+        gate_checker = AsyncMock(spec=LLMGateChecker)
+        gate_checker.gate_minus_1 = AsyncMock(
+            return_value=_passing_verdict("gate_minus_1")
+        )
+        gate_checker.gate_3a = AsyncMock(return_value=_passing_verdict("gate_3a"))
+
+        call_count = 0
+
+        async def flaky_generate(*args: Any, **kwargs: Any) -> Image.Image:
+            nonlocal call_count
+            call_count += 1
+            if call_count == 1:
+                await asyncio.Event().wait()
+            return _make_strip_image(3)
+
+        ref_provider = AsyncMock(spec=ReferenceProvider)
+        ref_provider.generate_row_strip = AsyncMock(side_effect=flaky_generate)
+
+        row_processor = _build_row_processor(
+            sample_config,
+            reference_provider=ref_provider,
+            gate_checker=gate_checker,
+        )
+
+        strip = await row_processor._generate_reference_strip(
+            _TINY_PNG,
+            sample_config.animations[0],
+        )
+
+        assert strip.size == (64 * 3, 64)
+        assert ref_provider.generate_row_strip.call_count == 2
 
 
 class TestRowProcessorFrameSequencing:

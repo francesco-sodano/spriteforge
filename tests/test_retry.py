@@ -420,6 +420,14 @@ class TestCustomConfig:
         assert config.guided_temperature == 0.7
         assert config.constrained_temperature == 0.3
 
+    def test_custom_config_rejects_non_contiguous_tiers(self) -> None:
+        with pytest.raises(ValueError, match="contiguous"):
+            RetryConfig(
+                soft_range=(1, 2),
+                guided_range=(4, 6),
+                constrained_range=(7, 10),
+            )
+
 
 # ---------------------------------------------------------------------------
 # Dynamic retry guidance dimensions (Phase 5)

@@ -16,7 +16,7 @@ from __future__ import annotations
 from enum import Enum
 from typing import Protocol
 
-from pydantic import BaseModel
+from pydantic import BaseModel, model_validator
 
 from spriteforge.gates import GateVerdict
 from spriteforge.logging import get_logger
@@ -78,6 +78,43 @@ class RetryConfig(BaseModel):
     soft_temperature: float = 1.0
     guided_temperature: float = 0.7
     constrained_temperature: float = 0.3
+
+    @model_validator(mode="after")
+    def _validate_tier_ranges(self) -> "RetryConfig":
+        soft_start, soft_end = self.soft_range
+        guided_start, guided_end = self.guided_range
+        constrained_start, constrained_end = self.constrained_range
+
+        for name, start, end in (
+            ("soft_range", soft_start, soft_end),
+            ("guided_range", guided_start, guided_end),
+            ("constrained_range", constrained_start, constrained_end),
+        ):
+            if start < 1:
+                raise ValueError(f"{name} start must be >= 1, got {start}")
+            if end < start:
+                raise ValueError(f"{name} end must be >= start, got {start}-{end}")
+
+        if soft_start != 1:
+            raise ValueError(
+                f"soft_range must start at 1 for 1-based attempts, got {soft_start}"
+            )
+
+        if guided_start != soft_end + 1:
+            raise ValueError(
+                "Retry tier ranges must be contiguous: "
+                f"expected guided_range to start at {soft_end + 1}, "
+                f"got {guided_start}"
+            )
+
+        if constrained_start != guided_end + 1:
+            raise ValueError(
+                "Retry tier ranges must be contiguous: "
+                f"expected constrained_range to start at {guided_end + 1}, "
+                f"got {constrained_start}"
+            )
+
+        return self
 
 
 # ---------------------------------------------------------------------------

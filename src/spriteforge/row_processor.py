@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import io
 import re
 from typing import Any
@@ -302,12 +303,27 @@ class RowProcessor:
         for attempt in range(max_ref_retries):
             if self.call_tracker:
                 self.call_tracker.increment("reference_generation")
-            strip = await self.reference_provider.generate_row_strip(
-                base_reference=base_reference,
-                prompt=prompt,
-                num_frames=animation.frames,
-                frame_size=self.config.character.frame_size,
-            )
+            timeout_s = self.config.generation.request_timeout_seconds
+            try:
+                strip = await asyncio.wait_for(
+                    self.reference_provider.generate_row_strip(
+                        base_reference=base_reference,
+                        prompt=prompt,
+                        num_frames=animation.frames,
+                        frame_size=self.config.character.frame_size,
+                    ),
+                    timeout=timeout_s,
+                )
+            except TimeoutError:
+                logger.warning(
+                    "Reference strip generation timed out for %s "
+                    "(attempt %d/%d, timeout=%.1fs)",
+                    animation.name,
+                    attempt + 1,
+                    max_ref_retries,
+                    timeout_s,
+                )
+                continue
 
             strip_bytes = frame_to_png_bytes(strip.convert("RGBA"))
             if self.call_tracker:
@@ -333,8 +349,10 @@ class RowProcessor:
 
     def _identify_problematic_frames(self, feedback: str, num_frames: int) -> list[int]:
         """Identify frame indices that may be problematic based on Gate 3A feedback."""
-        frame_pattern = r"[Ff]rame[s]?\s+(\d+)"
-        matches = re.findall(frame_pattern, feedback)
+        frame_list_pattern = r"[Ff]rame[s]?\s+([0-9,\sand]+)"
+        matches: list[str] = []
+        for chunk in re.findall(frame_list_pattern, feedback):
+            matches.extend(re.findall(r"\d+", chunk))
 
         if matches:
             indices = []

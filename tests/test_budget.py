@@ -95,6 +95,9 @@ class TestCallTracker:
         with pytest.raises(BudgetExhaustedError, match="call budget exhausted"):
             tracker.increment()
 
+        # Strict mode should block before incrementing beyond the limit.
+        assert tracker.count == 5
+
     def test_tracker_warning_at_threshold(
         self, caplog: pytest.LogCaptureFixture
     ) -> None:

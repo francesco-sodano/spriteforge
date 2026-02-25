@@ -89,13 +89,24 @@ class CallTracker:
         should_warn = False
         current = 0
         max_calls = 0
+        mode = "strict"
 
         with self._lock:
+            if self._budget is not None and self._budget.max_llm_calls > 0:
+                max_calls = self._budget.max_llm_calls
+                mode = self._budget.enforcement_mode
+
+                if mode == "strict" and self._count >= max_calls:
+                    raise BudgetExhaustedError(
+                        f"LLM call budget exhausted: {self._count} calls already made, "
+                        f"limit is {max_calls}. Increase budget.max_llm_calls "
+                        f"or reduce spritesheet complexity."
+                    )
+
             self._count += 1
             current = self._count
 
             if self._budget is not None and self._budget.max_llm_calls > 0:
-                max_calls = self._budget.max_llm_calls
                 warn_threshold = int(max_calls * self._budget.warn_at_percentage)
                 if current >= warn_threshold and not self._warned:
                     self._warned = True
@@ -116,7 +127,6 @@ class CallTracker:
 
         # Check for hard limit
         if current > max_calls:
-            mode = self._budget.enforcement_mode
             if mode == "best_effort":
                 with self._lock:
                     should_log_best_effort = not self._best_effort_budget_exceeded
