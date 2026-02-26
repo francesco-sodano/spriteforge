@@ -12,9 +12,10 @@ import sys
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import click
+from pydantic import ValidationError
 from rich.console import Console
 from rich.progress import (
     BarColumn,
@@ -28,11 +29,15 @@ from rich.progress import (
 )
 
 from spriteforge import (
+    MinimalActionInput,
+    MinimalConfigInput,
+    build_spritesheet_spec_from_minimal_input,
     create_workflow,
     estimate_calls,
     load_config,
     setup_logging,
     validate_config,
+    write_spritesheet_spec_yaml,
 )
 from spriteforge.errors import SpriteForgeError
 from spriteforge.observability import write_run_summary
@@ -56,11 +61,169 @@ def _setup_logging(verbose: bool, json_logs: bool = False) -> None:
         setup_logging(level=logging.INFO, json_logs=json_logs)
 
 
+def _prompt_non_empty_text(prompt: str) -> str:
+    """Prompt until a non-empty value is provided."""
+    while True:
+        value = cast(str, click.prompt(prompt, type=str)).strip()
+        if value:
+            return value
+        console.print("[bold red]✗[/] Value cannot be empty.")
+
+
+def _prompt_existing_file_path(prompt: str) -> str:
+    """Prompt until an existing file path is provided."""
+    while True:
+        value = cast(str, click.prompt(prompt, type=str)).strip()
+        candidate = Path(value)
+        if candidate.is_file():
+            return str(candidate)
+        console.print("[bold red]✗[/] Path must point to an existing file.")
+
+
+def _parse_action_option(value: str) -> MinimalActionInput:
+    """Parse --action values formatted as name|movement|frames|timing_ms."""
+    parts = [part.strip() for part in value.split("|")]
+    if len(parts) != 4:
+        raise click.BadParameter(
+            "--action must be in format: name|movement description|frames|timing_ms"
+        )
+    try:
+        action = MinimalActionInput(
+            name=parts[0],
+            movement_description=parts[1],
+            frames=int(parts[2]),
+            timing_ms=int(parts[3]),
+        )
+    except (ValueError, ValidationError) as exc:
+        raise click.BadParameter(f"Invalid --action value '{value}': {exc}") from exc
+    return action
+
+
+def _default_output_path_for_character(character_name: str) -> Path:
+    slug = "_".join(character_name.lower().split())
+    return Path("configs") / f"{slug}.yaml"
+
+
 @click.group()
 @click.version_option()
 def main() -> None:
     """SpriteForge — AI-powered spritesheet generator for 2D pixel-art games."""
     pass
+
+
+@main.command()
+@click.argument("output_path", required=False, type=click.Path(path_type=Path))
+@click.option(
+    "--character-name",
+    type=str,
+    help="Character name for the generated config",
+)
+@click.option(
+    "--base-image-path",
+    type=click.Path(exists=True, dir_okay=False, path_type=Path),
+    help="Base character reference image path",
+)
+@click.option(
+    "--action",
+    "action_specs",
+    multiple=True,
+    help="Repeatable action in format: name|movement description|frames|timing_ms",
+)
+@click.option(
+    "--non-interactive",
+    is_flag=True,
+    help="Fail instead of prompting when required inputs are missing",
+)
+@click.option(
+    "--force",
+    is_flag=True,
+    help="Overwrite output file if it already exists",
+)
+def init(
+    output_path: Path | None,
+    character_name: str | None,
+    base_image_path: Path | None,
+    action_specs: tuple[str, ...],
+    non_interactive: bool,
+    force: bool,
+) -> None:
+    """Create a minimal character config via prompts or flags."""
+    if character_name is None:
+        if non_interactive:
+            raise click.UsageError(
+                "--character-name is required with --non-interactive"
+            )
+        character_name = _prompt_non_empty_text("Character name")
+
+    if base_image_path is None:
+        if non_interactive:
+            raise click.UsageError(
+                "--base-image-path is required with --non-interactive"
+            )
+        base_image_path_str = _prompt_existing_file_path("Base image path")
+    else:
+        base_image_path_str = str(base_image_path)
+
+    actions: list[MinimalActionInput] = []
+    if action_specs:
+        actions = [_parse_action_option(spec) for spec in action_specs]
+    else:
+        if non_interactive:
+            raise click.UsageError(
+                "At least one --action is required with --non-interactive"
+            )
+        while True:
+            while True:
+                action_payload = {
+                    "name": _prompt_non_empty_text("Action name"),
+                    "movement_description": _prompt_non_empty_text(
+                        "Movement description"
+                    ),
+                    "frames": click.prompt("Frames", type=click.IntRange(min=1)),
+                    "timing_ms": click.prompt(
+                        "Timing (ms per frame)", type=click.IntRange(min=1)
+                    ),
+                }
+                try:
+                    actions.append(MinimalActionInput(**action_payload))
+                    break
+                except ValidationError as exc:
+                    console.print(f"[bold red]✗[/] Invalid action: {exc}")
+            if not click.confirm("Add another action?", default=False):
+                break
+
+    if output_path is None:
+        default_path = _default_output_path_for_character(character_name)
+        if non_interactive:
+            output_path = default_path
+        else:
+            output_path = Path(
+                click.prompt(
+                    "Output config path",
+                    default=str(default_path),
+                    show_default=True,
+                    type=click.Path(path_type=Path),
+                )
+            )
+
+    if output_path.exists() and not force:
+        raise click.ClickException(
+            f"Output file already exists: {output_path}. Use --force to overwrite."
+        )
+
+    try:
+        minimal_input = MinimalConfigInput(
+            character_name=character_name,
+            base_image_path=base_image_path_str,
+            actions=actions,
+        )
+        spec = build_spritesheet_spec_from_minimal_input(minimal_input)
+    except ValidationError as exc:
+        raise click.ClickException(f"Invalid config input: {exc}") from exc
+
+    written_path = write_spritesheet_spec_yaml(spec, output_path)
+    console.print(f"[bold green]✓[/] Config created: [bold]{written_path}[/]")
+    console.print(f"Run: spriteforge validate {written_path}")
 
 
 @main.command()
