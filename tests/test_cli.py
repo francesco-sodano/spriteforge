@@ -166,6 +166,94 @@ def test_init_non_interactive_requires_action(
     assert "At least one --action is required with --non-interactive" in result.output
 
 
+def test_init_force_overwrites_existing_config(
+    cli_runner: CliRunner, tmp_path: Path
+) -> None:
+    """Test that --force allows overwriting an existing config file."""
+    base_image = tmp_path / "base.png"
+    base_image.write_bytes(b"placeholder")
+    config_path = tmp_path / "generated.yaml"
+
+    first_result = cli_runner.invoke(
+        main,
+        [
+            "init",
+            str(config_path),
+            "--character-name",
+            "hero",
+            "--base-image-path",
+            str(base_image),
+            "--action",
+            "idle|breathing in place|4|120",
+            "--non-interactive",
+        ],
+    )
+    assert first_result.exit_code == 0
+    assert "name: idle" in config_path.read_text()
+
+    second_result = cli_runner.invoke(
+        main,
+        [
+            "init",
+            str(config_path),
+            "--character-name",
+            "hero",
+            "--base-image-path",
+            str(base_image),
+            "--action",
+            "walk|steady forward walk|6|100",
+            "--non-interactive",
+        ],
+    )
+    assert second_result.exit_code != 0
+    assert "already exists" in second_result.output
+    assert "name: idle" in config_path.read_text()
+
+    third_result = cli_runner.invoke(
+        main,
+        [
+            "init",
+            str(config_path),
+            "--character-name",
+            "hero",
+            "--base-image-path",
+            str(base_image),
+            "--action",
+            "walk|steady forward walk|6|100",
+            "--non-interactive",
+            "--force",
+        ],
+    )
+    assert third_result.exit_code == 0
+    assert "name: walk" in config_path.read_text()
+
+
+def test_init_interactive_prompts_for_output_path(cli_runner: CliRunner) -> None:
+    """Test interactive init prompts for output path with character-based default."""
+    with cli_runner.isolated_filesystem():
+        base_image = Path("base.png")
+        base_image.write_bytes(b"placeholder")
+
+        result = cli_runner.invoke(
+            main,
+            ["init"],
+            input=(
+                "hero knight\n"
+                "base.png\n"
+                "idle\n"
+                "breathing in place\n"
+                "4\n"
+                "120\n"
+                "n\n"
+                "\n"
+            ),
+        )
+
+        assert result.exit_code == 0
+        assert "[configs/hero_knight.yaml]" in result.output
+        assert Path("configs/hero_knight.yaml").exists()
+
+
 # ---------------------------------------------------------------------------
 # Generate Command Tests
 # ---------------------------------------------------------------------------
