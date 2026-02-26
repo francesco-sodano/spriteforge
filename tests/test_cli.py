@@ -122,13 +122,13 @@ def test_init_reprompts_invalid_prompt_values(
         main,
         ["init", str(config_path)],
         input=(
-            "\n"  # invalid character name
+            "\n"  # empty string (invalid character name)
             "hero\n"
             "missing.png\n"  # invalid base image path
             f"{base_image}\n"
-            "\n"  # invalid action name
+            "\n"  # empty string (invalid action name)
             "idle\n"
-            "\n"  # invalid movement description
+            "\n"  # empty string (invalid movement description)
             "breathing in place\n"
             "0\n"  # invalid frames
             "4\n"

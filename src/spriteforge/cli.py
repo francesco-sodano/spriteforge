@@ -12,7 +12,7 @@ import sys
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import click
 from pydantic import ValidationError
@@ -64,7 +64,7 @@ def _setup_logging(verbose: bool, json_logs: bool = False) -> None:
 def _prompt_non_empty_text(prompt: str) -> str:
     """Prompt until a non-empty value is provided."""
     while True:
-        value = str(click.prompt(prompt, type=str)).strip()
+        value = cast(str, click.prompt(prompt, type=str)).strip()
         if value:
             return value
         console.print("[bold red]✗[/] Value cannot be empty.")
@@ -73,7 +73,7 @@ def _prompt_non_empty_text(prompt: str) -> str:
 def _prompt_existing_file_path(prompt: str) -> str:
     """Prompt until an existing file path is provided."""
     while True:
-        value = str(click.prompt(prompt, type=str)).strip()
+        value = cast(str, click.prompt(prompt, type=str)).strip()
         candidate = Path(value)
         if candidate.is_file():
             return str(candidate)
