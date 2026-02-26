@@ -39,6 +39,9 @@ For complete runnable examples, see:
 - `configs/examples/simple_enemy.yaml` — A goblin with 5 animations and 5 colors.
 - `configs/examples/hero.yaml` — A knight with 16 animations and 11 colors.
 
+For builder/CLI onboarding with reduced authoring inputs, see
+[`docs/minimal-input-contract.md`](./minimal-input-contract.md).
+
 ---
 
 ## Config File Structure
