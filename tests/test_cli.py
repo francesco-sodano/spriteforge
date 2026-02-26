@@ -251,7 +251,11 @@ def test_init_interactive_prompts_for_output_path(cli_runner: CliRunner) -> None
 
         assert result.exit_code == 0
         assert "[configs/hero_knight.yaml]" in result.output
-        assert Path("configs/hero_knight.yaml").exists()
+        config_path = Path("configs/hero_knight.yaml")
+        assert config_path.exists()
+        config_text = config_path.read_text()
+        assert "name: hero knight" in config_text
+        assert "name: idle" in config_text
 
 
 # ---------------------------------------------------------------------------
