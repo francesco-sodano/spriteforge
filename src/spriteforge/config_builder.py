@@ -16,6 +16,29 @@ from spriteforge.models import (
 )
 
 _LOOPING_ACTION_NAMES = {"idle", "walk", "run"}
+_GENERATION_FIELD_ORDER = (
+    "style",
+    "facing",
+    "feet_row",
+    "outline_width",
+    "rules",
+    "auto_palette",
+    "max_palette_colors",
+    "semantic_labels",
+    "grid_model",
+    "gate_model",
+    "labeling_model",
+    "reference_model",
+    "gate_3a_max_retries",
+    "fallback_regen_frames",
+    "compact_grid_context",
+    "max_image_bytes",
+    "request_timeout_seconds",
+    "max_anchor_regenerations",
+    "anchor_regen_failure_ratio",
+    "allow_absolute_output_path",
+    "budget",
+)
 
 
 def _normalize_spaces(value: str) -> str:
@@ -96,30 +119,17 @@ def build_spritesheet_spec_from_minimal_input(
 
 
 def _serialize_generation(generation: GenerationConfig) -> dict[str, Any]:
-    payload: dict[str, Any] = {
-        "style": generation.style,
-        "facing": generation.facing,
-        "feet_row": generation.feet_row,
-        "outline_width": generation.outline_width,
-        "rules": generation.rules,
-        "auto_palette": generation.auto_palette,
-        "max_palette_colors": generation.max_palette_colors,
-        "semantic_labels": generation.semantic_labels,
-        "grid_model": generation.grid_model,
-        "gate_model": generation.gate_model,
-        "labeling_model": generation.labeling_model,
-        "reference_model": generation.reference_model,
-        "gate_3a_max_retries": generation.gate_3a_max_retries,
-        "fallback_regen_frames": generation.fallback_regen_frames,
-        "compact_grid_context": generation.compact_grid_context,
-        "max_image_bytes": generation.max_image_bytes,
-        "request_timeout_seconds": generation.request_timeout_seconds,
-        "max_anchor_regenerations": generation.max_anchor_regenerations,
-        "anchor_regen_failure_ratio": generation.anchor_regen_failure_ratio,
-        "allow_absolute_output_path": generation.allow_absolute_output_path,
-    }
-    if generation.budget is not None:
-        payload["budget"] = generation.budget.model_dump()
+    raw = generation.model_dump()
+    payload: dict[str, Any] = {}
+    for key in _GENERATION_FIELD_ORDER:
+        if key == "budget":
+            if raw.get("budget") is not None:
+                payload[key] = raw[key]
+            continue
+        if key in raw:
+            payload[key] = raw[key]
+    for key in sorted(set(raw.keys()) - set(_GENERATION_FIELD_ORDER)):
+        payload[key] = raw[key]
     return payload
 
 
