@@ -52,7 +52,7 @@ async def draft_character_description_from_image(
                 ],
             }
         ]
-        drafted = (await chat_provider.chat(messages=messages, temperature=1.0)).strip()
+        drafted = (await chat_provider.chat(messages=messages, temperature=0.5)).strip()
         return drafted or fallback
     except Exception:
         return fallback
