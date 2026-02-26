@@ -4,8 +4,11 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+
 from spriteforge.config import load_config, validate_config
 from spriteforge.config_builder import (
+    MinimalConfigInput,
     build_spritesheet_spec_from_minimal_input,
     serialize_spritesheet_spec_yaml,
     write_spritesheet_spec_yaml,
@@ -77,3 +80,123 @@ def test_serialized_yaml_is_deterministic_and_loadable(tmp_path: Path) -> None:
     assert loaded.character.name == spec.character.name
     assert [anim.name for anim in loaded.animations] == ["idle", "run"]
     assert validate_config(config_path) == []
+
+
+@pytest.mark.parametrize("field", ["name", "movement_description"])
+def test_minimal_action_input_rejects_blank_text_fields(field: str) -> None:
+    action = {
+        "name": "idle",
+        "movement_description": "Breathing in place",
+        "frames": 6,
+        "timing_ms": 140,
+    }
+    action[field] = "   "
+    with pytest.raises(ValueError, match="value must not be blank"):
+        build_spritesheet_spec_from_minimal_input(
+            {
+                "character_name": "hero",
+                "base_image_path": "base.png",
+                "actions": [action],
+            }
+        )
+
+
+@pytest.mark.parametrize("field", ["character_name", "base_image_path"])
+def test_minimal_config_input_rejects_blank_text_fields(field: str) -> None:
+    payload = {
+        "character_name": "hero",
+        "base_image_path": "base.png",
+        "actions": [
+            {
+                "name": "idle",
+                "movement_description": "Breathing in place",
+                "frames": 6,
+                "timing_ms": 140,
+            }
+        ],
+    }
+    payload[field] = "   "
+    with pytest.raises(ValueError, match="value must not be blank"):
+        MinimalConfigInput(**payload)
+
+
+def test_minimal_config_input_rejects_empty_actions() -> None:
+    with pytest.raises(ValueError, match="at least 1 item"):
+        MinimalConfigInput(
+            character_name="hero",
+            base_image_path="base.png",
+            actions=[],
+        )
+
+
+@pytest.mark.parametrize(
+    ("frames", "timing_ms"),
+    [
+        (0, 140),
+        (-1, 140),
+        (6, 0),
+        (6, -1),
+    ],
+)
+def test_build_from_minimal_input_rejects_invalid_numeric_constraints(
+    frames: int, timing_ms: int
+) -> None:
+    with pytest.raises(ValueError):
+        build_spritesheet_spec_from_minimal_input(
+            {
+                "character_name": "hero",
+                "base_image_path": "base.png",
+                "actions": [
+                    {
+                        "name": "idle",
+                        "movement_description": "Breathing in place",
+                        "frames": frames,
+                        "timing_ms": timing_ms,
+                    }
+                ],
+            }
+        )
+
+
+def test_build_spritesheet_spec_respects_explicit_loop_override() -> None:
+    spec = build_spritesheet_spec_from_minimal_input(
+        {
+            "character_name": "hero",
+            "base_image_path": "base.png",
+            "actions": [
+                {
+                    "name": "attack_slash",
+                    "movement_description": "Quick slash",
+                    "frames": 5,
+                    "timing_ms": 90,
+                    "loop": True,
+                }
+            ],
+        }
+    )
+
+    assert spec.animations[0].loop is True
+
+
+def test_serialize_palette_uses_yaml_name_fields() -> None:
+    spec = build_spritesheet_spec_from_minimal_input(
+        {
+            "character_name": "hero",
+            "base_image_path": "base.png",
+            "actions": [
+                {
+                    "name": "idle",
+                    "movement_description": "Breathing in place",
+                    "frames": 6,
+                    "timing_ms": 140,
+                }
+            ],
+        }
+    )
+    spec.palette = load_config(
+        Path(__file__).resolve().parent.parent / "configs/examples/simple_enemy.yaml"
+    ).palette
+
+    yaml_text = serialize_spritesheet_spec_yaml(spec)
+    assert "name: Outline" in yaml_text
+    assert "element:" not in yaml_text
