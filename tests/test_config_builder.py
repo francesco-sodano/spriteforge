@@ -5,6 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
+import yaml
 
 from spriteforge.config import load_config, validate_config
 from spriteforge.config_builder import (
@@ -196,7 +197,16 @@ def test_serialize_palette_uses_yaml_name_fields() -> None:
     spec.palette = load_config(
         Path(__file__).resolve().parent.parent / "configs/examples/simple_enemy.yaml"
     ).palette
+    assert spec.palette is not None
+    assert len(spec.palette.colors) > 0
 
     yaml_text = serialize_spritesheet_spec_yaml(spec)
-    assert "name: Outline" in yaml_text
-    assert "element:" not in yaml_text
+    payload = yaml.safe_load(yaml_text)
+
+    outline = payload["palette"]["outline"]
+    assert "name" in outline
+    assert "element" not in outline
+
+    first_color = payload["palette"]["colors"][0]
+    assert "name" in first_color
+    assert "element" not in first_color
