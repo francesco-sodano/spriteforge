@@ -272,7 +272,7 @@ class RowProcessor:
                 animation.name,
             )
             frames_to_regenerate = self._identify_problematic_frames(
-                verdict.feedback, animation.frames
+                verdict, animation.frames
             )
             for fi in frames_to_regenerate:
                 ref_frame = self._extract_reference_frame(
@@ -376,8 +376,39 @@ class RowProcessor:
             f"failed after {max_ref_retries} attempts."
         )
 
-    def _identify_problematic_frames(self, feedback: str, num_frames: int) -> list[int]:
+    def _identify_problematic_frames(
+        self,
+        verdict: GateVerdict,
+        num_frames: int,
+    ) -> list[int]:
         """Identify frame indices that may be problematic based on Gate 3A feedback."""
+        structured = verdict.details.get("problematic_frame_indices")
+        if isinstance(structured, list):
+            indices = []
+            for item in structured:
+                if not isinstance(item, int):
+                    continue
+                idx = item
+                if idx >= num_frames:
+                    logger.warning(
+                        "Gate 3A structured frame index out of range: %d "
+                        "(num_frames=%d); clamping to last frame.",
+                        idx,
+                        num_frames,
+                    )
+                    idx = num_frames - 1
+                if 0 <= idx < num_frames:
+                    indices.append(idx)
+
+            if indices:
+                normalized = sorted(set(indices))
+                logger.info(
+                    "Using structured Gate 3A problematic_frame_indices: %s",
+                    normalized,
+                )
+                return normalized
+
+        feedback = verdict.feedback
         frame_list_pattern = r"[Ff]rame[s]?\s+([0-9,\sand]+)"
         matches: list[str] = []
         for chunk in re.findall(frame_list_pattern, feedback):

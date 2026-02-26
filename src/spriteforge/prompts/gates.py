@@ -16,8 +16,12 @@ Return your analysis as JSON (no markdown fences):
 {
     "passed": true/false,
     "confidence": 0.0-1.0,
-    "feedback": "Specific, actionable feedback for improvement"
+    "feedback": "Specific, actionable feedback for improvement",
+    "problematic_frame_indices": [0, 2, 5]
 }
+
+Include "problematic_frame_indices" only when relevant (primarily Gate 3A) and
+only when "passed" is false.
 """
 
 # ---------------------------------------------------------------------------

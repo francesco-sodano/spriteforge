@@ -370,11 +370,33 @@ def parse_verdict_response(response_text: str, gate_name: str) -> GateVerdict:
     confidence = max(0.0, min(1.0, confidence))
     feedback = str(data.get("feedback", "No feedback provided."))
 
+    details: dict[str, Any] = {}
+    indices_raw = data.get("problematic_frame_indices")
+    if indices_raw is not None:
+        if isinstance(indices_raw, list):
+            parsed_indices = [
+                int(item) for item in indices_raw if isinstance(item, int) and item >= 0
+            ]
+            if len(parsed_indices) != len(indices_raw):
+                logger.warning(
+                    "Gate verdict parse ignored non-integer frame indices for %s: %r",
+                    gate_name,
+                    indices_raw,
+                )
+            details["problematic_frame_indices"] = sorted(set(parsed_indices))
+        else:
+            logger.warning(
+                "Gate verdict parse ignored non-list problematic_frame_indices for %s: %r",
+                gate_name,
+                indices_raw,
+            )
+
     return GateVerdict(
         gate_name=gate_name,
         passed=passed,
         confidence=confidence,
         feedback=feedback,
+        details=details,
     )
 
 

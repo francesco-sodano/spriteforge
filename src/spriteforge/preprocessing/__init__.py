@@ -1,8 +1,4 @@
-"""Compatibility facade for preprocessing APIs.
-
-This module re-exports the legacy public preprocessing API while the
-implementation is split into focused modules under ``spriteforge.preprocessing``.
-"""
+"""Preprocessing modules split by concern."""
 
 from spriteforge.preprocessing.image_io import (
     resize_reference,
@@ -10,7 +6,6 @@ from spriteforge.preprocessing.image_io import (
 )
 from spriteforge.preprocessing.labeling import (
     SYMBOL_POOL,
-    describe_color as _describe_color,
     label_palette_colors_with_llm,
 )
 from spriteforge.preprocessing.palette_quantization import (
@@ -22,7 +17,6 @@ from spriteforge.preprocessing.pipeline import PreprocessResult, preprocess_refe
 __all__ = [
     "PreprocessResult",
     "SYMBOL_POOL",
-    "_describe_color",
     "_assign_symbols",
     "extract_palette_from_image",
     "label_palette_colors_with_llm",

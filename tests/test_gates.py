@@ -485,6 +485,18 @@ class TestParseVerdictResponse:
         assert verdict.confidence == 0.0
         assert verdict.details.get("parser_fallback") == "non_object_json"
 
+    def test_parse_verdict_extracts_problematic_frame_indices(self) -> None:
+        response = json.dumps(
+            {
+                "passed": False,
+                "confidence": 0.4,
+                "feedback": "Regenerate frame 1 and 3",
+                "problematic_frame_indices": [3, 1, 3],
+            }
+        )
+        verdict = parse_verdict_response(response, "gate_3a")
+        assert verdict.details.get("problematic_frame_indices") == [1, 3]
+
 
 # ---------------------------------------------------------------------------
 # LLM gate checker — mocked API

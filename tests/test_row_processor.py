@@ -208,11 +208,31 @@ class TestRowProcessorGate3ARetry:
         self, sample_config: SpritesheetSpec
     ) -> None:
         row_processor = _build_row_processor(sample_config)
+        verdict = GateVerdict(
+            gate_name="gate_3a",
+            passed=False,
+            confidence=0.2,
+            feedback="frames 2, 5, and 7 have jitter",
+        )
         indices = row_processor._identify_problematic_frames(
-            "frames 2, 5, and 7 have jitter",
+            verdict,
             num_frames=8,
         )
         assert indices == [2, 5, 7]
+
+    def test_identify_problematic_frames_prefers_structured_indices(
+        self, sample_config: SpritesheetSpec
+    ) -> None:
+        row_processor = _build_row_processor(sample_config)
+        verdict = GateVerdict(
+            gate_name="gate_3a",
+            passed=False,
+            confidence=0.2,
+            feedback="frame 1 looked off",
+            details={"problematic_frame_indices": [4, 1, 4]},
+        )
+        indices = row_processor._identify_problematic_frames(verdict, num_frames=6)
+        assert indices == [1, 4]
 
 
 class TestRowProcessorTimeouts:
