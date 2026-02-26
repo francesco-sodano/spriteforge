@@ -48,6 +48,7 @@ def test_cli_help_flag(cli_runner: CliRunner) -> None:
     assert result.exit_code == 0
     assert "SpriteForge" in result.output
     assert "generate" in result.output
+    assert "init" in result.output
     assert "validate" in result.output
     assert "estimate" in result.output
 
@@ -57,6 +58,112 @@ def test_cli_version_flag(cli_runner: CliRunner) -> None:
     result = cli_runner.invoke(main, ["--version"])
     assert result.exit_code == 0
     assert "version" in result.output.lower() or "0.1.0" in result.output
+
+
+# ---------------------------------------------------------------------------
+# Init Command Tests
+# ---------------------------------------------------------------------------
+
+
+def test_init_help(cli_runner: CliRunner) -> None:
+    """Test that init --help displays usage information."""
+    result = cli_runner.invoke(main, ["init", "--help"])
+    assert result.exit_code == 0
+    assert "Create a minimal character config" in result.output
+    assert "--character-name" in result.output
+    assert "--base-image-path" in result.output
+    assert "--action" in result.output
+    assert "--non-interactive" in result.output
+
+
+def test_init_non_interactive_happy_path(cli_runner: CliRunner, tmp_path: Path) -> None:
+    """Test non-interactive init with repeatable --action inputs."""
+    base_image = tmp_path / "base.png"
+    base_image.write_bytes(b"placeholder")
+    config_path = tmp_path / "generated.yaml"
+
+    result = cli_runner.invoke(
+        main,
+        [
+            "init",
+            str(config_path),
+            "--character-name",
+            "test hero",
+            "--base-image-path",
+            str(base_image),
+            "--action",
+            "idle|breathing in place|4|120",
+            "--action",
+            "walk|steady forward walk|6|100",
+            "--non-interactive",
+        ],
+    )
+    assert result.exit_code == 0
+    assert config_path.exists()
+    assert "Config created" in result.output
+
+    validate_result = cli_runner.invoke(main, ["validate", str(config_path)])
+    assert validate_result.exit_code == 0
+
+    estimate_result = cli_runner.invoke(main, ["estimate", str(config_path)])
+    assert estimate_result.exit_code == 0
+    assert "Minimum calls:" in estimate_result.output
+
+
+def test_init_reprompts_invalid_prompt_values(
+    cli_runner: CliRunner, tmp_path: Path
+) -> None:
+    """Test interactive init rejects invalid values and eventually succeeds."""
+    base_image = tmp_path / "base.png"
+    base_image.write_bytes(b"placeholder")
+    config_path = tmp_path / "interactive.yaml"
+
+    result = cli_runner.invoke(
+        main,
+        ["init", str(config_path)],
+        input=(
+            "\n"  # invalid character name
+            "hero\n"
+            "missing.png\n"  # invalid base image path
+            f"{base_image}\n"
+            "\n"  # invalid action name
+            "idle\n"
+            "\n"  # invalid movement description
+            "breathing in place\n"
+            "0\n"  # invalid frames
+            "4\n"
+            "0\n"  # invalid timing
+            "120\n"
+            "n\n"
+        ),
+    )
+    assert result.exit_code == 0
+    assert result.output.count("Character name:") == 2
+    assert "Path must point to an existing file" in result.output
+    assert config_path.exists()
+
+
+def test_init_non_interactive_requires_action(
+    cli_runner: CliRunner, tmp_path: Path
+) -> None:
+    """Test --non-interactive requires at least one --action."""
+    base_image = tmp_path / "base.png"
+    base_image.write_bytes(b"placeholder")
+    config_path = tmp_path / "generated.yaml"
+    result = cli_runner.invoke(
+        main,
+        [
+            "init",
+            str(config_path),
+            "--character-name",
+            "hero",
+            "--base-image-path",
+            str(base_image),
+            "--non-interactive",
+        ],
+    )
+    assert result.exit_code != 0
+    assert "At least one --action is required with --non-interactive" in result.output
 
 
 # ---------------------------------------------------------------------------

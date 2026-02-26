@@ -10,7 +10,7 @@ SpriteForge generates game-ready 2D pixel-art spritesheets from a base character
 - **Per-request timeout protection** for external model calls
 - **Deterministic grid-to-PNG rendering** for stable output
 - **Automatic spritesheet assembly** with transparent PNG output
-- **CLI commands for generate, validate, and estimate**
+- **CLI commands for init, generate, validate, and estimate**
 - **Optional structured JSON logs** for log aggregation
 - **Run summary JSON export** with retries, gate outcomes, and token usage
 - **Optional auto-palette extraction** from base references
@@ -39,12 +39,13 @@ cp .env.example .env
 
 ## Quick Start
 
-Start from `configs/template.yaml` (or an example in `configs/examples/`), then run:
+Create a config interactively (or start from `configs/template.yaml`), then run:
 
 ```bash
-spriteforge validate configs/examples/simple_enemy.yaml
-spriteforge estimate configs/examples/simple_enemy.yaml
-spriteforge generate configs/examples/simple_enemy.yaml
+spriteforge init configs/examples/my_character.yaml
+spriteforge validate configs/examples/my_character.yaml
+spriteforge estimate configs/examples/my_character.yaml
+spriteforge generate configs/examples/my_character.yaml
 
 # Observability-focused run
 spriteforge generate configs/examples/simple_enemy.yaml \

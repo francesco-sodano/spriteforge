@@ -33,7 +33,20 @@ This guide explains how to create a YAML configuration file for a new SpriteForg
 
   Note: if you pass a custom `credential=...` to `create_workflow()`, you keep ownership of that credential; otherwise SpriteForge creates and closes `DefaultAzureCredential` for you.
 
-CLI commands are available for `validate`, `estimate`, and `generate` via `spriteforge`.
+CLI commands are available for `init`, `validate`, `estimate`, and `generate` via `spriteforge`.
+
+```bash
+# Interactive config authoring
+spriteforge init configs/my_character.yaml
+
+# Non-interactive config authoring (repeat --action as needed)
+spriteforge init configs/my_character.yaml \
+  --character-name "my_character" \
+  --base-image-path docs_assets/theron_base_reference.png \
+  --action "idle|breathing in place|4|120" \
+  --action "walk|steady forward walk|6|100" \
+  --non-interactive
+```
 
 For complete runnable examples, see:
 - `configs/examples/simple_enemy.yaml` — A goblin with 5 animations and 5 colors.
