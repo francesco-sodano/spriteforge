@@ -41,6 +41,10 @@ from spriteforge import (
 )
 from spriteforge.errors import SpriteForgeError
 from spriteforge.observability import write_run_summary
+from spriteforge.preprocessing.description import (
+    deterministic_description_fallback,
+    draft_character_description_from_image,
+)
 
 console = Console()
 
@@ -104,6 +108,41 @@ def _default_output_path_for_character(character_name: str) -> Path:
     return Path("configs") / f"{slug}.yaml"
 
 
+async def _generate_character_description_draft(
+    base_image_path: Path, character_name: str
+) -> str:
+    from spriteforge.providers.azure_chat import AzureChatProvider
+
+    provider = AzureChatProvider(model_deployment_name="gpt-5-nano")
+    try:
+        return await draft_character_description_from_image(
+            image_path=base_image_path,
+            character_name=character_name,
+            chat_provider=provider,
+        )
+    finally:
+        await provider.close()
+
+
+def _resolve_character_description(
+    character_name: str, base_image_path: Path, draft_description: bool
+) -> str:
+    if not draft_description:
+        return ""
+    fallback = deterministic_description_fallback(character_name)
+    try:
+        with console.status("[bold blue]Drafting character description from image..."):
+            return asyncio.run(
+                _generate_character_description_draft(base_image_path, character_name)
+            )
+    except Exception as exc:
+        console.print(
+            "[bold yellow]⚠[/] Unable to draft description from image "
+            f"({exc}). Using fallback text."
+        )
+        return fallback
+
+
 @click.group()
 @click.version_option()
 def main() -> None:
@@ -139,6 +178,11 @@ def main() -> None:
     is_flag=True,
     help="Overwrite output file if it already exists",
 )
+@click.option(
+    "--draft-description",
+    is_flag=True,
+    help="Best-effort: draft character.description from the base image",
+)
 def init(
     output_path: Path | None,
     character_name: str | None,
@@ -146,6 +190,7 @@ def init(
     action_specs: tuple[str, ...],
     non_interactive: bool,
     force: bool,
+    draft_description: bool,
 ) -> None:
     """Create a minimal character config via prompts or flags."""
     if character_name is None:
@@ -218,6 +263,11 @@ def init(
             actions=actions,
         )
         spec = build_spritesheet_spec_from_minimal_input(minimal_input)
+        spec.character.description = _resolve_character_description(
+            character_name=character_name,
+            base_image_path=Path(base_image_path_str),
+            draft_description=draft_description,
+        )
     except ValidationError as exc:
         raise click.ClickException(f"Invalid config input: {exc}") from exc
 
