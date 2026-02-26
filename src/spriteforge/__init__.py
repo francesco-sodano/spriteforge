@@ -3,6 +3,13 @@
 from typing import Any
 
 from spriteforge.budget import CallEstimate, CallTracker, estimate_calls
+from spriteforge.config_builder import (
+    MinimalActionInput,
+    MinimalConfigInput,
+    build_spritesheet_spec_from_minimal_input,
+    serialize_spritesheet_spec_yaml,
+    write_spritesheet_spec_yaml,
+)
 from spriteforge.config import load_config, validate_config
 from spriteforge.errors import (
     BudgetExhaustedError,
@@ -97,6 +104,8 @@ __all__ = [
     "GenerationError",
     "GridGenerator",
     "LLMGateChecker",
+    "MinimalActionInput",
+    "MinimalConfigInput",
     "PaletteColor",
     "PaletteConfig",
     "PaletteError",
@@ -115,6 +124,7 @@ __all__ = [
     "SpriteForgeError",
     "SpriteForgeWorkflow",
     "build_palette_map",
+    "build_spritesheet_spec_from_minimal_input",
     "create_workflow",
     "estimate_calls",
     "extract_palette_from_image",
@@ -131,9 +141,11 @@ __all__ = [
     "render_row_strip",
     "resize_reference",
     "setup_logging",
+    "serialize_spritesheet_spec_yaml",
     "strip_code_fences",
     "swap_palette_grid",
     "validate_config",
     "validate_grid_symbols",
     "validate_reference_image",
+    "write_spritesheet_spec_yaml",
 ]

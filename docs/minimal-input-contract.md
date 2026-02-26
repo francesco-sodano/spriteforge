@@ -4,6 +4,17 @@ This design note defines the canonical **minimal authoring contract** and how it
 
 It is intended for config-builder and CLI onboarding flows where users provide only essential animation intent.
 
+## Maintainer API (implemented)
+
+SpriteForge exposes deterministic builder helpers in `src/spriteforge/config_builder.py`:
+
+- `build_spritesheet_spec_from_minimal_input(minimal_input)` → returns a validated `SpritesheetSpec`
+- `serialize_spritesheet_spec_yaml(spec)` → returns deterministic YAML text
+- `write_spritesheet_spec_yaml(spec, output_path)` → writes deterministic YAML to disk
+
+The builder accepts either a plain dict or `MinimalConfigInput` model with `character_name`, `base_image_path`, and ordered `actions`.
+Each action is `MinimalActionInput` with `name`, `movement_description`, `frames`, `timing_ms`, and optional explicit `loop`.
+
 ## 1) Required command inputs
 
 The minimal contract requires:
@@ -107,6 +118,32 @@ These values must remain explicit and immutable after expansion for a run:
 - `Row 0 / Frame 0` remains the anchor identity frame by construction.
 - `generation` model deployment names remain explicit strings in YAML.
 - `generation.auto_palette` remains explicitly `true` unless a future version introduces an explicit override input.
+
+## 3.1 Generated YAML shape example
+
+```yaml
+character:
+  name: "my_character"
+  class: ""
+  description: ""
+  frame_width: 64
+  frame_height: 64
+  spritesheet_columns: 14
+animations:
+  - name: "idle"
+    row: 0
+    frames: 6
+    loop: true
+    timing_ms: 140
+    hit_frame: null
+    frame_descriptions: []
+    prompt_context: "idle: Breathing in place with subtle torso sway."
+generation:
+  auto_palette: true
+  # ...other generation defaults listed in section 2.3
+base_image_path: "docs_assets/my_character_base_reference.png"
+output_path: ""
+```
 
 ## 4) Excluded inferences (v1)
 
