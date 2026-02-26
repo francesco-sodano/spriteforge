@@ -41,6 +41,9 @@ For complete runnable examples, see:
 
 For builder/CLI onboarding with reduced authoring inputs, see
 [`docs/minimal-input-contract.md`](./minimal-input-contract.md).
+Maintainers can generate deterministic configs programmatically with
+`spriteforge.build_spritesheet_spec_from_minimal_input(...)` and
+`spriteforge.write_spritesheet_spec_yaml(...)`.
 
 ---
 
