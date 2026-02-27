@@ -178,7 +178,7 @@ See also: [Character Config Guide — Troubleshooting](./character-config-guide.
 
 **Symptom:** `Error: Invalid value: --action must be in format: name|movement description|frames|timing_ms`
 
-**Fix:** The format is `"name|movement_description|frames|timing_ms"` — exactly four pipe-separated fields. `frames` and `timing_ms` must be positive integers. Example: `"idle|breathing in place|4|120"`.
+**Fix:** The format is `"name|movement description|frames|timing_ms"` — exactly four pipe-separated fields. `frames` and `timing_ms` must be positive integers. Example: `"idle|breathing in place|4|120"`.
 
 ### 6.3 Output file already exists
 
