@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
+from typing import Any
 
 import pytest
 from click.testing import CliRunner
@@ -165,6 +166,81 @@ def test_init_non_interactive_requires_action(
     )
     assert result.exit_code != 0
     assert "At least one --action is required with --non-interactive" in result.output
+
+
+def test_init_non_interactive_requires_character_name(
+    cli_runner: CliRunner, tmp_path: Path
+) -> None:
+    """Test --non-interactive requires --character-name."""
+    base_image = tmp_path / "base.png"
+    base_image.write_bytes(b"placeholder")
+    config_path = tmp_path / "generated.yaml"
+
+    result = cli_runner.invoke(
+        main,
+        [
+            "init",
+            str(config_path),
+            "--base-image-path",
+            str(base_image),
+            "--action",
+            "idle|breathing in place|4|120",
+            "--non-interactive",
+        ],
+    )
+    assert result.exit_code != 0
+    assert "--character-name is required with --non-interactive" in result.output
+
+
+def test_init_non_interactive_requires_base_image_path(
+    cli_runner: CliRunner, tmp_path: Path
+) -> None:
+    """Test --non-interactive requires --base-image-path."""
+    config_path = tmp_path / "generated.yaml"
+
+    result = cli_runner.invoke(
+        main,
+        [
+            "init",
+            str(config_path),
+            "--character-name",
+            "hero",
+            "--action",
+            "idle|breathing in place|4|120",
+            "--non-interactive",
+        ],
+    )
+    assert result.exit_code != 0
+    assert "--base-image-path is required with --non-interactive" in result.output
+
+
+def test_init_non_interactive_rejects_invalid_action_format(
+    cli_runner: CliRunner, tmp_path: Path
+) -> None:
+    """Test malformed --action values fail with clear guidance."""
+    base_image = tmp_path / "base.png"
+    base_image.write_bytes(b"placeholder")
+    config_path = tmp_path / "generated.yaml"
+
+    result = cli_runner.invoke(
+        main,
+        [
+            "init",
+            str(config_path),
+            "--character-name",
+            "hero",
+            "--base-image-path",
+            str(base_image),
+            "--action",
+            "idle|breathing in place|4",
+            "--non-interactive",
+        ],
+    )
+    assert result.exit_code != 0
+    assert (
+        "--action must be in format: name|movement description|frames|timing_ms"
+        in result.output
+    )
 
 
 def test_init_force_overwrites_existing_config(
@@ -329,6 +405,58 @@ def test_init_non_interactive_draft_description_fallback(
     assert result.exit_code == 0
     config_text = config_path.read_text()
     assert "Pixel-art character named test hero." in config_text
+
+
+def test_init_generated_config_is_compatible_with_generate(
+    cli_runner: CliRunner, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Regression: init output remains consumable by generate command."""
+    base_image = tmp_path / "base.png"
+    base_image.write_bytes(b"placeholder")
+    config_path = tmp_path / "generated.yaml"
+    output_path = tmp_path / "sheet.png"
+
+    init_result = cli_runner.invoke(
+        main,
+        [
+            "init",
+            str(config_path),
+            "--character-name",
+            "test hero",
+            "--base-image-path",
+            str(base_image),
+            "--action",
+            "idle|breathing in place|4|120",
+            "--non-interactive",
+        ],
+    )
+    assert init_result.exit_code == 0
+
+    captured: dict[str, Path | str] = {}
+
+    async def _mock_run_generation(
+        config: Any,
+        base_reference_path: Path,
+        output_path: Path,
+        max_concurrent_rows: int,
+        checkpoint_dir: Path | None,
+        verbose: bool,
+        run_summary_path: Path | None,
+    ) -> None:
+        captured["character_name"] = config.character.name
+        captured["base_reference_path"] = base_reference_path
+        captured["output_path"] = output_path
+
+    monkeypatch.setattr("spriteforge.cli._run_generation", _mock_run_generation)
+
+    generate_result = cli_runner.invoke(
+        main,
+        ["generate", str(config_path), "--output", str(output_path)],
+    )
+    assert generate_result.exit_code == 0
+    assert captured["character_name"] == "test hero"
+    assert captured["base_reference_path"] == base_image
+    assert captured["output_path"] == output_path
 
 
 # ---------------------------------------------------------------------------
