@@ -435,6 +435,23 @@ pytest tests/test_configs.py -v
 
 ---
 
+## Troubleshooting: Init Flow
+
+Common failures when using `spriteforge init`:
+
+| Symptom | Likely cause | Fix |
+|---------|-------------|-----|
+| `Missing option '--character-name'` | `--non-interactive` used without `--character-name` | Add `--character-name "..."` |
+| `Invalid action format` | `--action` value doesn't have exactly four pipe-separated fields | Use `"name|description|frames|timing_ms"` format, e.g. `"idle|breathing in place|4|120"` |
+| Config file already exists, exits non-zero | Output path exists and `--force` was not passed | Add `--force` to overwrite, or choose a new output path |
+| `--draft-description` adds unexpected delay or shows a warning | Vision/chat endpoint unavailable or slow | Check `AZURE_AI_PROJECT_ENDPOINT`/`AZURE_OPENAI_ENDPOINT`; omit `--draft-description` if not needed — init still succeeds with fallback text |
+| `validate` fails with "base image not found" | `base_image_path` in the config points to a file that doesn't exist | Pass `--no-check-base-image` to skip, or ensure the file exists at the path in the config |
+| `estimate` reports 0 calls for a row | `frames: 0` in an animation | Re-run `init` with corrected `--action` entries |
+
+See [`docs/maintainer-validation-checklist.md`](./maintainer-validation-checklist.md) for the full pre-release smoke-check procedure.
+
+---
+
 ## Troubleshooting
 
 **Q: My character looks different across animation rows.**

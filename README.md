@@ -82,6 +82,7 @@ for the advanced YAML-first path.
 - [Cost Estimation Guide](docs/cost-estimation.md)
 - [Character Config Guide](docs/character-config-guide.md)
 - [Checkpoint / Resume Example](docs/checkpoint_resume_example.md)
+- [Maintainer Rollout and Validation Checklist](docs/maintainer-validation-checklist.md)
 
 ## Development
 
