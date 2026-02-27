@@ -170,13 +170,13 @@ See also: [Character Config Guide — Troubleshooting](./character-config-guide.
 
 ### 6.1 `--character-name` missing in non-interactive mode
 
-**Symptom:** `Error: Missing option '--character-name'` with non-zero exit.
+**Symptom:** `Error: --character-name is required with --non-interactive` with non-zero exit.
 
 **Fix:** Always supply `--character-name "..."` when running with `--non-interactive`. Omitting it is intentionally an error.
 
 ### 6.2 `--action` pipe format wrong
 
-**Symptom:** `Error: Invalid action format` or similar parsing error.
+**Symptom:** `Error: Invalid value: --action must be in format: name|movement description|frames|timing_ms`
 
 **Fix:** The format is `"name|movement_description|frames|timing_ms"` — exactly four pipe-separated fields. `frames` and `timing_ms` must be positive integers. Example: `"idle|breathing in place|4|120"`.
 
