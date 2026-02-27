@@ -15,6 +15,16 @@ SpriteForge exposes deterministic builder helpers in `src/spriteforge/config_bui
 The builder accepts either a plain dict or `MinimalConfigInput` model with `character_name`, `base_image_path`, and ordered `actions`.
 Each action is `MinimalActionInput` with `name`, `movement_description`, `frames`, `timing_ms`, and optional explicit `loop`.
 
+## Maintainer rollout and validation procedure
+
+Before merging or releasing changes to the init flow, run the full validation checklist documented in [`docs/maintainer-validation-checklist.md`](./maintainer-validation-checklist.md). That document covers:
+
+- Pre-merge gate checks (format/lint/type/test).
+- Targeted CLI smoke checks for the `init` command.
+- End-to-end smoke with the committed minimal example config.
+- Regression checks for existing full-YAML users.
+- Known v1 limitations and troubleshooting notes for common init-flow failures.
+
 ## Maintainer release-note/changelog snippet guidance
 
 When shipping docs/examples updates for this flow, maintainers can reuse:
