@@ -80,6 +80,11 @@ def test_serialized_yaml_is_deterministic_and_loadable(tmp_path: Path) -> None:
     loaded = load_config(config_path)
     assert loaded.character.name == spec.character.name
     assert [anim.name for anim in loaded.animations] == ["idle", "run"]
+    assert [anim.row for anim in loaded.animations] == [0, 1]
+    assert [anim.prompt_context for anim in loaded.animations] == [
+        "idle: Breathing in place",
+        "run: Fast sprint cycle",
+    ]
     assert validate_config(config_path) == []
 
 

@@ -77,6 +77,15 @@ Run checks:
 black . && mypy src/ && pytest
 ```
 
+Run targeted minimal-config init regressions:
+
+```bash
+pytest tests/test_cli.py -k "init and (non_interactive or interactive or generated_config)"
+pytest tests/test_config_builder.py -k "deterministic or round_trip or row"
+```
+
+Init-flow tests use `tmp_path` fixtures with a placeholder `base.png` file to avoid requiring real image assets.
+
 Integration tests are opt-in and make real Azure calls:
 
 ```bash
