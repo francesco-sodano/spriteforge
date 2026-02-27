@@ -4,6 +4,32 @@ This guide explains how to create a YAML configuration file for a new SpriteForg
 
 ## Quick Start
 
+### Minimal-input onboarding (recommended)
+
+Use `spriteforge init` when you only have a base image and action list:
+
+```bash
+spriteforge init configs/examples/my_character_minimal.yaml \
+  --character-name "my character" \
+  --base-image-path docs_assets/theron_base_reference.png \
+  --action "idle|breathing in place|4|120" \
+  --action "walk|steady forward walk|6|100" \
+  --action "attack|quick forward slash|4|90" \
+  --non-interactive
+
+spriteforge validate configs/examples/my_character_minimal.yaml
+spriteforge estimate configs/examples/my_character_minimal.yaml
+spriteforge generate configs/examples/my_character_minimal.yaml \
+  --output output/my_character_spritesheet.png
+```
+
+Optional feature: add `--draft-description` to best-effort draft `character.description` from the base image.
+
+Generated minimal example:
+- `configs/examples/minimal_generated.yaml` — CLI-generated config with auto-palette enabled and three basic actions.
+
+### Advanced manual YAML-first authoring (optional)
+
 1. Copy the template:
    ```bash
    cp configs/template.yaml configs/my_character.yaml
@@ -64,12 +90,20 @@ spriteforge init configs/my_character.yaml \
 For complete runnable examples, see:
 - `configs/examples/simple_enemy.yaml` — A goblin with 5 animations and 5 colors.
 - `configs/examples/hero.yaml` — A knight with 16 animations and 11 colors.
+- `configs/examples/minimal_generated.yaml` — Generated from minimal inputs (image + actions).
 
 For builder/CLI onboarding with reduced authoring inputs, see
 [`docs/minimal-input-contract.md`](./minimal-input-contract.md).
 Maintainers can generate deterministic configs programmatically with
 `spriteforge.build_spritesheet_spec_from_minimal_input(...)` and
 `spriteforge.write_spritesheet_spec_yaml(...)`.
+
+### Migration note: from manual YAML-first to minimal init flow
+
+If you previously started from `configs/template.yaml`, you can migrate to the faster minimal flow:
+1. Run `spriteforge init ... --non-interactive` with your base image and actions.
+2. Keep using `spriteforge validate`, `estimate`, and `generate` as before.
+3. Add optional advanced fields later (palette overrides, expanded generation rules, richer prompts) by editing the generated YAML.
 
 ---
 

@@ -37,23 +37,42 @@ Create a local environment file before running generation:
 cp .env.example .env
 ```
 
-## Quick Start
+## Quick Start (Minimal Init Flow)
 
-Create a config interactively (or start from `configs/template.yaml`), then run:
+Create a config from just a base image + actions, then run:
 
 ```bash
-spriteforge init configs/examples/my_character.yaml
-spriteforge validate configs/examples/my_character.yaml
-spriteforge estimate configs/examples/my_character.yaml
-spriteforge generate configs/examples/my_character.yaml
+spriteforge init configs/examples/my_character_minimal.yaml \
+  --character-name "my character" \
+  --base-image-path docs_assets/theron_base_reference.png \
+  --action "idle|breathing in place|4|120" \
+  --action "walk|steady forward walk|6|100" \
+  --action "attack|quick forward slash|4|90" \
+  --non-interactive
+
+# Optional: best-effort character.description drafting from the image
+spriteforge init configs/examples/my_character_minimal.yaml \
+  --character-name "my character" \
+  --base-image-path docs_assets/theron_base_reference.png \
+  --action "idle|breathing in place|4|120" \
+  --non-interactive \
+  --draft-description
 
 # Observability-focused run
+spriteforge validate configs/examples/my_character_minimal.yaml
+spriteforge estimate configs/examples/my_character_minimal.yaml
+spriteforge generate configs/examples/my_character_minimal.yaml \
+  --output output/my_character_spritesheet.png
+
 spriteforge generate configs/examples/simple_enemy.yaml \
   --json-logs \
   --run-summary output/simple_enemy_run_summary.json
 ```
 
-For full YAML authoring details, see the [Character Config Guide](docs/character-config-guide.md).
+Reference generated minimal example: `configs/examples/minimal_generated.yaml`.
+
+Prefer full manual YAML authoring? See the [Character Config Guide](docs/character-config-guide.md)
+for the advanced YAML-first path.
 
 ### Reliability Defaults
 
@@ -90,6 +109,13 @@ Integration tests are opt-in and make real Azure calls:
 
 ```bash
 SPRITEFORGE_RUN_INTEGRATION=1 pytest -m integration
+```
+
+### Maintainer release-note/changelog snippet
+
+```md
+- Docs: added minimal-init onboarding flow and migration guidance from manual YAML-first authoring.
+- Examples: added `configs/examples/minimal_generated.yaml` as CLI-generated minimal config.
 ```
 
 ## License
