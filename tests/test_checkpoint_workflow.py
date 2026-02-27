@@ -23,7 +23,6 @@ from spriteforge.models import (
     SpritesheetSpec,
 )
 from spriteforge.providers._base import ReferenceProvider
-from spriteforge.renderer import frame_to_png_bytes, render_frame
 from spriteforge.row_processor import RowProcessor
 from spriteforge.retry import RetryManager
 from spriteforge.workflow import SpriteForgeWorkflow
@@ -533,6 +532,8 @@ class TestWorkflowCheckpointIntegration:
         tmp_path: Path,
     ) -> None:
         """Anchor is reconstructed from checkpoint grids[0]."""
+        from spriteforge.renderer import frame_to_png_bytes, render_frame
+
         checkpoint_dir = tmp_path / "checkpoints"
         checkpoint_dir.mkdir()
         base_ref_path = tmp_path / "base.png"
@@ -656,3 +657,102 @@ class TestWorkflowCheckpointIntegration:
         assert "Dependent rows are not automatically regenerated" in caplog.text
         row_processor.process_anchor_row.assert_awaited_once()
         await workflow.close()
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_regenerate_row_integration_real_azure(
+    azure_project_endpoint: str,
+    tmp_path: Path,
+) -> None:
+    """Integration test: regenerate a single row using live Azure providers."""
+    import os
+
+    from spriteforge.providers import AzureChatProvider, GPTImageProvider
+
+    palette = PaletteConfig(
+        name="IntegrationPalette",
+        outline=PaletteColor(element="Outline", symbol="O", r=20, g=40, b=40),
+        colors=[PaletteColor(element="Skin", symbol="s", r=235, g=210, b=185)],
+    )
+    config = SpritesheetSpec(
+        character=CharacterConfig(
+            name="IntegrationHero",
+            frame_width=64,
+            frame_height=64,
+            spritesheet_columns=14,
+            description="Simple hero silhouette.",
+        ),
+        palette=palette,
+        animations=[
+            AnimationDef(name="idle", row=0, frames=1, timing_ms=120),
+            AnimationDef(name="walk", row=1, frames=1, timing_ms=100),
+            AnimationDef(name="attack", row=2, frames=1, timing_ms=100),
+        ],
+        generation=GenerationConfig(
+            allow_absolute_output_path=True,
+            request_timeout_seconds=120.0,
+        ),
+        base_image_path="docs_assets/theron_base_reference.png",
+        output_path=str(tmp_path / "regenerated.png"),
+    )
+
+    checkpoint_mgr = CheckpointManager(tmp_path / "checkpoints")
+    checkpoint_mgr.save_row(
+        row=0,
+        animation_name="idle",
+        strip_bytes=_create_mock_strip_bytes(num_frames=1),
+        grids=[_make_grid()],
+    )
+    checkpoint_mgr.save_row(
+        row=2,
+        animation_name="attack",
+        strip_bytes=_create_mock_strip_bytes(num_frames=1),
+        grids=[_make_grid()],
+    )
+
+    grid_chat_provider = AzureChatProvider(
+        project_endpoint=azure_project_endpoint,
+        model_deployment_name=os.environ.get(
+            "SPRITEFORGE_TEST_GRID_MODEL", config.generation.grid_model
+        ),
+    )
+    gate_chat_provider = AzureChatProvider(
+        project_endpoint=azure_project_endpoint,
+        model_deployment_name=os.environ.get(
+            "SPRITEFORGE_TEST_GATE_MODEL", config.generation.gate_model
+        ),
+    )
+    ref_provider = GPTImageProvider(
+        model_deployment=os.environ.get(
+            "SPRITEFORGE_TEST_REFERENCE_MODEL", config.generation.reference_model
+        ),
+    )
+    try:
+        frame_generator = FrameGenerator(
+            grid_generator=GridGenerator(grid_chat_provider),
+            gate_checker=LLMGateChecker(gate_chat_provider),
+            programmatic_checker=ProgrammaticChecker(),
+            retry_manager=RetryManager(),
+            generation_config=config.generation,
+        )
+        row_processor = RowProcessor(
+            config=config,
+            frame_generator=frame_generator,
+            gate_checker=frame_generator.gate_checker,
+            reference_provider=ref_provider,
+        )
+        workflow = SpriteForgeWorkflow(
+            config=config,
+            row_processor=row_processor,
+            checkpoint_manager=checkpoint_mgr,
+        )
+
+        result = await workflow.regenerate_row(1)
+        assert result.exists()
+        assert checkpoint_mgr.load_row(1) is not None
+        await workflow.close()
+    finally:
+        await grid_chat_provider.close()
+        await gate_chat_provider.close()
+        await ref_provider.close()
