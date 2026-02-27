@@ -389,6 +389,11 @@ class TestExampleConfigs:
         spec = load_config(EXAMPLES_DIR / "hero.yaml")
         assert isinstance(spec, SpritesheetSpec)
 
+    def test_minimal_generated_example_loads(self) -> None:
+        """configs/examples/minimal_generated.yaml loads via load_config()."""
+        spec = load_config(EXAMPLES_DIR / "minimal_generated.yaml")
+        assert isinstance(spec, SpritesheetSpec)
+
     def test_simple_enemy_has_minimal_animations(self) -> None:
         """Simple enemy must have at least 3 animation rows."""
         spec = load_config(EXAMPLES_DIR / "simple_enemy.yaml")
@@ -398,6 +403,17 @@ class TestExampleConfigs:
         """Hero example must have at least 10 animation rows."""
         spec = load_config(EXAMPLES_DIR / "hero.yaml")
         assert len(spec.animations) >= 10
+
+    def test_minimal_generated_has_minimal_animations(self) -> None:
+        """Minimal generated example keeps the smallest practical action set."""
+        spec = load_config(EXAMPLES_DIR / "minimal_generated.yaml")
+        assert len(spec.animations) == 3
+        assert [animation.row for animation in spec.animations] == [0, 1, 2]
+        assert [animation.name for animation in spec.animations] == [
+            "idle",
+            "walk",
+            "attack",
+        ]
 
     def test_examples_have_palette(self) -> None:
         """Both examples must have a palette section."""
@@ -411,3 +427,9 @@ class TestExampleConfigs:
         for name in ("simple_enemy.yaml", "hero.yaml"):
             spec = load_config(EXAMPLES_DIR / name)
             assert spec.character.description.strip(), f"{name} has empty description"
+
+    def test_minimal_generated_uses_auto_palette(self) -> None:
+        """Generated minimal example relies on auto_palette instead of a palette block."""
+        spec = load_config(EXAMPLES_DIR / "minimal_generated.yaml")
+        assert spec.palette is None
+        assert spec.generation.auto_palette is True

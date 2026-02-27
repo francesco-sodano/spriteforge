@@ -15,6 +15,15 @@ SpriteForge exposes deterministic builder helpers in `src/spriteforge/config_bui
 The builder accepts either a plain dict or `MinimalConfigInput` model with `character_name`, `base_image_path`, and ordered `actions`.
 Each action is `MinimalActionInput` with `name`, `movement_description`, `frames`, `timing_ms`, and optional explicit `loop`.
 
+## Maintainer release-note/changelog snippet guidance
+
+When shipping docs/examples updates for this flow, maintainers can reuse:
+
+```md
+- Docs: added minimal-init onboarding flow and migration guidance from manual YAML-first authoring.
+- Examples: added `configs/examples/minimal_generated.yaml` as CLI-generated minimal config.
+```
+
 ## 1) Required command inputs
 
 The minimal contract requires:

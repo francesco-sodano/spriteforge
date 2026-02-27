@@ -1,0 +1,55 @@
+character:
+  name: ember scout
+  class: ''
+  description: ''
+  frame_width: 64
+  frame_height: 64
+  spritesheet_columns: 14
+animations:
+- name: idle
+  row: 0
+  frames: 4
+  loop: true
+  timing_ms: 120
+  hit_frame: null
+  frame_descriptions: []
+  prompt_context: 'idle: breathing in place'
+- name: walk
+  row: 1
+  frames: 6
+  loop: true
+  timing_ms: 100
+  hit_frame: null
+  frame_descriptions: []
+  prompt_context: 'walk: steady forward walk'
+- name: attack
+  row: 2
+  frames: 4
+  loop: false
+  timing_ms: 90
+  hit_frame: null
+  frame_descriptions: []
+  prompt_context: 'attack: quick forward slash'
+generation:
+  style: Modern HD pixel art (Dead Cells / Owlboy style)
+  facing: right
+  feet_row: 56
+  outline_width: 1
+  rules: ''
+  auto_palette: true
+  max_palette_colors: 16
+  semantic_labels: true
+  grid_model: gpt-5.2
+  gate_model: gpt-5-mini
+  labeling_model: gpt-5-nano
+  reference_model: gpt-image-1.5
+  gate_3a_max_retries: 2
+  fallback_regen_frames: 2
+  compact_grid_context: false
+  max_image_bytes: 4000000
+  request_timeout_seconds: 120.0
+  max_anchor_regenerations: 0
+  anchor_regen_failure_ratio: 1.0
+  allow_absolute_output_path: false
+base_image_path: docs_assets/theron_base_reference.png
+output_path: ''
