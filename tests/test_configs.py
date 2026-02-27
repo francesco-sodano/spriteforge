@@ -409,6 +409,11 @@ class TestExampleConfigs:
         spec = load_config(EXAMPLES_DIR / "minimal_generated.yaml")
         assert len(spec.animations) == 3
         assert [animation.row for animation in spec.animations] == [0, 1, 2]
+        assert [animation.name for animation in spec.animations] == [
+            "idle",
+            "walk",
+            "attack",
+        ]
 
     def test_examples_have_palette(self) -> None:
         """Both examples must have a palette section."""

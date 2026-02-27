@@ -111,13 +111,6 @@ Integration tests are opt-in and make real Azure calls:
 SPRITEFORGE_RUN_INTEGRATION=1 pytest -m integration
 ```
 
-### Maintainer release-note/changelog snippet
-
-```md
-- Docs: added minimal-init onboarding flow and migration guidance from manual YAML-first authoring.
-- Examples: added `configs/examples/minimal_generated.yaml` as CLI-generated minimal config.
-```
-
 ## License
 
 This project is licensed under the MIT License — see [LICENSE](LICENSE).
