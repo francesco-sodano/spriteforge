@@ -428,6 +428,123 @@ class SpriteForgeWorkflow:
             if self.metrics_collector is not None:
                 self.metrics_collector.finish()
 
+    def load_anchor_from_checkpoint(self) -> tuple[list[str], bytes]:
+        """Load and reconstruct anchor artifacts from row-0 checkpoint data."""
+        if self.checkpoint_manager is None:
+            raise RuntimeError("Checkpoint manager is required for row regeneration")
+        if self.config.palette is None:
+            raise ValueError("Cannot load anchor without a configured palette")
+
+        checkpoint_data = self.checkpoint_manager.load_row(0)
+        if checkpoint_data is None:
+            raise RuntimeError("Missing row 0 checkpoint; cannot reconstruct anchor")
+
+        _strip_bytes, grids = checkpoint_data
+        if not grids:
+            raise RuntimeError("Row 0 checkpoint has no frame grids")
+
+        anchor_animation = next((a for a in self.config.animations if a.row == 0), None)
+        if anchor_animation is None:
+            raise RuntimeError("Config is missing required anchor animation at row 0")
+
+        anchor_grid = grids[0]
+        anchor_context = self.row_processor._build_frame_context(
+            palette=self.config.palette,
+            palette_map=self.palette_map,
+            animation=anchor_animation,
+            anchor_grid=anchor_grid,
+            anchor_rendered=None,
+            quantized_reference=None,
+        )
+        anchor_rendered = render_frame(anchor_grid, anchor_context)
+        anchor_rendered_bytes = frame_to_png_bytes(anchor_rendered)
+        return anchor_grid, anchor_rendered_bytes
+
+    async def regenerate_row(self, row_index: int) -> Path:
+        """Regenerate a single row, then re-assemble from checkpointed rows."""
+        if self.checkpoint_manager is None:
+            raise RuntimeError("Checkpoint manager is required for row regeneration")
+        if self.config.palette is None:
+            raise ValueError("No palette configured for row regeneration")
+        if not self.config.base_image_path:
+            raise ValueError("base_image_path is required for row regeneration")
+        if not self.config.output_path:
+            raise ValueError("output_path is required for row regeneration")
+
+        animation = next(
+            (a for a in self.config.animations if a.row == row_index), None
+        )
+        if animation is None:
+            raise ValueError(f"Unknown row index: {row_index}")
+
+        base_reference = Path(self.config.base_image_path).read_bytes()
+        palette = self.config.palette
+        palette_map = dict(self.palette_map)
+
+        if row_index == 0:
+            logger.warning(
+                "Regenerating row 0 updates anchor identity. Dependent rows are not "
+                "automatically regenerated."
+            )
+            anchor_grid, _anchor_rendered, row_grids = (
+                await self.row_processor.process_anchor_row(
+                    base_reference,
+                    animation,
+                    palette,
+                    palette_map,
+                    quantized_reference=None,
+                )
+            )
+            row_render_context = self.row_processor._build_frame_context(
+                palette=palette,
+                palette_map=palette_map,
+                animation=animation,
+                anchor_grid=anchor_grid,
+                anchor_rendered=None,
+                quantized_reference=None,
+            )
+        else:
+            anchor_grid, anchor_rendered = self.load_anchor_from_checkpoint()
+            row_grids = await self.row_processor.process_row(
+                base_reference,
+                animation,
+                palette,
+                palette_map,
+                anchor_grid=anchor_grid,
+                anchor_rendered=anchor_rendered,
+            )
+            row_render_context = self.row_processor._build_frame_context(
+                palette=palette,
+                palette_map=palette_map,
+                animation=animation,
+                anchor_grid=anchor_grid,
+                anchor_rendered=anchor_rendered,
+                quantized_reference=None,
+            )
+
+        row_strip = render_row_strip(row_grids, row_render_context)
+        row_strip_bytes = frame_to_png_bytes(row_strip)
+        self.checkpoint_manager.save_row(
+            row=animation.row,
+            animation_name=animation.name,
+            strip_bytes=row_strip_bytes,
+            grids=row_grids,
+        )
+
+        row_images: dict[int, bytes] = {}
+        for anim in self.config.animations:
+            checkpoint_row = self.checkpoint_manager.load_row(anim.row)
+            if checkpoint_row is not None:
+                row_images[anim.row] = checkpoint_row[0]
+
+        out = _resolve_output_path(
+            self.config.output_path,
+            allow_absolute=self.config.generation.allow_absolute_output_path,
+        )
+        out.parent.mkdir(parents=True, exist_ok=True)
+        assemble_spritesheet(row_images, self.config, output_path=out)
+        return out
+
     # ------------------------------------------------------------------
     # Helpers
     # ------------------------------------------------------------------

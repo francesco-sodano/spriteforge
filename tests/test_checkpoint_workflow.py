@@ -23,6 +23,7 @@ from spriteforge.models import (
     SpritesheetSpec,
 )
 from spriteforge.providers._base import ReferenceProvider
+from spriteforge.renderer import frame_to_png_bytes, render_frame
 from spriteforge.row_processor import RowProcessor
 from spriteforge.retry import RetryManager
 from spriteforge.workflow import SpriteForgeWorkflow
@@ -69,6 +70,19 @@ def _create_mock_strip_bytes(
 ) -> bytes:
     """Create PNG bytes for a mock strip image."""
     img = _create_mock_strip_image(num_frames, frame_width, frame_height)
+    buf = io.BytesIO()
+    img.save(buf, format="PNG")
+    return buf.getvalue()
+
+
+def _create_colored_strip_bytes(
+    color: tuple[int, int, int, int],
+    num_frames: int = 2,
+    frame_width: int = 64,
+    frame_height: int = 64,
+) -> bytes:
+    """Create PNG bytes for a solid-color strip image."""
+    img = Image.new("RGBA", (num_frames * frame_width, frame_height), color)
     buf = io.BytesIO()
     img.save(buf, format="PNG")
     return buf.getvalue()
@@ -420,3 +434,224 @@ class TestWorkflowCheckpointIntegration:
             # Verify no checkpoint directory was created
             checkpoint_dir = tmp_path / ".spriteforge_checkpoint"
             assert not checkpoint_dir.exists()
+
+    @pytest.mark.asyncio
+    async def test_regenerate_row_rebuilds_from_checkpoints(
+        self,
+        sample_config: SpritesheetSpec,
+        tmp_path: Path,
+    ) -> None:
+        """Regenerating one row should keep other checkpoint rows untouched."""
+        checkpoint_dir = tmp_path / "checkpoints"
+        checkpoint_dir.mkdir()
+        base_ref_path = tmp_path / "base.png"
+        base_ref_path.write_bytes(_TINY_PNG)
+        output_path = tmp_path / "out.png"
+
+        sample_config.base_image_path = str(base_ref_path)
+        sample_config.output_path = str(output_path)
+
+        checkpoint_mgr = CheckpointManager(checkpoint_dir)
+        checkpoint_mgr.save_row(
+            row=0,
+            animation_name="idle",
+            strip_bytes=_create_colored_strip_bytes((255, 0, 0, 255)),
+            grids=[_make_grid(), _make_grid()],
+        )
+        checkpoint_mgr.save_row(
+            row=1,
+            animation_name="walk",
+            strip_bytes=_create_colored_strip_bytes((255, 255, 0, 255)),
+            grids=[_make_grid(), _make_grid()],
+        )
+        checkpoint_mgr.save_row(
+            row=2,
+            animation_name="attack",
+            strip_bytes=_create_colored_strip_bytes((0, 0, 255, 255)),
+            grids=[_make_grid(), _make_grid()],
+        )
+
+        mock_ref_provider = MagicMock(spec=ReferenceProvider)
+        mock_ref_provider.close = AsyncMock()
+
+        mock_generator = MagicMock(spec=GridGenerator)
+        mock_generator.close = AsyncMock()
+
+        mock_gate_checker = MagicMock(spec=LLMGateChecker)
+        mock_gate_checker.close = AsyncMock()
+
+        mock_prog_checker = MagicMock(spec=ProgrammaticChecker)
+        frame_generator = FrameGenerator(
+            grid_generator=mock_generator,
+            gate_checker=mock_gate_checker,
+            programmatic_checker=mock_prog_checker,
+            retry_manager=RetryManager(),
+            generation_config=sample_config.generation,
+        )
+        row_processor = RowProcessor(
+            config=sample_config,
+            frame_generator=frame_generator,
+            gate_checker=mock_gate_checker,
+            reference_provider=mock_ref_provider,
+        )
+
+        workflow = SpriteForgeWorkflow(
+            config=sample_config,
+            row_processor=row_processor,
+            checkpoint_manager=checkpoint_mgr,
+        )
+
+        new_grid = _make_grid()
+        new_grid[0] = "O" * 64
+        row_processor.process_row = AsyncMock(return_value=[new_grid, _make_grid()])
+
+        await workflow.regenerate_row(1)
+
+        row_processor.process_row.assert_awaited_once()
+        args = row_processor.process_row.await_args
+        assert args.args[1].row == 1
+        assert args.kwargs["anchor_grid"] == _make_grid()
+
+        row0_after = checkpoint_mgr.load_row(0)
+        row2_after = checkpoint_mgr.load_row(2)
+        assert row0_after is not None
+        assert row2_after is not None
+        assert row0_after[0] == _create_colored_strip_bytes((255, 0, 0, 255))
+        assert row2_after[0] == _create_colored_strip_bytes((0, 0, 255, 255))
+
+        assert output_path.exists()
+        sheet = Image.open(output_path).convert("RGBA")
+        assert sheet.getpixel((0, 0)) == (255, 0, 0, 255)
+        assert sheet.getpixel((0, 64 * 2)) == (0, 0, 255, 255)
+
+        await workflow.close()
+
+    @pytest.mark.asyncio
+    async def test_load_anchor_from_checkpoint_reconstructs_rendered_bytes(
+        self,
+        sample_config: SpritesheetSpec,
+        tmp_path: Path,
+    ) -> None:
+        """Anchor is reconstructed from checkpoint grids[0]."""
+        checkpoint_dir = tmp_path / "checkpoints"
+        checkpoint_dir.mkdir()
+        base_ref_path = tmp_path / "base.png"
+        base_ref_path.write_bytes(_TINY_PNG)
+        output_path = tmp_path / "out.png"
+
+        sample_config.base_image_path = str(base_ref_path)
+        sample_config.output_path = str(output_path)
+
+        checkpoint_mgr = CheckpointManager(checkpoint_dir)
+        grids = [_make_grid(), _make_grid()]
+        checkpoint_mgr.save_row(
+            row=0,
+            animation_name="idle",
+            strip_bytes=_create_mock_strip_bytes(),
+            grids=grids,
+        )
+
+        mock_ref_provider = MagicMock(spec=ReferenceProvider)
+        mock_ref_provider.close = AsyncMock()
+        mock_generator = MagicMock(spec=GridGenerator)
+        mock_generator.close = AsyncMock()
+        mock_gate_checker = MagicMock(spec=LLMGateChecker)
+        mock_gate_checker.close = AsyncMock()
+        frame_generator = FrameGenerator(
+            grid_generator=mock_generator,
+            gate_checker=mock_gate_checker,
+            programmatic_checker=MagicMock(spec=ProgrammaticChecker),
+            retry_manager=RetryManager(),
+            generation_config=sample_config.generation,
+        )
+        row_processor = RowProcessor(
+            config=sample_config,
+            frame_generator=frame_generator,
+            gate_checker=mock_gate_checker,
+            reference_provider=mock_ref_provider,
+        )
+        workflow = SpriteForgeWorkflow(
+            config=sample_config,
+            row_processor=row_processor,
+            checkpoint_manager=checkpoint_mgr,
+        )
+
+        anchor_grid, anchor_rendered = workflow.load_anchor_from_checkpoint()
+
+        assert anchor_grid == grids[0]
+        context = row_processor._build_frame_context(
+            palette=sample_config.palette,
+            palette_map=workflow.palette_map,
+            animation=sample_config.animations[0],
+            anchor_grid=anchor_grid,
+            anchor_rendered=None,
+            quantized_reference=None,
+        )
+        expected = frame_to_png_bytes(render_frame(anchor_grid, context))
+        assert anchor_rendered == expected
+        await workflow.close()
+
+    @pytest.mark.asyncio
+    async def test_regenerate_row_zero_logs_warning(
+        self,
+        sample_config: SpritesheetSpec,
+        tmp_path: Path,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        """Regenerating row 0 should log an anchor-dependency warning."""
+        checkpoint_dir = tmp_path / "checkpoints"
+        checkpoint_dir.mkdir()
+        base_ref_path = tmp_path / "base.png"
+        base_ref_path.write_bytes(_TINY_PNG)
+        output_path = tmp_path / "out.png"
+
+        sample_config.base_image_path = str(base_ref_path)
+        sample_config.output_path = str(output_path)
+
+        checkpoint_mgr = CheckpointManager(checkpoint_dir)
+        for row, name in [(0, "idle"), (1, "walk"), (2, "attack")]:
+            checkpoint_mgr.save_row(
+                row=row,
+                animation_name=name,
+                strip_bytes=_create_mock_strip_bytes(),
+                grids=[_make_grid(), _make_grid()],
+            )
+
+        mock_ref_provider = MagicMock(spec=ReferenceProvider)
+        mock_ref_provider.close = AsyncMock()
+
+        mock_generator = MagicMock(spec=GridGenerator)
+        mock_generator.close = AsyncMock()
+
+        mock_gate_checker = MagicMock(spec=LLMGateChecker)
+        mock_gate_checker.close = AsyncMock()
+
+        mock_prog_checker = MagicMock(spec=ProgrammaticChecker)
+        frame_generator = FrameGenerator(
+            grid_generator=mock_generator,
+            gate_checker=mock_gate_checker,
+            programmatic_checker=mock_prog_checker,
+            retry_manager=RetryManager(),
+            generation_config=sample_config.generation,
+        )
+        row_processor = RowProcessor(
+            config=sample_config,
+            frame_generator=frame_generator,
+            gate_checker=mock_gate_checker,
+            reference_provider=mock_ref_provider,
+        )
+        row_processor.process_anchor_row = AsyncMock(
+            return_value=(_make_grid(), _TINY_PNG, [_make_grid(), _make_grid()])
+        )
+
+        workflow = SpriteForgeWorkflow(
+            config=sample_config,
+            row_processor=row_processor,
+            checkpoint_manager=checkpoint_mgr,
+        )
+
+        with caplog.at_level("WARNING"):
+            await workflow.regenerate_row(0)
+
+        assert "Dependent rows are not automatically regenerated" in caplog.text
+        await workflow.close()
