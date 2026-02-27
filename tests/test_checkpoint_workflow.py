@@ -654,4 +654,5 @@ class TestWorkflowCheckpointIntegration:
             await workflow.regenerate_row(0)
 
         assert "Dependent rows are not automatically regenerated" in caplog.text
+        row_processor.process_anchor_row.assert_awaited_once()
         await workflow.close()
