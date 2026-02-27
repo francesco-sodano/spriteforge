@@ -16,6 +16,8 @@ from spriteforge.preprocessor import (
     SYMBOL_POOL,
     PreprocessResult,
     _assign_symbols,
+    deterministic_description_fallback,
+    draft_character_description_from_image,
     extract_palette_from_image,
     preprocess_reference,
     resize_reference,
@@ -610,6 +612,91 @@ class TestLabelPaletteColorsWithLLM:
 
         # Should fall back to descriptive names
         assert len(result) == 2
+
+
+# ---------------------------------------------------------------------------
+# draft_character_description_from_image
+# ---------------------------------------------------------------------------
+
+
+class TestDraftCharacterDescriptionFromImage:
+    """Tests for description drafting helpers."""
+
+    @pytest.mark.asyncio
+    async def test_draft_character_description_success(self, tmp_path: Path) -> None:
+        img = Image.new("RGBA", (64, 64), (120, 80, 60, 255))
+        image_path = tmp_path / "ref.png"
+        _save_rgba(img, image_path)
+
+        class MockChatProvider:
+            async def chat(self, messages, temperature):
+                return "A stocky adventurer in brown leather armor."
+
+        result = await draft_character_description_from_image(
+            image_path=image_path,
+            character_name="hero",
+            chat_provider=MockChatProvider(),
+        )
+        assert result == "A stocky adventurer in brown leather armor."
+
+    @pytest.mark.asyncio
+    async def test_draft_character_description_whitespace_fallback(
+        self, tmp_path: Path
+    ) -> None:
+        img = Image.new("RGBA", (64, 64), (120, 80, 60, 255))
+        image_path = tmp_path / "ref.png"
+        _save_rgba(img, image_path)
+
+        class MockChatProvider:
+            async def chat(self, messages, temperature):
+                return "   "
+
+        result = await draft_character_description_from_image(
+            image_path=image_path,
+            character_name="hero",
+            chat_provider=MockChatProvider(),
+        )
+        assert result == deterministic_description_fallback("hero")
+
+    @pytest.mark.asyncio
+    async def test_draft_character_description_invalid_image_raises(self) -> None:
+        class MockChatProvider:
+            async def chat(self, messages, temperature):
+                return "unused"
+
+        with pytest.raises(FileNotFoundError):
+            await draft_character_description_from_image(
+                image_path="/nonexistent/path.png",
+                character_name="hero",
+                chat_provider=MockChatProvider(),
+            )
+
+    @pytest.mark.asyncio
+    async def test_draft_character_description_provider_error_raises(
+        self, tmp_path: Path
+    ) -> None:
+        img = Image.new("RGBA", (64, 64), (120, 80, 60, 255))
+        image_path = tmp_path / "ref.png"
+        _save_rgba(img, image_path)
+
+        class MockChatProvider:
+            async def chat(self, messages, temperature):
+                raise RuntimeError("provider unavailable")
+
+        with pytest.raises(RuntimeError, match="provider unavailable"):
+            await draft_character_description_from_image(
+                image_path=image_path,
+                character_name="hero",
+                chat_provider=MockChatProvider(),
+            )
+
+    def test_deterministic_description_fallback_is_stable(self) -> None:
+        expected = (
+            "Pixel-art character named hero. Update this draft with detailed notes "
+            "about body, face, clothing, colors, and gear."
+        )
+        assert deterministic_description_fallback("hero") == expected
+        assert deterministic_description_fallback("hero") == expected
 
 
 # ---------------------------------------------------------------------------

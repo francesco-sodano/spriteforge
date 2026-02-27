@@ -47,6 +47,7 @@ from spriteforge.preprocessing.description import (
 )
 
 console = Console()
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -136,9 +137,18 @@ def _resolve_character_description(
                 _generate_character_description_draft(base_image_path, character_name)
             )
     except Exception as exc:
+        logger.exception("Unable to draft description from image")
+        if isinstance(exc, FileNotFoundError):
+            user_hint = "file not found"
+        elif isinstance(exc, ConnectionError):
+            user_hint = "connection error"
+        elif isinstance(exc, ValueError):
+            user_hint = "invalid image input"
+        else:
+            user_hint = str(exc) or exc.__class__.__name__
         console.print(
             "[bold yellow]⚠[/] Unable to draft description from image "
-            f"({exc}). Using fallback text."
+            f"({user_hint}). Using fallback text."
         )
         return fallback
 
