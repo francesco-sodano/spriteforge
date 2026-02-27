@@ -10,7 +10,15 @@ from spriteforge.providers.azure_chat import AzureChatProvider
 async def describe_character_from_image(
     image_bytes: bytes, provider: AzureChatProvider
 ) -> str:
-    """Generate a detailed character description from a base image."""
+    """Generate a detailed character description from PNG image bytes.
+
+    Args:
+        image_bytes: Uploaded base image bytes (PNG) used for vision analysis.
+        provider: Azure chat provider used to execute the vision completion.
+
+    Returns:
+        A plain-text character description suitable for pre-filling the GUI.
+    """
     image_b64 = base64.b64encode(image_bytes).decode("ascii")
     image_data_url = f"data:image/png;base64,{image_b64}"
     prompt = (
