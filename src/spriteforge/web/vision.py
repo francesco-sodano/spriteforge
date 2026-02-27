@@ -2,25 +2,23 @@
 
 from __future__ import annotations
 
-import base64
-
-from spriteforge.providers.azure_chat import AzureChatProvider
+from spriteforge.providers.chat import ChatProvider
+from spriteforge.utils import image_to_data_url_limited
 
 
 async def describe_character_from_image(
-    image_bytes: bytes, provider: AzureChatProvider
+    image_bytes: bytes, provider: ChatProvider
 ) -> str:
     """Generate a detailed character description from PNG image bytes.
 
     Args:
         image_bytes: Uploaded base image bytes (PNG) used for vision analysis.
-        provider: Azure chat provider used to execute the vision completion.
+        provider: Chat provider used to execute the vision completion.
 
     Returns:
         A plain-text character description suitable for pre-filling the GUI.
     """
-    image_b64 = base64.b64encode(image_bytes).decode("ascii")
-    image_data_url = f"data:image/png;base64,{image_b64}"
+    image_data_url = image_to_data_url_limited(image_bytes, max_bytes=4_000_000)
     prompt = (
         "Describe this character in at least 100 words for a pixel-art sprite workflow. "
         "Cover appearance, outfit and gear, colors, pose/body language, silhouette, and art style. "
