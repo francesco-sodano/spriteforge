@@ -80,7 +80,7 @@ black . && mypy src/ && pytest
 Run targeted minimal-config init regressions:
 
 ```bash
-pytest tests/test_cli.py -k "init and (non_interactive or interactive or generated_config)"
+pytest tests/test_cli.py -k "init and (test_init_non_interactive or test_init_interactive or test_init_generated_config)"
 pytest tests/test_config_builder.py -k "deterministic or round_trip or row"
 ```
 

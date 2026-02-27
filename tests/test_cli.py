@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
+from typing import Any
 
 import pytest
 from click.testing import CliRunner
@@ -434,7 +435,7 @@ def test_init_generated_config_is_compatible_with_generate(
     captured: dict[str, Path | str] = {}
 
     async def _mock_run_generation(
-        config: object,
+        config: Any,
         base_reference_path: Path,
         output_path: Path,
         max_concurrent_rows: int,
@@ -442,7 +443,7 @@ def test_init_generated_config_is_compatible_with_generate(
         verbose: bool,
         run_summary_path: Path | None,
     ) -> None:
-        captured["character_name"] = getattr(config.character, "name")
+        captured["character_name"] = config.character.name
         captured["base_reference_path"] = base_reference_path
         captured["output_path"] = output_path
 
