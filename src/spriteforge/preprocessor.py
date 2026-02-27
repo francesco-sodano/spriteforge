@@ -8,6 +8,10 @@ from spriteforge.preprocessing.image_io import (
     resize_reference,
     validate_reference_image,
 )
+from spriteforge.preprocessing.description import (
+    deterministic_description_fallback,
+    draft_character_description_from_image,
+)
 from spriteforge.preprocessing.labeling import (
     SYMBOL_POOL,
     describe_color as _describe_color,
@@ -22,6 +26,8 @@ from spriteforge.preprocessing.pipeline import PreprocessResult, preprocess_refe
 __all__ = [
     "PreprocessResult",
     "SYMBOL_POOL",
+    "deterministic_description_fallback",
+    "draft_character_description_from_image",
     "_describe_color",
     "_assign_symbols",
     "extract_palette_from_image",

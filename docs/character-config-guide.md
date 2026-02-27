@@ -46,7 +46,20 @@ spriteforge init configs/my_character.yaml \
   --action "idle|breathing in place|4|120" \
   --action "walk|steady forward walk|6|100" \
   --non-interactive
+
+# Optional image-based draft for character.description
+spriteforge init configs/my_character.yaml \
+  --character-name "my_character" \
+  --base-image-path docs_assets/theron_base_reference.png \
+  --action "idle|breathing in place|4|120" \
+  --non-interactive \
+  --draft-description
 ```
+
+`--draft-description` is optional and best-effort:
+- it adds one extra vision/chat model request, so init can be slower and may incur provider cost;
+- if drafting is unavailable (missing endpoint/credentials/provider errors), init still succeeds;
+- on failure, SpriteForge writes deterministic fallback text to `character.description` so the generated config is never blocked.
 
 For complete runnable examples, see:
 - `configs/examples/simple_enemy.yaml` — A goblin with 5 animations and 5 colors.

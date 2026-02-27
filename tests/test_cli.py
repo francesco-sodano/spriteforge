@@ -74,6 +74,7 @@ def test_init_help(cli_runner: CliRunner) -> None:
     assert "--base-image-path" in result.output
     assert "--action" in result.output
     assert "--non-interactive" in result.output
+    assert "--draft-description" in result.output
 
 
 def test_init_non_interactive_happy_path(cli_runner: CliRunner, tmp_path: Path) -> None:
@@ -256,6 +257,78 @@ def test_init_interactive_prompts_for_output_path(cli_runner: CliRunner) -> None
         config_text = config_path.read_text()
         assert "name: hero knight" in config_text
         assert "name: idle" in config_text
+
+
+def test_init_non_interactive_draft_description_success(
+    cli_runner: CliRunner, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Test --draft-description writes generated draft text when available."""
+    base_image = tmp_path / "base.png"
+    base_image.write_bytes(b"placeholder")
+    config_path = tmp_path / "generated.yaml"
+
+    async def _mock_draft(base_image_path: Path, character_name: str) -> str:
+        return f"{character_name} has a bright cloak and a steel sword."
+
+    monkeypatch.setattr(
+        "spriteforge.cli._generate_character_description_draft", _mock_draft
+    )
+
+    result = cli_runner.invoke(
+        main,
+        [
+            "init",
+            str(config_path),
+            "--character-name",
+            "test hero",
+            "--base-image-path",
+            str(base_image),
+            "--action",
+            "idle|breathing in place|4|120",
+            "--non-interactive",
+            "--draft-description",
+        ],
+    )
+    assert result.exit_code == 0
+    assert (
+        "description: test hero has a bright cloak and a steel sword."
+        in config_path.read_text()
+    )
+
+
+def test_init_non_interactive_draft_description_fallback(
+    cli_runner: CliRunner, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Test --draft-description falls back deterministically on failures."""
+    base_image = tmp_path / "base.png"
+    base_image.write_bytes(b"placeholder")
+    config_path = tmp_path / "generated.yaml"
+
+    async def _mock_draft(base_image_path: Path, character_name: str) -> str:
+        raise RuntimeError("provider unavailable")
+
+    monkeypatch.setattr(
+        "spriteforge.cli._generate_character_description_draft", _mock_draft
+    )
+
+    result = cli_runner.invoke(
+        main,
+        [
+            "init",
+            str(config_path),
+            "--character-name",
+            "test hero",
+            "--base-image-path",
+            str(base_image),
+            "--action",
+            "idle|breathing in place|4|120",
+            "--non-interactive",
+            "--draft-description",
+        ],
+    )
+    assert result.exit_code == 0
+    config_text = config_path.read_text()
+    assert "Pixel-art character named test hero." in config_text
 
 
 # ---------------------------------------------------------------------------
