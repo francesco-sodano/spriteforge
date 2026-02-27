@@ -50,13 +50,8 @@ spriteforge init configs/examples/my_character_minimal.yaml \
   --action "attack|quick forward slash|4|90" \
   --non-interactive
 
-# Optional: best-effort character.description drafting from the image
-spriteforge init configs/examples/my_character_minimal.yaml \
-  --character-name "my character" \
-  --base-image-path docs_assets/theron_base_reference.png \
-  --action "idle|breathing in place|4|120" \
-  --non-interactive \
-  --draft-description
+# Optional: add --draft-description for best-effort image-based description text
+#   spriteforge init ... --draft-description
 
 # Observability-focused run
 spriteforge validate configs/examples/my_character_minimal.yaml
