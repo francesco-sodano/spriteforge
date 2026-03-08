@@ -91,7 +91,7 @@ wheels = [
 
 [[package]]
 name = "azure-ai-projects"
-version = "2.0.0b3"
+version = "2.0.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "azure-core" },
@@ -99,10 +99,11 @@ dependencies = [
     { name = "azure-storage-blob" },
     { name = "isodate" },
     { name = "openai" },
+    { name = "typing-extensions" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/24/e0/3512d3f07e9dd2eb4af684387c31598c435bd87833b6a81850972963cb9c/azure_ai_projects-2.0.0b3.tar.gz", hash = "sha256:6d09ad110086e450a47b991ee8a3644f1be97fa3085d5981d543f900d78f4505", size = 431749, upload-time = "2026-01-06T05:31:25.849Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/0f/3d/6a7d04f61f3befc74a6f09ad7a0c02e8c701fc6db91ad7151c46da44a902/azure_ai_projects-2.0.0.tar.gz", hash = "sha256:0892f075cf287d747be54c25bea93dc9406ad100d44efc2fdaadb26586ecf4ff", size = 491449, upload-time = "2026-03-06T05:59:51.645Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/4e/b6/8fbd4786bb5c0dd19eaff86ddce0fbfb53a6f90d712038272161067a076a/azure_ai_projects-2.0.0b3-py3-none-any.whl", hash = "sha256:3b3048a3ba3904d556ba392b7bd20b6e84c93bb39df6d43a6470cdb0ad08af8c", size = 240717, upload-time = "2026-01-06T05:31:27.716Z" },
+    { url = "https://files.pythonhosted.org/packages/20/af/7b218cccab8e22af44844bfc16275b55c1fa48ed494145614b9852950fe6/azure_ai_projects-2.0.0-py3-none-any.whl", hash = "sha256:e655e0e495d0c76077d95cc8e0d606fcdbf3f4dbdf1a8379cbd4bea1e34c401d", size = 236354, upload-time = "2026-03-06T05:59:53.536Z" },
 ]
 
 [[package]]
